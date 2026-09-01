@@ -411,7 +411,12 @@ namespace hooks {
 			diag::set_exception_phase( "create_move: movement correction" );
 			if ( settings::g_combat.m_antiaim.enabled.value && features::combat::g_misc.antiaim( ).is_active( ) )
 			{
-				features::combat::g_misc.antiaim( ).correct_movement( current_cmd );
+				// Если airstrafe активен (игрок в воздухе и управляется им), не трогаем движение,
+				// чтобы не сломать стрейфы и баннихоп.
+				if ( !features::movement::g_airstrafe.active_this_tick( ) )
+				{
+					features::combat::g_misc.antiaim( ).correct_movement( current_cmd );
+				}
 			}
 			if ( trace )
 			{

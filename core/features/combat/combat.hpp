@@ -17,8 +17,8 @@ namespace features::combat {
 				std::uintptr_t bone_cache{};
 				int bone_count{};
 
-				systems::bones::data bones[128]{};
-				systems::bones::data bones_backup[128]{};
+				systems::bones::data bones[ 128 ]{};
+				systems::bones::data bones_backup[ 128 ]{};
 
 				math::vector3 origin{};
 				math::vector3 rotation{};
@@ -30,11 +30,11 @@ namespace features::combat {
 				bool is_applied{};
 				bool extrapolated{};
 
-				bool setup(std::uintptr_t pawn);
-				[[nodiscard]] bool is_valid() const;
+				bool setup( std::uintptr_t pawn );
+				[[nodiscard]] bool is_valid( ) const;
 
-				void apply();
-				void restore();
+				void apply( );
+				void restore( );
 			};
 
 			struct visual_record
@@ -54,18 +54,18 @@ namespace features::combat {
 				float direction{};
 			};
 
-			void run();
+			void run( );
 
-			[[nodiscard]] record* get_oldest_valid(std::uintptr_t pawn);
-			[[nodiscard]] record* get_oldest_was_valid(std::uintptr_t pawn);
-			[[nodiscard]] std::optional<visual_record> get_oldest_was_valid_visual(std::uintptr_t pawn) const;
-			[[nodiscard]] std::vector<record*> get_valid_records(std::uintptr_t pawn);
-			[[nodiscard]] std::array<systems::bones::data, 27> get_skeleton(const record& record) const;
+			[[nodiscard]] record* get_oldest_valid( std::uintptr_t pawn );
+			[[nodiscard]] record* get_oldest_was_valid( std::uintptr_t pawn );
+			[[nodiscard]] std::optional<visual_record> get_oldest_was_valid_visual( std::uintptr_t pawn ) const;
+			[[nodiscard]] std::vector<record*> get_valid_records( std::uintptr_t pawn );
+			[[nodiscard]] std::array<systems::bones::data, 27> get_skeleton( const record& record ) const;
 
-			[[nodiscard]] std::optional<record> extrapolate(std::uintptr_t pawn);
+			[[nodiscard]] std::optional<record> extrapolate( std::uintptr_t pawn );
 
 		private:
-			void predict_movement(extrapolation_data& data, std::uintptr_t skip_entity) const;
+			void predict_movement( extrapolation_data& data, std::uintptr_t skip_entity ) const;
 
 			std::unordered_map<std::uintptr_t, std::deque<record>> m_records{};
 			mutable std::shared_mutex m_records_mtx{};
@@ -113,16 +113,16 @@ namespace features::combat {
 				bool penetrated{};
 			};
 
-			void prepare(std::uintptr_t weapon_vdata, std::uintptr_t weapon);
+			void prepare( std::uintptr_t weapon_vdata, std::uintptr_t weapon );
 
-			[[nodiscard]] run_context prepare_target(std::uintptr_t target_pawn, lagcomp::record* record) const;
-			[[nodiscard]] bool run(const math::vector3& start, const math::vector3& end, const run_context& ctx, std::uintptr_t local_pawn, int local_team, result& out) const;
-			[[nodiscard]] bool can(const math::vector3& start, const math::vector3& direction, float& out_damage, const systems::local::snapshot& local) const;
-			[[nodiscard]] float get_max_damage(int hitgroup, int target_armor, bool has_helmet, int target_team) const;
-			[[nodiscard]] const weapon_data& get_weapon_data() const { return this->m_weapon_data; }
+			[[nodiscard]] run_context prepare_target( std::uintptr_t target_pawn, lagcomp::record* record ) const;
+			[[nodiscard]] bool run( const math::vector3& start, const math::vector3& end, const run_context& ctx, std::uintptr_t local_pawn, int local_team, result& out ) const;
+			[[nodiscard]] bool can( const math::vector3& start, const math::vector3& direction, float& out_damage, const systems::local::snapshot& local ) const;
+			[[nodiscard]] float get_max_damage( int hitgroup, int target_armor, bool has_helmet, int target_team ) const;
+			[[nodiscard]] const weapon_data& get_weapon_data( ) const { return this->m_weapon_data; }
 
 		private:
-			void scale_damage(int hitgroup, int armor, bool has_helmet, int team, float armor_ratio, float headshot_multiplier, const damage_scales& scales, float& damage) const;
+			void scale_damage( int hitgroup, int armor, bool has_helmet, int team, float armor_ratio, float headshot_multiplier, const damage_scales& scales, float& damage ) const;
 			weapon_data m_weapon_data{};
 		};
 
@@ -148,24 +148,24 @@ namespace features::combat {
 
 			struct eye_candidates
 			{
-				eye_candidate entries[2]{};
+				eye_candidate entries[ 2 ]{};
 				int count{};
 			};
 
-			void snapshot(std::uintptr_t local_pawn, std::uintptr_t weapon_services);
-			[[nodiscard]] eye_candidates get_candidates() const;
-			[[nodiscard]] bool has_data() const { return this->m_count > 0; }
-			[[nodiscard]] int client_tick() const { return this->m_client_tick; }
-			[[nodiscard]] float client_tick_frac() const { return this->m_client_tick_frac; }
-			[[nodiscard]] int server_tick() const { return this->m_server_tick; }
-			[[nodiscard]] int lerp_ticks_int() const { return this->m_lerp_ticks_int; }
-			[[nodiscard]] float lerp_ticks_frac() const { return this->m_lerp_ticks_frac; }
-			[[nodiscard]] int count() const { return this->m_count; }
-			[[nodiscard]] int oldest_tick() const { return this->m_count > 0 ? this->m_entries[0].tick : -1; }
-			[[nodiscard]] int newest_tick() const { return this->m_count > 0 ? this->m_entries[this->m_count - 1].tick : -1; }
+			void snapshot( std::uintptr_t local_pawn, std::uintptr_t weapon_services );
+			[[nodiscard]] eye_candidates get_candidates( ) const;
+			[[nodiscard]] bool has_data( ) const { return this->m_count > 0; }
+			[[nodiscard]] int client_tick( ) const { return this->m_client_tick; }
+			[[nodiscard]] float client_tick_frac( ) const { return this->m_client_tick_frac; }
+			[[nodiscard]] int server_tick( ) const { return this->m_server_tick; }
+			[[nodiscard]] int lerp_ticks_int( ) const { return this->m_lerp_ticks_int; }
+			[[nodiscard]] float lerp_ticks_frac( ) const { return this->m_lerp_ticks_frac; }
+			[[nodiscard]] int count( ) const { return this->m_count; }
+			[[nodiscard]] int oldest_tick( ) const { return this->m_count > 0 ? this->m_entries[ 0 ].tick : -1; }
+			[[nodiscard]] int newest_tick( ) const { return this->m_count > 0 ? this->m_entries[ this->m_count - 1 ].tick : -1; }
 
 		private:
-			ring_entry m_entries[32]{};
+			ring_entry m_entries[ 32 ]{};
 			int m_count{};
 			int m_client_tick{};
 			float m_client_tick_frac{};
@@ -196,37 +196,37 @@ namespace features::combat {
 			float spread{};
 		};
 
-		void update();
-		void invalidate_if_needed();
+		void update( );
+		void invalidate_if_needed( );
 
-		[[nodiscard]] context& ctx() { return this->m_ctx; }
-		[[nodiscard]] penetration& pen() { return this->m_pen; }
-		[[nodiscard]] lagcomp& lc() { return this->m_lc; }
-		[[nodiscard]] shoot_history& sh() { return this->m_sh; }
+		[[nodiscard]] context& ctx( ) { return this->m_ctx; }
+		[[nodiscard]] penetration& pen( ) { return this->m_pen; }
+		[[nodiscard]] lagcomp& lc( ) { return this->m_lc; }
+		[[nodiscard]] shoot_history& sh( ) { return this->m_sh; }
 
-		[[nodiscard]] bool autowalling() const { return this->m_autowalling; }
-		[[nodiscard]] lagcomp::record* current_autowall_record() const { return this->m_current_autowall_record; }
+		[[nodiscard]] bool autowalling( ) const { return this->m_autowalling; }
+		[[nodiscard]] lagcomp::record* current_autowall_record( ) const { return this->m_current_autowall_record; }
 
-		[[nodiscard]] int& last_shoot_tick() { return this->m_last_shoot_tick; }
+		[[nodiscard]] int& last_shoot_tick( ) { return this->m_last_shoot_tick; }
 
-		[[nodiscard]] std::uint32_t get_spread_seed(const math::vector3& angles, int tick) const;
-		[[nodiscard]] math::vector2 calculate_spread(int seed, float accuracy, float spread, float recoil_index, int item_def_idx, int num_bullets) const;
-		[[nodiscard]] math::vector3 get_aim_punch(std::uintptr_t local_pawn) const;
-		[[nodiscard]] float calculate_hitchance(const math::vector3& shoot_position, const math::vector3& aim_angle, const systems::hitboxes::entry& hitbox, const systems::bones::data& bone, float inaccuracy, float spread, int samples = 256) const;
-		[[nodiscard]] math::vector3 find_spread_correction(const math::vector3& aim_angle, int tick) const;
-		[[nodiscard]] math::vector3 get_eye_position(std::uintptr_t local_pawn) const;
-		[[nodiscard]] math::vector3 get_shoot_position() const;
-		[[nodiscard]] math::vector3 get_interpolated_shoot_position(std::uintptr_t local_pawn, bool newest = false) const;
-		[[nodiscard]] int calculate_stop_ticks(const math::vector3& velocity, float max_speed, std::uintptr_t local_pawn) const;
-		[[nodiscard]] float get_spread() const;
-		[[nodiscard]] float get_inaccuracy(bool update_accuracy_penalty) const;
-		[[nodiscard]] float get_inaccuracy_at_velocity(std::uintptr_t local_pawn, const math::vector3& velocity) const;
-		[[nodiscard]] float get_air_inaccuracy(float vertical_speed, float jump_initial, float jump_apex) const;
-		[[nodiscard]] bool can_shoot(systems::input::usercmd* cmd, std::uintptr_t local_controller, bool check_next_attack = true) const;
-		[[nodiscard]] bool is_max_accuracy(float inaccuracy) const;
-		[[nodiscard]] math::vector3 simulate_aim_punch(int recoil_index) const;
+		[[nodiscard]] std::uint32_t get_spread_seed( const math::vector3& angles, int tick ) const;
+		[[nodiscard]] math::vector2 calculate_spread( int seed, float accuracy, float spread, float recoil_index, int item_def_idx, int num_bullets ) const;
+		[[nodiscard]] math::vector3 get_aim_punch( std::uintptr_t local_pawn ) const;
+		[[nodiscard]] float calculate_hitchance( const math::vector3& shoot_position, const math::vector3& aim_angle, const systems::hitboxes::entry& hitbox, const systems::bones::data& bone, float inaccuracy, float spread, int samples = 256 ) const;
+		[[nodiscard]] math::vector3 find_spread_correction( const math::vector3& aim_angle, int tick ) const;
+		[[nodiscard]] math::vector3 get_eye_position( std::uintptr_t local_pawn ) const;
+		[[nodiscard]] math::vector3 get_shoot_position( ) const;
+		[[nodiscard]] math::vector3 get_interpolated_shoot_position( std::uintptr_t local_pawn, bool newest = false ) const;
+		[[nodiscard]] int calculate_stop_ticks( const math::vector3& velocity, float max_speed, std::uintptr_t local_pawn ) const;
+		[[nodiscard]] float get_spread( ) const;
+		[[nodiscard]] float get_inaccuracy( bool update_accuracy_penalty ) const;
+		[[nodiscard]] float get_inaccuracy_at_velocity( std::uintptr_t local_pawn, const math::vector3& velocity ) const;
+		[[nodiscard]] float get_air_inaccuracy( float vertical_speed, float jump_initial, float jump_apex ) const;
+		[[nodiscard]] bool can_shoot( systems::input::usercmd* cmd, std::uintptr_t local_controller, bool check_next_attack = true ) const;
+		[[nodiscard]] bool is_max_accuracy( float inaccuracy ) const;
+		[[nodiscard]] math::vector3 simulate_aim_punch( int recoil_index ) const;
 
-		bool ray_vs_capsule(const math::vector3& ray_origin, const math::vector3& ray_dir, const math::vector3& capsule_a, const math::vector3& capsule_b, float radius, float& out_fraction) const;
+		bool ray_vs_capsule( const math::vector3& ray_origin, const math::vector3& ray_dir, const math::vector3& capsule_a, const math::vector3& capsule_b, float radius, float& out_fraction ) const;
 
 	private:
 		context m_ctx{};
@@ -243,22 +243,22 @@ namespace features::combat {
 
 	class misc
 	{
-	private:
+	public:
 		class antiaim
 		{
 		public:
-			void on_create_move(systems::input::usercmd* cmd);
-			void on_render(xdraw::draw_list& draw_list) const;
+			void on_create_move( systems::input::usercmd* cmd );
+			void on_render( xdraw::draw_list& draw_list ) const;
+			void correct_movement( systems::input::usercmd* cmd );
 
-			[[nodiscard]] bool has_modified_angles() const { return this->m_should_correct || this->m_modified_angles.y != this->m_old_angles.y; }
-			[[nodiscard]] const math::vector3& get_modified_angles() const { return this->m_modified_angles; }
-			[[nodiscard]] bool is_active() const { return this->m_antiaim_active; }
-			void correct_movement(systems::input::usercmd* cmd);
+			[[nodiscard]] bool is_active( ) const { return this->m_antiaim_active; }
+			[[nodiscard]] bool has_modified_angles( ) const { return this->m_should_correct || this->m_modified_angles.y != this->m_old_angles.y; }
+			[[nodiscard]] const math::vector3& get_modified_angles( ) const { return this->m_modified_angles; }
 
 		private:
-			[[nodiscard]] float get_pitch(float view_pitch);
-			[[nodiscard]] float get_yaw(const math::vector3& view_angles, const systems::local::snapshot& local);
-			[[nodiscard]] bool is_near_ladder(std::uintptr_t local_pawn) const;
+			[[nodiscard]] float get_pitch( float view_pitch );
+			[[nodiscard]] float get_yaw( const math::vector3& view_angles, const systems::local::snapshot& local );
+			[[nodiscard]] bool is_near_ladder( std::uintptr_t local_pawn ) const;
 
 			math::vector3 m_old_angles{};
 			math::vector3 m_modified_angles{};
@@ -267,14 +267,13 @@ namespace features::combat {
 			bool m_should_correct{};
 			bool m_antiaim_active{};
 			float m_indicator_yaw{};
-			float m_reference_yaw{};
 		};
 
 		class duckpeek
 		{
 		public:
-			void on_create_move(systems::input::usercmd* cmd);
-			void on_override_view(std::uintptr_t view_setup);
+			void on_create_move( systems::input::usercmd* cmd );
+			void on_override_view( std::uintptr_t view_setup );
 
 		private:
 			bool m_was_active{};
@@ -284,16 +283,16 @@ namespace features::combat {
 		class quickpeek
 		{
 		public:
-			void on_create_move(systems::input::usercmd* cmd);
-			void reset_if_needed();
+			void on_create_move( systems::input::usercmd* cmd );
+			void reset_if_needed( );
 
 		private:
-			static constexpr std::uint32_t invalid_effect_index{ static_cast<std::uint32_t>(-1) };
+			static constexpr std::uint32_t invalid_effect_index{ static_cast<std::uint32_t>( -1 ) };
 
-			void create_particle();
-			void update_particle();
-			void release_particle();
-			void reset();
+			void create_particle( );
+			void update_particle( );
+			void release_particle( );
+			void reset( );
 
 			math::vector3 m_saved_origin{};
 			bool m_should_retrack{};
@@ -307,36 +306,37 @@ namespace features::combat {
 		class autostop
 		{
 		public:
-			void on_create_move(systems::input::usercmd* cmd);
+			void on_create_move( systems::input::usercmd* cmd );
 
 		private:
-			[[nodiscard]] float get_effective_accel_base(std::uintptr_t local_pawn, std::uintptr_t movement_services, std::uint32_t flags, float max_weapon_speed) const;
+			[[nodiscard]] float get_effective_accel_base( std::uintptr_t local_pawn, std::uintptr_t movement_services, std::uint32_t flags, float max_weapon_speed ) const;
 		};
 
+	private:
 		antiaim m_antiaim{};
 		duckpeek m_duckpeek{};
 		quickpeek m_quickpeek{};
 		autostop m_autostop{};
 
 	public:
-		[[nodiscard]] antiaim& antiaim() { return this->m_antiaim; }
-		[[nodiscard]] duckpeek& duckpeek() { return this->m_duckpeek; }
-		[[nodiscard]] quickpeek& quickpeek() { return this->m_quickpeek; }
-		[[nodiscard]] autostop& autostop() { return this->m_autostop; }
+		[[nodiscard]] antiaim& antiaim( ) { return this->m_antiaim; }
+		[[nodiscard]] duckpeek& duckpeek( ) { return this->m_duckpeek; }
+		[[nodiscard]] quickpeek& quickpeek( ) { return this->m_quickpeek; }
+		[[nodiscard]] autostop& autostop( ) { return this->m_autostop; }
 	};
 
 	class rage
 	{
 	public:
-		void on_create_move(systems::input::usercmd* cmd);
-		void on_render(xdraw::draw_list& draw_list);
+		void on_create_move( systems::input::usercmd* cmd );
+		void on_render( xdraw::draw_list& draw_list );
 
-		[[nodiscard]] bool should_stop() const noexcept { return this->m_should_stop; }
-		[[nodiscard]] bool is_firing_this_tick() const noexcept { return this->m_firing_this_tick; }
-		[[nodiscard]] bool is_cocking_revolver() const noexcept { return this->m_revolver_cock_ticks > 0; }
-		[[nodiscard]] bool should_release_duck_for_shot() const noexcept { return this->m_release_duck_for_shot; }
-		[[nodiscard]] bool duckpeek_wants_reduck() const noexcept { return this->m_duckpeek_reduck; }
-		void clear_duckpeek_reduck() noexcept { this->m_duckpeek_reduck = false; }
+		[[nodiscard]] bool should_stop( ) const noexcept { return this->m_should_stop; }
+		[[nodiscard]] bool is_firing_this_tick( ) const noexcept { return this->m_firing_this_tick; }
+		[[nodiscard]] bool is_cocking_revolver( ) const noexcept { return this->m_revolver_cock_ticks > 0; }
+		[[nodiscard]] bool should_release_duck_for_shot( ) const noexcept { return this->m_release_duck_for_shot; }
+		[[nodiscard]] bool duckpeek_wants_reduck( ) const noexcept { return this->m_duckpeek_reduck; }
+		void clear_duckpeek_reduck( ) noexcept { this->m_duckpeek_reduck = false; }
 
 		static constexpr auto k_max_lagcomp_records{ 16 };
 		// Scanning the newest and oldest valid records covers the useful lag-comp
@@ -403,9 +403,9 @@ namespace features::combat {
 			float score{};
 			bool valid{};
 
-			[[nodiscard]] bool is_lethal() const noexcept
+			[[nodiscard]] bool is_lethal( ) const noexcept
 			{
-				return this->hit.damage >= static_cast<float>(this->hit.health);
+				return this->hit.damage >= static_cast< float >( this->hit.health );
 			}
 		};
 
@@ -417,35 +417,35 @@ namespace features::combat {
 			float armor_ratio{};
 		};
 
-		[[nodiscard]] aim_context build_context(systems::input::usercmd* cmd, const systems::local::snapshot& local) const;
-		[[nodiscard]] std::optional<stop_prediction> predict_stop(const aim_context& ctx, const math::vector3& current_eye, const systems::local::snapshot& local) const;
-		[[nodiscard]] std::vector<candidate> gather_candidates(const systems::local::snapshot& local, float max_distance_sq = 0.0f) const;
+		[[nodiscard]] aim_context build_context( systems::input::usercmd* cmd, const systems::local::snapshot& local ) const;
+		[[nodiscard]] std::optional<stop_prediction> predict_stop( const aim_context& ctx, const math::vector3& current_eye, const systems::local::snapshot& local ) const;
+		[[nodiscard]] std::vector<candidate> gather_candidates( const systems::local::snapshot& local, float max_distance_sq = 0.0f ) const;
 
-		void run_gun(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire = true);
-		void run_taser(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local);
-		void run_knife(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local);
-		void auto_revolver(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local);
+		void run_gun( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire = true );
+		void run_taser( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
+		void run_knife( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
+		void auto_revolver( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
 
-		[[nodiscard]] std::vector<scan_hit> scan_players(const math::vector3& eye, float inaccuracy, const aim_context& ctx, std::vector<candidate>& candidates, const systems::local::snapshot& local) const;
-		[[nodiscard]] std::vector<scan_hit> scan_player(const math::vector3& eye, float inaccuracy, const aim_context& ctx, candidate& cand, shared::lagcomp::record* record, const systems::local::snapshot& local) const;
-		[[nodiscard]] target select_best(const aim_context& aim_ctx, const std::vector<scan_hit>& hits, float eval_inaccuracy) const;
-		[[nodiscard]] float evaluate_hitchance(const scan_hit& hit, const aim_context& ctx, float inaccuracy) const;
-		[[nodiscard]] float get_standing_inaccuracy(const systems::local::snapshot& local, const aim_context& ctx) const;
+		[[nodiscard]] std::vector<scan_hit> scan_players( const math::vector3& eye, float inaccuracy, const aim_context& ctx, std::vector<candidate>& candidates, const systems::local::snapshot& local ) const;
+		[[nodiscard]] std::vector<scan_hit> scan_player( const math::vector3& eye, float inaccuracy, const aim_context& ctx, candidate& cand, shared::lagcomp::record* record, const systems::local::snapshot& local ) const;
+		[[nodiscard]] target select_best( const aim_context& aim_ctx, const std::vector<scan_hit>& hits, float eval_inaccuracy ) const;
+		[[nodiscard]] float evaluate_hitchance( const scan_hit& hit, const aim_context& ctx, float inaccuracy ) const;
+		[[nodiscard]] float get_standing_inaccuracy( const systems::local::snapshot& local, const aim_context& ctx ) const;
 
-		[[nodiscard]] std::vector<scan_hit> scan_taser(const math::vector3& eye, const aim_context& ctx, std::vector<candidate>& candidates, const systems::local::snapshot& local) const;
+		[[nodiscard]] std::vector<scan_hit> scan_taser( const math::vector3& eye, const aim_context& ctx, std::vector<candidate>& candidates, const systems::local::snapshot& local ) const;
 
-		[[nodiscard]] knife_info get_knife_info(const systems::local::snapshot& local) const;
-		[[nodiscard]] std::vector<scan_hit> scan_knife(const math::vector3& eye, const aim_context& ctx, const knife_info& info, std::vector<candidate>& candidates, const systems::local::snapshot& local) const;
+		[[nodiscard]] knife_info get_knife_info( const systems::local::snapshot& local ) const;
+		[[nodiscard]] std::vector<scan_hit> scan_knife( const math::vector3& eye, const aim_context& ctx, const knife_info& info, std::vector<candidate>& candidates, const systems::local::snapshot& local ) const;
 
-		void fire_gun(systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local);
-		void fire_melee(systems::input::usercmd* cmd, const target& tgt, const systems::local::snapshot& local);
+		void fire_gun( systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local );
+		void fire_melee( systems::input::usercmd* cmd, const target& tgt, const systems::local::snapshot& local );
 
-		[[nodiscard]] std::vector<math::vector3> generate_multipoints(const systems::hitboxes::entry& hitbox, const math::vector3& center, const math::quaternion& bone_rot, float pointscale, const math::vector3& shoot_pos, float inaccuracy) const;
-		[[nodiscard]] bool should_stop_movement(const aim_context& ctx) const;
-		[[nodiscard]] float get_min_damage(const settings::combat::ragebot::weapon_group& config, int target_health, bool override_active) const;
-		[[nodiscard]] float get_knife_damage(float raw, int armor, float armor_ratio) const;
-		[[nodiscard]] systems::tracing::result trace_taser_hit(const math::vector3& origin, const math::vector3& forward, float range, std::uintptr_t target_pawn, std::uintptr_t local_pawn) const;
-		[[nodiscard]] systems::tracing::result trace_knife_hit(const math::vector3& origin, const math::vector3& forward, float reach, std::uintptr_t target_pawn, std::uintptr_t local_pawn) const;
+		[[nodiscard]] std::vector<math::vector3> generate_multipoints( const systems::hitboxes::entry& hitbox, const math::vector3& center, const math::quaternion& bone_rot, float pointscale, const math::vector3& shoot_pos, float inaccuracy ) const;
+		[[nodiscard]] bool should_stop_movement( const aim_context& ctx ) const;
+		[[nodiscard]] float get_min_damage( const settings::combat::ragebot::weapon_group& config, int target_health, bool override_active ) const;
+		[[nodiscard]] float get_knife_damage( float raw, int armor, float armor_ratio ) const;
+		[[nodiscard]] systems::tracing::result trace_taser_hit( const math::vector3& origin, const math::vector3& forward, float range, std::uintptr_t target_pawn, std::uintptr_t local_pawn ) const;
+		[[nodiscard]] systems::tracing::result trace_knife_hit( const math::vector3& origin, const math::vector3& forward, float reach, std::uintptr_t target_pawn, std::uintptr_t local_pawn ) const;
 
 		enum class penetration_crosshair_state : std::uint8_t
 		{
@@ -454,8 +454,8 @@ namespace features::combat {
 			penetrable
 		};
 
-		void update_penetration_crosshair(const systems::local::snapshot& local);
-		void draw_penetration_crosshair(xdraw::draw_list& draw_list) const;
+		void update_penetration_crosshair( const systems::local::snapshot& local );
+		void draw_penetration_crosshair( xdraw::draw_list& draw_list ) const;
 
 		bool m_should_stop{};
 		bool m_firing_this_tick{};
@@ -484,11 +484,11 @@ namespace features::combat {
 	class legit
 	{
 	public:
-		void on_create_move(systems::input::usercmd* cmd);
-		void on_render(xdraw::draw_list& draw_list);
-		void invalidate_if_needed();
+		void on_create_move( systems::input::usercmd* cmd );
+		void on_render( xdraw::draw_list& draw_list );
+		void invalidate_if_needed( );
 
-		[[nodiscard]] bool has_target() const noexcept { return this->m_target.has_target(); }
+		[[nodiscard]] bool has_target( ) const noexcept { return this->m_target.has_target( ); }
 
 	private:
 		struct scan_point
@@ -516,22 +516,22 @@ namespace features::combat {
 			int health{};
 			shared::lagcomp::record* record{};
 
-			[[nodiscard]] bool has_target() const noexcept { return this->best_point.valid; }
+			[[nodiscard]] bool has_target( ) const noexcept { return this->best_point.valid; }
 		};
 
-		[[nodiscard]] target_result find_target(const math::vector3& shoot_position, const math::vector3& view_angles, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local) const;
-		[[nodiscard]] scan_point scan_player(std::uintptr_t pawn, shared::lagcomp::record* record, const math::vector3& shoot_position, const math::vector3& view_angles, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local) const;
+		[[nodiscard]] target_result find_target( const math::vector3& shoot_position, const math::vector3& view_angles, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local ) const;
+		[[nodiscard]] scan_point scan_player( std::uintptr_t pawn, shared::lagcomp::record* record, const math::vector3& shoot_position, const math::vector3& view_angles, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local ) const;
 
-		void apply_aimbot(systems::input::usercmd* cmd, const target_result& tgt, const math::vector3& view_angles, const math::vector3& aim_punch, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local);
-		void apply_triggerbot(systems::input::usercmd* cmd, const math::vector3& shoot_position, const math::vector3& view_angles, const math::vector3& aim_punch, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local);
-		void apply_rcs(math::vector3& aim_angle, const math::vector3& aim_punch, int rand_min, int rand_max) const;
+		void apply_aimbot( systems::input::usercmd* cmd, const target_result& tgt, const math::vector3& view_angles, const math::vector3& aim_punch, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local );
+		void apply_triggerbot( systems::input::usercmd* cmd, const math::vector3& shoot_position, const math::vector3& view_angles, const math::vector3& aim_punch, const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local );
+		void apply_rcs( math::vector3& aim_angle, const math::vector3& aim_punch, int rand_min, int rand_max ) const;
 
-		void update_standalone_rcs(const math::vector3& view_angles, const math::vector3& aim_punch, int amount, int rand_min, int rand_max, bool apply, const systems::local::snapshot& local);
-		[[nodiscard]] float compute_rcs_factor(int rand_min, int rand_max) const;
+		void update_standalone_rcs( const math::vector3& view_angles, const math::vector3& aim_punch, int amount, int rand_min, int rand_max, bool apply, const systems::local::snapshot& local );
+		[[nodiscard]] float compute_rcs_factor( int rand_min, int rand_max ) const;
 
-		void draw_fov(xdraw::draw_list& draw_list, const math::vector3& view_angles, const math::vector3& aim_punch, float fov_degrees, const config::col& color, bool rcs_active) const;
+		void draw_fov( xdraw::draw_list& draw_list, const math::vector3& view_angles, const math::vector3& aim_punch, float fov_degrees, const config::col& color, bool rcs_active ) const;
 
-		[[nodiscard]] static int hitgroup_to_cfg(int hitgroup);
+		[[nodiscard]] static int hitgroup_to_cfg( int hitgroup );
 
 		target_result m_target{};
 		math::vector3 m_old_punch{};

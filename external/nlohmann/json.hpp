@@ -18,6 +18,11 @@
 #ifndef INCLUDE_NLOHMANN_JSON_HPP_
 #define INCLUDE_NLOHMANN_JSON_HPP_
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 26819 26495)
+#endif
+
 #include <algorithm> // all_of, find, for_each
 #include <cstddef> // nullptr_t, ptrdiff_t, size_t
 #include <functional> // hash, less
@@ -25570,5 +25575,9 @@ using nlohmann::literals::json_literals::operator "" _json_pointer; //NOLINT(mis
 #undef JSON_HEDLEY_FALL_THROUGH
 
 
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #endif  // INCLUDE_NLOHMANN_JSON_HPP_
