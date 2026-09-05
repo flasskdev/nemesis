@@ -96,6 +96,11 @@ namespace rendering {
 			xui::checkbox("hide onshot", aa.hide_shots);
 			xui::checkbox("avoid backstab", aa.avoid_backstab);
 			xui::checkbox("spinbot", aa.spinbot);
+			if (xui::begin_popup("##spinbot_settings", 220.0f))
+			{
+				xui::slider_float("spin speed", aa.spin_speed, 1.0f, 100.0f, "%.0f°");
+				xui::end_popup();
+			}
 			xui::checkbox("direction indicator", aa.direction_indicator);
 
 			if (xui::begin_popup("##aa_indicator", 220.0f))

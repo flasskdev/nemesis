@@ -1,413 +1,435 @@
+// airstrafe.cpp
 #include <pch/pch.hpp>
 #include <utilities/memory/memory.hpp>
 #include <utilities/logging/logging.hpp>
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
 #include <core/settings.hpp>
+#include "../movement.hpp"
+#include "../movement_utils.hpp"
 #include <protection/game_addresses.hpp>
 
 namespace features::movement {
 
-    void airstrafe::on_create_move(systems::input::usercmd* cmd)
+void airstrafe::store_angles()
+{
+    const auto cmd = systems::g_input.get();
+    this->m_input_valid = cmd != nullptr;
+    if (!cmd)
     {
-        this->m_active_this_tick = false;
+        this->m_angles_valid = false;
+        return;
+    }
+    this->m_input_angles = systems::g_input.get_view_angles();
+    this->m_input_buttons = cmd->buttons.value;
+    if (!this->m_angles_valid)
+    {
+        this->m_angles = this->m_input_angles;
+        this->m_angles_valid = true;
+    }
+}
 
-        if (features::movement::g_jumpbug.active_this_tick())
+void airstrafe::check_button(std::uintptr_t current_buttons, std::uintptr_t button)
+{
+    constexpr auto moveleft = static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveleft);
+    constexpr auto moveright = static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveright);
+    constexpr auto forward = static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward);
+    constexpr auto back = static_cast<std::uintptr_t>(cstypes::command_buttons::in_back);
+
+    if (current_buttons & button && (!(this->m_last_buttons & button) || (button & moveleft && !(this->m_last_pressed & moveright)) || (button & moveright && !(this->m_last_pressed & moveleft)) || (button & forward && !(this->m_last_pressed & back)) || (button & back && !(this->m_last_pressed & forward))))
+    {
+        if (button & moveleft)
         {
-            return;
+            this->m_last_pressed &= ~moveright;
         }
-        const auto base = cmd->csgo_user_cmd.mutable_base();
-        if (!base)
+        else if (button & moveright)
         {
-            return;
+            this->m_last_pressed &= ~moveleft;
         }
-        const auto current_buttons = cmd->buttons.value;
-        const bool shift_held = current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_sprint);
-        const auto& prestate = systems::g_prediction.pre();
-        const bool in_air = !(prestate.flags & cstypes::entity_flags::on_ground);
-
-        // Получаем чистый угол мыши игрока, игнорируя спинбот для расчетов движения
-        float net_yaw = systems::g_input.get_view_angles().y;
-        if (base->viewangles())
+        else if (button & forward)
         {
-            if (!settings::g_combat.m_antiaim.enabled.value && !settings::g_combat.m_antiaim.spinbot.value)
-            {
-                net_yaw = base->viewangles()->y();
-            }
+            this->m_last_pressed &= ~back;
         }
-
-        if (shift_held && in_air)
+        else if (button & back)
         {
-            this->m_active_this_tick = true; // управляем движением в этом тике
-
-            const auto& vel = prestate.networked_velocity;
-            float forward_move = 0.0f;
-            float left_move = 0.0f;
-            if (vel.length_2d() > 10.0f)
-            {
-                const auto vel_yaw = std::atan2f(vel.y, vel.x)
-                    * (180.0f / std::numbers::pi_v<float>);
-                const auto relative_yaw = (vel_yaw - net_yaw)
-                    * (std::numbers::pi_v<float> / 180.0f);
-                const auto fwd_x = std::cosf(relative_yaw);
-                const auto fwd_y = std::sinf(relative_yaw);
-                forward_move = std::clamp(-fwd_x, -1.0f, 1.0f);
-                left_move = std::clamp(-fwd_y, -1.0f, 1.0f);
-            }
-            base->set_forwardmove(forward_move);
-            base->set_leftmove(left_move);
-
-            // Компенсация спинбота/антиаима: движение выше рассчитано в плоскости
-            // реального угла мыши (net_yaw), но сервер применяет forward/leftmove
-            // относительно углов из usercmd (base->viewangles), которые спинбот
-            // подменяет. Перепроецируем во вью-фрейм, иначе при спинботе игрок
-            // летит не туда (например, назад).
-            if (base->viewangles())
-            {
-                const auto cmd_yaw = base->viewangles()->y();
-                const auto mouse_yaw = systems::g_input.get_view_angles().y;
-                if (std::fabsf(math::helpers::normalize_yaw(cmd_yaw - mouse_yaw)) > 0.01f)
-                {
-                    this->rotate_movement(base, net_yaw, mouse_yaw);
-                    forward_move = base->forwardmove();
-                    left_move = base->leftmove();
-                }
-            }
-
-            const auto subtick_moves = base->mutable_subtick_moves();
-            if (subtick_moves)
-            {
-                const auto step = systems::g_input.acquire_subtick_step(subtick_moves);
-                if (step)
-                {
-                    step->set_button(0);
-                    step->set_pressed(false);
-                    step->set_when(0.0f);
-                    step->set_analog_forward_delta(forward_move - prestate.last_movement_impulses.x);
-                    step->set_analog_left_delta(left_move - prestate.last_movement_impulses.y);
-                }
-            }
-            return;
+            this->m_last_pressed &= ~forward;
         }
 
-        const auto wants_stop = false;
-        if (!settings::g_movement.airstrafe.value)
-        {
-            return;
-        }
+        this->m_last_pressed |= button;
+    }
+    else if (!(current_buttons & button))
+    {
+        this->m_last_pressed &= ~button;
+    }
+}
 
-        const auto local = systems::g_local.get();
-        if (!local.pawn)
-        {
-            return;
-        }
+void airstrafe::rotate_to_stop(proto::base_usercmd_pb* base, const math::vector3& velocity) const
+{
+    const auto speed = velocity.length_2d();
+    if (speed < 1.0f)
+    {
+        base->set_forwardmove(0.0f);
+        base->set_leftmove(0.0f);
+        return;
+    }
 
-        const auto move_type = memory::read<std::uint8_t>(local.pawn + SCHEMA("CBaseEntity", "m_nActualMoveType"_hash));
-        if (move_type == cstypes::move_type::ladder || move_type == cstypes::move_type::noclip)
-        {
-            return;
-        }
+    const auto stop_yaw = std::atan2f(velocity.y, velocity.x) * (180.0f / std::numbers::pi_v<float>) + 180.0f;
+    const auto final_yaw = base->viewangles() ? base->viewangles()->y() : systems::g_input.get_view_angles().y;
 
-        // Если работает квантованный тест-стрейфер, не даем обычному airstrafe вмешиваться и плодить дублирующие сабтики
-        if (settings::g_movement.m_test_strafer.enabled.value && features::movement::g_test_strafer.handled_this_tick())
-        {
-            return;
-        }
+    const auto delta = math::helpers::normalize_yaw(stop_yaw - final_yaw);
+    const auto delta_rad = delta * (std::numbers::pi_v<float> / 180.0f);
 
-        if (prestate.flags & cstypes::entity_flags::on_ground)
-        {
-            return;
-        }
+    auto fwd = std::cosf(delta_rad);
+    auto side = std::sinf(delta_rad);
 
-        if (current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_sprint))
-        {
-            return;
-        }
+    const auto max_c = std::max(std::fabsf(fwd), std::fabsf(side));
+    if (max_c > 0.001f)
+    {
+        fwd /= max_c;
+        side /= max_c;
+    }
 
-        const auto subtick_moves = base->mutable_subtick_moves();
-        if (!subtick_moves)
-        {
-            return;
-        }
+    base->set_forwardmove(std::clamp(fwd, -1.0f, 1.0f));
+    base->set_leftmove(std::clamp(side, -1.0f, 1.0f));
+}
 
-        if (!wants_stop)
-        {
-            this->check_button(current_buttons, cstypes::command_buttons::in_moveleft);
-            this->check_button(current_buttons, cstypes::command_buttons::in_moveright);
-            this->check_button(current_buttons, cstypes::command_buttons::in_forward);
-            this->check_button(current_buttons, cstypes::command_buttons::in_back);
-            this->m_last_buttons = current_buttons;
-        }
+void airstrafe::rotate_movement(proto::base_usercmd_pb* base, float target_yaw, float view_yaw) const
+{
+    const auto delta = math::helpers::normalize_yaw(target_yaw - view_yaw);
+    const auto delta_rad = delta * (std::numbers::pi_v<float> / 180.0f);
 
-        const auto movement_services = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pMovementServices"_hash));
-        if (!movement_services)
-        {
-            return;
-        }
+    auto fwd = std::cosf(delta_rad);
+    auto side = std::sinf(delta_rad);
 
-        const auto sv_airaccelerate = CONVAR("sv_airaccelerate")->get<float>();
-        const auto sv_air_max_wishspeed = CONVAR("sv_air_max_wishspeed")->get<float>();
-        const auto sv_gravity = CONVAR("sv_gravity")->get<float>();
-        const auto sv_staminarecoveryrate = CONVAR("sv_staminarecoveryrate")->get<float>();
+    const auto max_c = std::max(std::fabsf(fwd), std::fabsf(side));
+    if (max_c > 0.001f)
+    {
+        fwd /= max_c;
+        side /= max_c;
+    }
 
-        // Желаемый вектор направления полета высчитываем относительно реального взгляда игрока (мыши)
-        math::vector3 view_angles = { this->m_angles.x, systems::g_input.get_view_angles().y, this->m_angles.z };
+    base->set_forwardmove(std::clamp(fwd, -1.0f, 1.0f));
+    base->set_leftmove(std::clamp(side, -1.0f, 1.0f));
+}
 
-        // Фрейм, в котором сервер реально обработает движение: это угол из usercmd
-        // (base->viewangles), который спинбот/антиаим подменяет. Симуляция воздуха
-        // ниже должна использовать именно его, иначе предсказанная скорость будет
-        // расходиться с тем, что сервер применит, и автострейф сломается.
-        const auto cmd_yaw = (base->viewangles())
-            ? base->viewangles()->y()
-            : systems::g_input.get_view_angles().y;
+// ---------------------------------------------------------------------------
+// Subtick yaw-delta injection — neverlose-style multi-strafe per tick
+// ---------------------------------------------------------------------------
 
-        const auto cmd_move_backup = math::vector3{ base->forwardmove(), base->leftmove(), 0.0f };
-        const auto effective_maxspeed = memory::read<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flMaxspeed"_hash));
-        constexpr auto subtick_count{ 32 };
-        constexpr auto frame_time{ cstypes::tick_interval / static_cast<float>(subtick_count) };
-        auto yaw_offset{ 0.0f };
-        if (!wants_stop)
-        {
-            if (this->m_last_pressed & cstypes::command_buttons::in_moveleft)
-            {
-                yaw_offset += 90.0f;
-            }
-            if (this->m_last_pressed & cstypes::command_buttons::in_moveright)
-            {
-                yaw_offset -= 90.0f;
-            }
-            if (this->m_last_pressed & cstypes::command_buttons::in_forward)
-            {
-                yaw_offset *= 0.5f;
-            }
-            else if (this->m_last_pressed & cstypes::command_buttons::in_back)
-            {
-                yaw_offset = -yaw_offset * 0.5f + 180.0f;
-            }
-        }
+bool airstrafe::apply_yaw_subtick(proto::base_usercmd_pb* base, float when, float yaw_delta) const
+{
+    math::helpers::normalize_angle(yaw_delta);
+    if (std::fabsf(yaw_delta) <= 0.01f)
+        return true;
 
-        const auto has_direction_input = (this->m_last_pressed & cstypes::command_buttons::in_moveleft) || (this->m_last_pressed & cstypes::command_buttons::in_moveright) || (this->m_last_pressed & cstypes::command_buttons::in_forward) || (this->m_last_pressed & cstypes::command_buttons::in_back);
-        const auto effective_wants_stop = wants_stop || (settings::g_movement.airstrafe_fully_directional.value && !has_direction_input);
+    const auto subtick_moves = base->mutable_subtick_moves();
+    if (!subtick_moves)
+        return false;
 
-        auto velocity = prestate.networked_velocity;
-        auto last_impulses = prestate.last_movement_impulses;
-        auto stamina = prestate.stamina;
-        const auto surface_friction = prestate.surface_friction;
+    const auto step = systems::g_input.acquire_subtick_step(subtick_moves);
+    if (!step)
+        return false;
 
-        if (effective_wants_stop && velocity.length_2d() <= 10.0f)
-        {
-            this->rotate_to_stop(base, velocity);
-            return;
-        }
+    step->set_when(when);
+    step->set_button(0);
+    step->set_pressed(false);
+    step->set_analog_forward_delta(0.0f);
+    step->set_analog_left_delta(0.0f);
+    step->set_yaw_delta(yaw_delta);
+    step->set_pitch_delta(0.0f);
 
-        if (last_impulses.y < 0.0f)
-        {
-            this->m_side_switch = false;
-        }
-        else if (last_impulses.y > 0.0f)
+    return true;
+}
+
+void airstrafe::inject_subtick_strafes(
+    proto::base_usercmd_pb* base,
+    systems::input::usercmd* cmd,
+    const systems::prediction::state& prestate,
+    float target_yaw,
+    float view_yaw)
+{
+    const auto vel = utils::pick_velocity(prestate);
+    const auto speed_2d = vel.length_2d();
+    if (speed_2d < utils::k_min_strafe_speed)
+        return;
+
+    const auto start_when = utils::get_max_subtick_when(base);
+    if (start_when >= 0.98f)
+        return;
+
+    const auto sv_airaccelerate = CONVAR("sv_airaccelerate")->get<float>();
+    const auto sv_maxspeed = utils::get_player_maxspeed(systems::g_local.get().pawn);
+    const auto sv_air_max_wishspeed = CONVAR("sv_air_max_wishspeed")->get<float>();
+    const auto surface_friction = (prestate.surface_friction > 0.0f) ? prestate.surface_friction : 1.0f;
+
+    const auto when_step = (1.0f - start_when) / static_cast<float>(utils::k_max_subticks + 1);
+    const auto sub_frame = when_step * cstypes::tick_interval;
+
+    auto acc_yaw = view_yaw;
+    auto sim_vx = vel.x;
+    auto sim_vy = vel.y;
+    auto injected = 0;
+    const float strafe_key_yaw_offset = this->m_side_switch ? 90.0f : -90.0f;
+    // The original side input applies until the first generated event.
+    utils::simulate_air_accel(sim_vx, sim_vy, view_yaw + strafe_key_yaw_offset,
+        (start_when + when_step) * cstypes::tick_interval, surface_friction,
+        sv_maxspeed, sv_airaccelerate, sv_air_max_wishspeed);
+
+    for (auto i = 1; i <= utils::k_max_subticks; ++i)
+    {
+        // Do NOT flip m_side_switch intra-tick: conflicting yaw deltas within
+        // one tick cancel each other and cause net zero or negative acceleration.
+        // Direction is decided ONCE per tick in on_create_move.
+
+        const auto wishdir_yaw = utils::compute_strafe_yaw(
+            sim_vx, sim_vy, target_yaw, sub_frame, this->m_side_switch,
+            sv_maxspeed, sv_airaccelerate, sv_air_max_wishspeed, surface_friction);
+
+        // A/D key approach: leftmove = ±1, forwardmove = 0.
+        // Wishdir = viewyaw ± 90°, so target_view_yaw = wishdir_yaw ∓ 90°.
+        auto target_view_yaw = wishdir_yaw - strafe_key_yaw_offset;
+        math::helpers::normalize_angle(target_view_yaw);
+
+        auto yaw_delta = target_view_yaw - acc_yaw;
+        math::helpers::normalize_angle(yaw_delta);
+
+        const auto when_frac = start_when + static_cast<float>(i) * when_step;
+
+        if (!this->apply_yaw_subtick(base, when_frac, yaw_delta))
+            break;
+
+        acc_yaw = target_view_yaw;
+        utils::simulate_air_accel(sim_vx, sim_vy, wishdir_yaw, sub_frame,
+                                  surface_friction, sv_maxspeed,
+                                  sv_airaccelerate, sv_air_max_wishspeed);
+        ++injected;
+    }
+
+    if (injected > 0)
+    {
+        this->m_handled_subtick = true;
+        ++this->m_substep_counter;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
+void airstrafe::on_create_move(systems::input::usercmd* cmd)
+{
+    this->m_active_this_tick = false;
+    this->m_handled_subtick = false;
+
+    if (!settings::g_movement.airstrafe.value)
+    {
+        return;
+    }
+
+    if (features::movement::g_jumpbug.active_this_tick())
+    {
+        return;
+    }
+
+    const auto base = cmd->csgo_user_cmd.mutable_base();
+    if (!base)
+    {
+        return;
+    }
+
+    const auto local = systems::g_local.get();
+    if (!local.pawn)
+    {
+        return;
+    }
+
+    const auto move_type = memory::read<std::uint8_t>(local.pawn + SCHEMA("C_BaseEntity", "m_nActualMoveType"_hash));
+    if (move_type == cstypes::move_type::ladder || move_type == cstypes::move_type::noclip)
+    {
+        return;
+    }
+
+    const auto current_mouse = this->m_input_valid
+        ? this->m_input_angles : systems::g_input.get_view_angles();
+    if (!this->m_angles_valid)
+    {
+        this->m_angles = current_mouse;
+        this->m_angles_valid = true;
+    }
+
+    const auto& prestate = systems::g_prediction.pre();
+    if (prestate.flags & cstypes::entity_flags::on_ground)
+    {
+        this->m_angles = current_mouse;
+        return;
+    }
+
+    const auto current_buttons = this->m_input_valid ? this->m_input_buttons : cmd->buttons.value;
+    const bool shift_held = (current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_sprint)) != 0;
+
+    const auto vel = utils::pick_velocity(prestate);
+    const auto speed_2d = vel.length_2d();
+
+    // Shift held -> air brake (stop)
+    if (shift_held)
+    {
+        this->m_active_this_tick = true;
+        this->rotate_to_stop(base, vel);
+        this->m_angles = current_mouse;
+        return;
+    }
+
+    this->m_active_this_tick = true;
+
+    // --- Key states ---
+    const bool press_fwd = (current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward)) != 0;
+    const bool press_back = (current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_back)) != 0;
+    const bool press_left = (current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveleft)) != 0;
+    const bool press_right = (current_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveright)) != 0;
+
+    const auto mouse_yaw = current_mouse.y;
+    const auto mouse_delta = math::helpers::normalize_yaw(mouse_yaw - this->m_angles.y);
+    this->m_angles = current_mouse;
+
+    // Determine target world-space travel direction from user input (W/A/S/D/diagonals or view forward)
+    const auto target_world_yaw = utils::get_target_yaw(mouse_yaw, current_buttons);
+
+    // Current velocity direction in world space
+    const auto velocity_yaw = (speed_2d > 1.0f)
+        ? (std::atan2f(vel.y, vel.x) * (180.0f / std::numbers::pi_v<float>))
+        : target_world_yaw;
+
+    // How far has velocity drifted from intended direction
+    const auto delta_yaw = math::helpers::normalize_yaw(target_world_yaw - velocity_yaw);
+
+    // Side selection logic:
+    // 1. Manual directional strafe with A or D (highest priority)
+    if (press_left && !press_right)
+    {
+        this->m_side_switch = true;
+    }
+    else if (press_right && !press_left)
+    {
+        this->m_side_switch = false;
+    }
+    // 2. Mouse steering: steer into mouse turn
+    else if (std::fabsf(mouse_delta) > 0.02f)
+    {
+        this->m_side_switch = (mouse_delta > 0.0f);
+    }
+    // 3. Auto-pilot S-curve (W held, S held, or Space only without movement keys)
+    else
+    {
+        // 30° wide hysteresis: produces smooth, sweeping, pro-level S-curves (8-10 ticks per side).
+        // Avoids the rapid 2-tick flip-flop at 350+ u/s that bleeds speed and causes jitter.
+        constexpr float k_drift_threshold = 30.0f;
+        if (delta_yaw > k_drift_threshold)
         {
             this->m_side_switch = true;
         }
-
-        // Все проверки пройдены, airstrafe будет управлять движением в этом тике
-        this->m_active_this_tick = true;
-
-        for (auto i = 0; i < subtick_count; ++i)
+        else if (delta_yaw < -k_drift_threshold)
         {
-            base->set_forwardmove(cmd_move_backup.x);
-            base->set_leftmove(cmd_move_backup.y);
-            auto speed_2d = std::sqrtf(velocity.x * velocity.x + velocity.y * velocity.y);
-            if (stamina > 0.0f)
-            {
-                const auto speed_scale = std::clamp(1.0f - (stamina / 100.0f), 0.0f, 1.0f);
-                speed_2d *= speed_scale * speed_scale;
-                stamina = std::fmaxf(stamina - (frame_time * sv_staminarecoveryrate), 0.0f);
-            }
-            velocity.z -= (sv_gravity * frame_time);
-            if (speed_2d > 0.0001f)
-            {
-                math::vector3 forward_dir{}, right_dir{};
-                math::helpers::angle_vectors_2d(cmd_yaw, forward_dir, right_dir);
-                math::vector3 wish_dir
-                {
-                    (forward_dir.x * last_impulses.x * effective_maxspeed) + (right_dir.x * last_impulses.y * effective_maxspeed),
-                    (forward_dir.y * last_impulses.x * effective_maxspeed) + (right_dir.y * last_impulses.y * effective_maxspeed),
-                    0.0f
-                };
-                auto wish_speed = std::sqrtf(wish_dir.x * wish_dir.x + wish_dir.y * wish_dir.y);
-                if (wish_speed > 0.0001f)
-                {
-                    wish_dir.x /= wish_speed;
-                    wish_dir.y /= wish_speed;
-                    wish_dir.z = 0.0f;
-                }
-                wish_speed = std::fminf(wish_speed, effective_maxspeed);
-                const auto capped_wish = std::fminf(wish_speed, sv_air_max_wishspeed);
-                const auto current_speed = velocity.x * wish_dir.x + velocity.y * wish_dir.y;
-                const auto add_speed = capped_wish - current_speed;
-                if (add_speed > 0.0f)
-                {
-                    const auto accel_speed = sv_airaccelerate * effective_maxspeed * frame_time * surface_friction;
-                    const auto half_accel = accel_speed * 0.5f;
-                    const auto gain = std::fminf(half_accel, add_speed);
-                    velocity.x += wish_dir.x * gain;
-                    velocity.y += wish_dir.y * gain;
-                }
-            }
-            velocity.z += (sv_gravity * frame_time) * 0.5f;
-            speed_2d = std::sqrtf(velocity.x * velocity.x + velocity.y * velocity.y);
-            if (speed_2d >= 10.0f)
-            {
-                base->set_forwardmove(0.0f);
-                base->set_leftmove(0.0f);
-                if (effective_wants_stop)
-                {
-                    this->rotate_to_stop(base, velocity);
-                }
-                else
-                {
-                    const auto velocity_angle = std::atan2f(velocity.y, velocity.x) * (180.0f / std::numbers::pi_v<float>);
-                    const auto accel_speed = sv_airaccelerate * effective_maxspeed * frame_time * surface_friction;
-                    const auto half_accel = accel_speed * 0.5f;
-                    const auto optimal_floor = std::fmaxf(half_accel, sv_air_max_wishspeed - half_accel);
-                    const auto ideal_angle = std::clamp(std::atanf(optimal_floor / speed_2d) * (180.0f / std::numbers::pi_v<float>), 0.0f, 45.0f);
-                    auto target_yaw = view_angles.y + yaw_offset;
-                    math::helpers::normalize_angle(target_yaw);
-                    auto velocity_delta = target_yaw - velocity_angle;
-                    math::helpers::normalize_angle(velocity_delta);
-                    if ((std::fabsf(velocity_delta) > 170.0f && speed_2d > 80.0f) || (velocity_delta > ideal_angle && speed_2d > 80.0f))
-                    {
-                        target_yaw = velocity_angle + ideal_angle;
-                        base->set_leftmove(-1.0f);
-                    }
-                    else if (-ideal_angle <= velocity_delta || speed_2d <= 80.0f)
-                    {
-                        if (this->m_side_switch)
-                        {
-                            target_yaw = target_yaw - ideal_angle;
-                            base->set_leftmove(-1.0f);
-                        }
-                        else
-                        {
-                            target_yaw = target_yaw + ideal_angle;
-                            base->set_leftmove(1.0f);
-                        }
-                    }
-                    else
-                    {
-                        target_yaw = velocity_angle - ideal_angle;
-                        base->set_leftmove(1.0f);
-                    }
-                    math::helpers::normalize_angle(target_yaw);
-                    this->rotate_movement(base, target_yaw, view_angles.y);
-                }
-            }
-            const auto step = systems::g_input.acquire_subtick_step(subtick_moves);
-            if (!step)
-            {
-                continue;
-            }
-            step->set_button(0);
-            step->set_pressed(false);
-            step->set_when(static_cast<float>(i) / static_cast<float>(subtick_count));
-            step->set_analog_forward_delta(base->forwardmove() - last_impulses.x);
-            step->set_analog_left_delta(base->leftmove() - last_impulses.y);
-            last_impulses.x += base->forwardmove() - last_impulses.x;
-            last_impulses.y += base->leftmove() - last_impulses.y;
-            if (!effective_wants_stop)
-            {
-                this->m_side_switch = !this->m_side_switch;
-            }
+            this->m_side_switch = false;
         }
     }
 
-	void airstrafe::store_angles()
-	{
-		this->m_angles = systems::g_input.get_view_angles();
-	}
-
-	void airstrafe::check_button(std::uintptr_t current_buttons, std::uintptr_t button)
-	{
-		constexpr auto moveleft = static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveleft);
-		constexpr auto moveright = static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveright);
-		constexpr auto forward = static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward);
-		constexpr auto back = static_cast<std::uintptr_t>(cstypes::command_buttons::in_back);
-
-		if (current_buttons & button && (!(this->m_last_buttons & button) || (button & moveleft && !(this->m_last_pressed & moveright)) || (button & moveright && !(this->m_last_pressed & moveleft)) || (button & forward && !(this->m_last_pressed & back)) || (button & back && !(this->m_last_pressed & forward))))
-		{
-			if (button & moveleft)
-			{
-				this->m_last_pressed &= ~moveright;
-			}
-			else if (button & moveright)
-			{
-				this->m_last_pressed &= ~moveleft;
-			}
-			else if (button & forward)
-			{
-				this->m_last_pressed &= ~back;
-			}
-			else if (button & back)
-			{
-				this->m_last_pressed &= ~forward;
-			}
-
-			this->m_last_pressed |= button;
-		}
-		else if (!(current_buttons & button))
-		{
-			this->m_last_pressed &= ~button;
-		}
-	}
-
-     void airstrafe::rotate_movement(proto::base_usercmd_pb* base, float target_yaw, float view_yaw) const
-     {
-         const auto forward_move = base->forwardmove();
-         const auto side_move = base->leftmove();
-
-         // view_yaw уже содержит реальный угол мыши (systems::g_input.get_view_angles().y),
-         // переданный из вызывающего кода. Не подменяем его спинбот-углами из base->viewangles(),
-         // иначе пересчёт движения будет некорректным.
-
-         math::vector3 target_forward{}, target_right{};
-         math::helpers::angle_vectors_2d(target_yaw, target_forward, target_right);
-
-         math::vector3 view_forward{}, view_right{};
-         math::helpers::angle_vectors_2d(view_yaw, view_forward, view_right);
-
-         const auto tf = target_forward * forward_move;
-         const auto tr = target_right * side_move;
-
-         const auto corrected_forward = view_forward.dot(tf) + view_forward.dot(tr);
-         const auto corrected_side = view_right.dot(tf) + view_right.dot(tr);
-
-         base->set_forwardmove(std::clamp(corrected_forward, -1.0f, 1.0f));
-         base->set_leftmove(std::clamp(corrected_side, -1.0f, 1.0f));
-     }
-
-    void airstrafe::rotate_to_stop(proto::base_usercmd_pb* base, const math::vector3& velocity) const
+    // ====================================================================
+    // Subtick yaw-delta injection path (quantized movement / official servers)
+    // ====================================================================
+    const float command_yaw = base->viewangles() ? base->viewangles()->y() : mouse_yaw;
+    constexpr auto angle_sensitive_buttons = static_cast<std::uintptr_t>(
+        cstypes::command_buttons::in_attack | cstypes::command_buttons::in_second_attack |
+        cstypes::command_buttons::in_use | cstypes::command_buttons::in_jump);
+    const bool allow_yaw_subticks =
+        !features::combat::g_misc.antiaim().is_active() &&
+        !settings::g_combat.m_antiaim.spinbot.value &&
+        !features::combat::g_rage.is_firing_this_tick() &&
+        !(cmd->buttons.value & angle_sensitive_buttons) &&
+        std::fabs(math::helpers::normalize_yaw(command_yaw - mouse_yaw)) < 0.01f;
+    const auto quantize = CONVAR("sv_quantize_movement_input");
+    if (allow_yaw_subticks && quantize && quantize->get<bool>() &&
+        speed_2d > utils::k_min_strafe_speed)
     {
-        const auto speed = velocity.length_2d();
-        const auto wish_yaw = std::atan2f(velocity.y, velocity.x) * (180.0f / std::numbers::pi_v<float>) + 180.0f;
+        this->inject_subtick_strafes(base, cmd, prestate, target_world_yaw, command_yaw);
 
+        if (this->m_handled_subtick)
         {
-            const auto& ctx = features::combat::g_shared.ctx();
-            const auto max_speed = (ctx.valid && ctx.weapon_vdata) ? memory::read<float>(ctx.weapon_vdata + SCHEMA("CCSWeaponBaseVData", "m_flMaxSpeed"_hash)) : 250.0f;
+            // Positive leftmove means left in this project's command convention.
+            const float strafe_side = this->m_side_switch ? 1.0f : -1.0f;
+            base->set_forwardmove(0.0f);
+            base->set_leftmove(strafe_side);
 
-            base->set_forwardmove(std::clamp(speed / max_speed, 0.0f, 1.0f));
-            base->set_leftmove(0.0f);
+            auto buttons = cmd->buttons.value;
+            buttons &= ~static_cast<std::uintptr_t>(
+                cstypes::command_buttons::in_forward | cstypes::command_buttons::in_back |
+                cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright);
+
+            if (this->m_side_switch)
+            {
+                buttons |= static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveleft);
+            }
+            else
+            {
+                buttons |= static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveright);
+            }
+
+            cmd->buttons.value_changed |= (cmd->buttons.value ^ buttons);
+            cmd->buttons.value = buttons;
+            return;
         }
-
-        // Защита от подмены углов спинботом при остановке
-        const auto view_yaw = (base->viewangles() && !settings::g_combat.m_antiaim.spinbot.value)
-            ? base->viewangles()->y()
-            : systems::g_input.get_view_angles().y;
-        const auto rotation = (view_yaw - wish_yaw) * (std::numbers::pi_v<float> / 180.0f);
-        const auto fwd = base->forwardmove();
-        const auto side = base->leftmove();
-
-        base->set_forwardmove(std::clamp(std::cosf(rotation) * fwd - std::sinf(rotation) * side, -1.0f, 1.0f));
-        base->set_leftmove(std::clamp((std::sinf(rotation) * fwd + std::cosf(rotation) * side) * -1.0f, -1.0f, 1.0f));
     }
+
+    // ====================================================================
+    // Analog path: low speed, non-quantized input, or another angle owner
+    // ====================================================================
+    const auto reference_yaw = base->viewangles() ? base->viewangles()->y() : mouse_yaw;
+
+    // At low speed, push directly in target direction to begin moving
+    float desired_yaw = target_world_yaw;
+    if (speed_2d > 15.0f)
+    {
+        const auto sv_airaccelerate = CONVAR("sv_airaccelerate")->get<float>();
+        const auto sv_maxspeed = utils::get_player_maxspeed(systems::g_local.get().pawn);
+        const auto sv_air_max_wishspeed = CONVAR("sv_air_max_wishspeed")->get<float>();
+        desired_yaw = utils::compute_strafe_yaw(
+            vel.x, vel.y, target_world_yaw, cstypes::tick_interval, this->m_side_switch,
+            sv_maxspeed, sv_airaccelerate, sv_air_max_wishspeed,
+            prestate.surface_friction > 0.0f ? prestate.surface_friction : 1.0f);
+    }
+
+    const auto delta_angle = math::helpers::normalize_yaw(desired_yaw - reference_yaw);
+    const auto delta_rad = delta_angle * (std::numbers::pi_v<float> / 180.0f);
+
+    auto cmd_forward = std::cosf(delta_rad);
+    auto cmd_side    = std::sinf(delta_rad);
+
+    const auto max_c = std::max(std::fabsf(cmd_forward), std::fabsf(cmd_side));
+    if (max_c > 0.001f)
+    {
+        cmd_forward /= max_c;
+        cmd_side /= max_c;
+    }
+
+    base->set_forwardmove(std::clamp(cmd_forward, -1.0f, 1.0f));
+    base->set_leftmove(std::clamp(cmd_side, -1.0f, 1.0f));
+
+    auto buttons = cmd->buttons.value;
+    buttons &= ~static_cast<std::uintptr_t>(
+        cstypes::command_buttons::in_forward | cstypes::command_buttons::in_back |
+        cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright);
+
+    if (base->forwardmove() > 0.2f)
+        buttons |= static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward);
+    else if (base->forwardmove() < -0.2f)
+        buttons |= static_cast<std::uintptr_t>(cstypes::command_buttons::in_back);
+
+    if (base->leftmove() > 0.2f)
+        buttons |= static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveleft);
+    else if (base->leftmove() < -0.2f)
+        buttons |= static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveright);
+
+    cmd->buttons.value_changed |= (cmd->buttons.value ^ buttons);
+    cmd->buttons.value = buttons;
+}
 
 } // namespace features::movement

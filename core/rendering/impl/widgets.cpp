@@ -188,33 +188,44 @@ namespace rendering {
 		const auto x = static_cast<float>( screen_w ) - w - margin;
 		const auto y = margin;
 
-		draw_list.rect_filled_blurred( x, y, w, h, xdraw::corner_radius{ r } );
-		draw_list.rect_filled( x, y, w, h, s.window_bg, xdraw::corner_radius{ r } );
+		const xdraw::color pale_purple{ 200, 180, 255, 255 };
+		const xdraw::color pale_purple_glow{ 200, 180, 255, 65 };
+		const xdraw::color pale_purple_dim{ 200, 180, 255, 120 };
+		const xdraw::color dark_bg{ 15, 15, 18, 245 };
+		const xdraw::color inner_bg{ 25, 25, 30, 255 };
+
+		draw_list.rect_filled_blurred( x, y, w, h, xdraw::corner_radius{ r }, pale_purple_glow );
+		draw_list.rect_filled( x, y, w, h, dark_bg, xdraw::corner_radius{ r } );
+
+		const float half_w = w * 0.5f;
+		const xdraw::color line_fade{ 200, 180, 255, 0 };
+		draw_list.rect_filled_gradient( x + r, y, half_w - r, 1.0f, line_fade, pale_purple, pale_purple, line_fade );
+		draw_list.rect_filled_gradient( x + half_w, y, half_w - r, 1.0f, pale_purple, line_fade, line_fade, pale_purple );
 
 		auto cx = x + inner_pad;
 
 		auto draw_split_pill = [ & ]( const char* value, float vw, float vh, const char* unit, float uw, float uh, float pill_w )
 			{
-				draw_list.rect_filled( cx, y + inner_pad, pill_w, inner_h, s.child_bg, xdraw::corner_radius{ inner_r } );
-				draw_list.text( cx + text_pad_x, y + ( h - vh ) * 0.5f + text_nudge, value, s.accent );
-				draw_list.text( cx + text_pad_x + vw, y + ( h - uh ) * 0.5f + text_nudge, unit, s.text_dim );
+				draw_list.rect_filled( cx, y + inner_pad, pill_w, inner_h, inner_bg, xdraw::corner_radius{ inner_r } );
+				draw_list.text( cx + text_pad_x, y + ( h - vh ) * 0.5f + text_nudge, value, pale_purple );
+				draw_list.text( cx + text_pad_x + vw, y + ( h - uh ) * 0.5f + text_nudge, unit, pale_purple_dim );
 				cx += pill_w + section_spacing;
 			};
 
 		auto draw_pill = [ & ]( const char* text, float tw, float th, float pill_w )
 			{
-				draw_list.rect_filled( cx, y + inner_pad, pill_w, inner_h, s.child_bg, xdraw::corner_radius{ inner_r } );
-				draw_list.text( cx + text_pad_x, y + ( h - th ) * 0.5f + text_nudge, text, s.accent );
+				draw_list.rect_filled( cx, y + inner_pad, pill_w, inner_h, inner_bg, xdraw::corner_radius{ inner_r } );
+				draw_list.text( cx + text_pad_x, y + ( h - th ) * 0.5f + text_nudge, text, pale_purple );
 				cx += pill_w + section_spacing;
 			};
 
 		// logo pill (always shown)
-		draw_list.rect_filled( cx, y + inner_pad, logo_pill_w, inner_h, s.accent, xdraw::corner_radius{ inner_r } );
+		draw_list.rect_filled( cx, y + inner_pad, logo_pill_w, inner_h, pale_purple, xdraw::corner_radius{ inner_r } );
 		if ( logo )
 			draw_list.image( cx + logo_icon_pad, y + ( h - static_cast<float>( logo_h ) ) * 0.5f,
-				static_cast<float>( logo_w ), static_cast<float>( logo_h ), logo.Get( ), s.checkbox_mark_icon );
+				static_cast<float>( logo_w ), static_cast<float>( logo_h ), logo.Get( ), dark_bg );
 		draw_list.text( cx + logo_icon_pad + logo_draw_w + logo_icon_pad,
-			y + ( h - name_th ) * 0.5f + text_nudge, "OneTap", s.checkbox_mark_icon );
+			y + ( h - name_th ) * 0.5f + text_nudge, "OneTap", dark_bg );
 		cx += logo_pill_w + section_spacing;
 
 		if ( wm.show_user.value ) draw_pill( "developer", user_tw, user_th, user_pill_w );

@@ -14,14 +14,14 @@ namespace features::combat {
 		const auto local = systems::g_local.get( );
 		this->update_penetration_crosshair( local );
 
+		this->m_should_stop = false;
+		this->m_firing_this_tick = false;
+
 		if ( !ctx.valid )
 		{
 			this->m_revolver_cock_ticks = 0;
 			return;
 		}
-
-		this->m_should_stop = false;
-		this->m_firing_this_tick = false;
 
 		if ( !settings::g_combat.m_duckpeek.enabled.value )
 		{

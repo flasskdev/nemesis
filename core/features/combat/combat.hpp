@@ -261,6 +261,7 @@ namespace features::combat {
 			[[nodiscard]] bool is_near_ladder( std::uintptr_t local_pawn ) const;
 
 			math::vector3 m_old_angles{};
+			float m_movement_yaw{};
 			math::vector3 m_modified_angles{};
 
 			int m_yaw_side{};

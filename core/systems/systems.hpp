@@ -123,6 +123,7 @@ namespace systems {
 
 		void update( );
 		void apply( );
+		void rebase_movement( usercmd* cmd, float source_yaw ) const;
 
 		[[nodiscard]] usercmd* get( ) const { return this->m_current_cmd; }
 		[[nodiscard]] usercmd* get_current_cmd( std::uintptr_t local_controller ) const;
@@ -137,10 +138,15 @@ namespace systems {
 		[[nodiscard]] usercmd* get_command_by_sequence( std::uintptr_t local_controller, int sequence ) const;
 		[[nodiscard]] bool is_subtick_overwrite( usercmd* cmd ) const;
 
-		void reset( )
+		void reset()
 		{
 			this->m_last_sent_forward = 0.0f;
 			this->m_last_sent_left = 0.0f;
+			this->m_suppress_auto_move_delta = false;
+		}
+		void suppress_auto_move_delta(bool value)
+		{
+			this->m_suppress_auto_move_delta = value;
 		}
 
 	private:
@@ -148,6 +154,7 @@ namespace systems {
 		proto::base_usercmd_pb m_backup{};
 		float m_last_sent_forward{ 0.0f };
 		float m_last_sent_left{ 0.0f };
+		bool m_suppress_auto_move_delta{ false };
 
 		bool calculate_crc( proto::base_usercmd_pb* base ) const;
 	};

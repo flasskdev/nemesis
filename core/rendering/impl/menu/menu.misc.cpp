@@ -1,4 +1,4 @@
-﻿#include <pch/pch.hpp>
+#include <pch/pch.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 
@@ -182,6 +182,14 @@ namespace rendering {
 			{
 				xui::checkbox( "bhop", mov.bhop );
 				xui::checkbox( "autostrafe", mov.airstrafe );
+				if ( xui::begin_popup( "##autostrafe_popup", 220.0f ) )
+				{
+					static const char* strafe_modes[]{ "viewangles", "directional", "rage" };
+					xui::combo( "mode##as", reinterpret_cast<int&>( mov.airstrafe_mode.value ), strafe_modes, 3 );
+					xui::slider_float( "retrack speed##as", mov.airstrafe_smooth, 10.0f, 100.0f, "%.0f%%" );
+					xui::checkbox( "directional WASD##as", mov.airstrafe_fully_directional );
+					xui::end_popup( );
+				}
 				xui::checkbox( "jumpbug", mov.jumpbug );
 				xui::checkbox( "fastladder", mov.fastladder );
 				xui::checkbox( "edgejump", mov.edgejump );
