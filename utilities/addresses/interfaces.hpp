@@ -28,7 +28,7 @@ public:
 	char _value_tail [0x8]; // 0x60
 
 	template<typename T>
-	T get() {
+	T get() const {
 		if constexpr (std::is_same_v<T, bool>)
 			return m_value.i1;
 		else if constexpr (std::is_same_v<T, short>)

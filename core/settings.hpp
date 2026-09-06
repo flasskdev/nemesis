@@ -199,6 +199,8 @@ namespace settings {
 			xui::setting auto_yaw_adjust{true, {}, "correct yaw to compensate for the models inherit sideways roll", "anti aim"};
 			xui::setting manual_left{ false, { 'Z', xui::bind_mode::toggle }, "force left", "anti aim" };
 			xui::setting manual_right{ false, { 'C', xui::bind_mode::toggle }, "force right", "anti aim" };
+            xui::setting spinbot{ false, {}, "spinbot", "anti aim" };
+            config::val<float> spin_speed{ 360.0f, "anti aim", "spin degrees per second" };
 			xui::setting hide_shots{ true, {}, "hide onshot", "anti aim" };
 			xui::setting avoid_backstab{ true, {}, "avoid backstab", "anti aim" };
 			xui::setting direction_indicator{ true, {}, "direction indicator", "anti aim" };
@@ -1364,6 +1366,7 @@ namespace settings {
 	struct movement
 	{
 		xui::setting bhop{ true, {}, "bhop", "movement" };
+        xui::setting movement_debug{ false, {}, "movement debug", "movement" };
 		xui::setting airstrafe{ true, {}, "airstrafe", "movement" };
 		xui::setting airstrafe_fully_directional{ true, {}, "fully directional", "movement - airstrafe" };
 		xui::setting jumpbug{ true, {}, "jumpbug", "movement" };

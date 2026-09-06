@@ -67,6 +67,7 @@ namespace features {
 	namespace movement {
 
 		inline bhop g_bhop{};
+		inline airstrafe g_airstrafe{};
 		inline test_strafer g_test_strafer{};
 		inline jumpbug g_jumpbug{};
 		inline fastladder g_fastladder{};

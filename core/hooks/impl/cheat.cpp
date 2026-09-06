@@ -341,6 +341,7 @@ namespace hooks {
 				diag::step( "create_move: feature pipeline begin" );
 			}
 
+			features::movement::g_airstrafe.store_angles();
 			systems::g_input.desubtick( current_cmd );
 			systems::g_prediction.capture_prestate( local.pawn, movement_services );
 
@@ -348,9 +349,7 @@ namespace hooks {
 				diag::set_exception_phase( "create_move: shared update" );
 				features::combat::g_shared.update( );
 
-				diag::set_exception_phase( "create_move: combat misc" );
-				features::combat::g_misc.antiaim( ).on_create_move( current_cmd );
-				features::combat::g_misc.autostop( ).on_create_move( current_cmd );
+                // Angle writers run after aim selection, before final movement serialization.
 			}
 			if ( trace )
 			{
@@ -366,6 +365,7 @@ namespace hooks {
 				features::movement::g_jumpbug.on_create_move( current_cmd );
 				features::movement::g_bhop.on_create_move( current_cmd );
 				features::movement::g_fastladder.on_create_move( current_cmd );
+                features::movement::g_airstrafe.on_create_move(current_cmd);
 				if ( trace )
 				{
 					diag::step( "create_move: pre-combat movement end" );
@@ -374,14 +374,22 @@ namespace hooks {
 
 				{
 					diag::set_exception_phase( "create_move: rage" );
-					features::combat::g_rage.on_create_move( current_cmd );
+                    const auto angle_base = current_cmd->csgo_user_cmd.mutable_base();
+                    const float before_rage = angle_base->viewangles() ? angle_base->viewangles()->y() : systems::g_input.get_view_angles().y;
+                    features::combat::g_rage.on_create_move(current_cmd);
+                    systems::g_input.rebase_movement(current_cmd, before_rage);
 					if ( trace )
 					{
 						diag::step( "create_move: rage end" );
 						diag::step( "create_move: legit begin" );
 					}
 					diag::set_exception_phase( "create_move: legit" );
-					features::combat::g_legit.on_create_move( current_cmd );
+                    if (!features::combat::g_rage.is_firing_this_tick())
+                    {
+                        const float before_legit = angle_base->viewangles() ? angle_base->viewangles()->y() : systems::g_input.get_view_angles().y;
+                        features::combat::g_legit.on_create_move(current_cmd);
+                        systems::g_input.rebase_movement(current_cmd, before_legit);
+                    }
 					if ( trace )
 					{
 						diag::step( "create_move: legit end" );
@@ -389,6 +397,9 @@ namespace hooks {
 				}
 
 				diag::set_exception_phase( "create_move: post-combat movement" );
+                features::combat::g_misc.autostop().on_create_move(current_cmd);
+                features::combat::g_misc.antiaim().on_create_move(current_cmd);
+                features::movement::g_airstrafe.finalize(current_cmd);
 				features::combat::g_misc.duckpeek( ).on_create_move( current_cmd );
 				features::movement::g_test_strafer.on_create_move( current_cmd );
 				features::misc::g_projectile_trajectory.on_create_move( current_cmd );
@@ -407,13 +418,9 @@ namespace hooks {
 			}
 
 			diag::set_exception_phase( "create_move: final subtick" );
-			const auto final_base = current_cmd->csgo_user_cmd.mutable_base( );
-			if ( final_base && final_base->subtick_moves_size( ) > 0
-				&& !features::movement::g_test_strafer.handled_this_tick( ) )
-			{
-				final_base->set_forwardmove( 0.0f );
-				final_base->set_leftmove( 0.0f );
-			}
+            // Button subticks do not mean that analog movement should be zeroed.
+            // input::apply emits one final analog correction and preserves jump/duck timestamps.
+
 			if ( trace )
 			{
 				diag::step( "create_move: final subtick end" );

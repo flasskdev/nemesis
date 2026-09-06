@@ -85,6 +85,11 @@ namespace rendering {
 
 		if ( xui::begin_child( "##misc_gameplay_logs", col_w, body_h, true ) )
 		{
+            xui::section_header("MOVEMENT");
+            xui::toggle("Bunnyhop", settings::g_movement.bhop);
+            xui::toggle("Silent Air Strafe", settings::g_movement.airstrafe);
+            xui::toggle("Directional WASD", settings::g_movement.airstrafe_fully_directional);
+            xui::layout::spacing(8.0f);
 			xui::section_header("GAMEPLAY & LOGS");
 
 			xui::toggle( "Hit Logs", impacts.hit_log );
@@ -96,6 +101,7 @@ namespace rendering {
 
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Console Logs", impacts.console_log );
+            xui::toggle("Movement Debug", settings::g_movement.movement_debug, "Log movement and server parameters every 16 commands");
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Chat Logs", impacts.chat_log );
 			xui::layout::spacing( 3.0f );

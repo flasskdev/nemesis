@@ -2,6 +2,22 @@
 
 namespace features::movement {
 
+    class airstrafe
+    {
+    public:
+        void store_angles();
+        void on_create_move(systems::input::usercmd* cmd);
+        void finalize(systems::input::usercmd* cmd);
+        [[nodiscard]] bool active_this_tick() const { return m_active_this_tick; }
+    private:
+        math::vector3 m_input_angles{};
+        std::uintptr_t m_input_buttons{};
+        float m_target_yaw{};
+        bool m_input_valid{};
+        bool m_active_this_tick{};
+        bool m_braking{};
+    };
+
 	class bhop
 	{
 	public:
@@ -66,14 +82,7 @@ namespace features::movement {
 		[[nodiscard]] bool handled_this_tick( ) const { return this->m_handled_this_tick; }
 
 	private:
-		void quantized_path( systems::input::usercmd* cmd );
-		[[nodiscard]] bool apply_yaw_subtick( proto::base_usercmd_pb* base, float when, float yaw_delta ) const;
-		void check_button( std::uintptr_t current_buttons, std::uintptr_t button );
-		[[nodiscard]] static math::vector2 movement_from_buttons( std::uintptr_t pressed );
 
-		std::uintptr_t m_last_buttons{};
-		std::uintptr_t m_last_pressed{};
-		int m_substep_counter{};
 		bool m_handled_this_tick{};
 	};
 

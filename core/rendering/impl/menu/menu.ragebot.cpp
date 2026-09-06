@@ -9,8 +9,8 @@ namespace rendering {
 
 		constexpr const char* hitbox_names[ ]{ "head", "chest", "stomach", "arms", "legs", "feet" };
 		constexpr const char* pitch_items[ ]{ "none", "down", "up" };
-		constexpr const char* target_priority_items[ ]{ "Highest Damage", "Lowest HP", "Closest Distance", "Highest Threat" };
-		inline int target_priority_idx{ 0 };
+        constexpr const char* weapon_group_items[]{ "Pistol", "SMG", "Rifle", "Shotgun", "Sniper", "LMG" };
+        inline int weapon_group_idx{ 2 };
 
 	} // namespace detail
 
@@ -26,7 +26,7 @@ namespace rendering {
 		auto& autos = s.m_autos;
 		auto& lg = s.m_lagcomp;
 
-		auto& wg = rb.groups[ 0 ];
+
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
@@ -46,9 +46,9 @@ namespace rendering {
 
 			xui::toggle( "Enable Ragebot", rb.enabled, "Activate automated targeting engine" );
 			xui::layout::spacing( 3.0f );
-			xui::toggle( "Silent Aim", wg.silent, "Aim without moving the screen view" );
-			xui::layout::spacing( 3.0f );
-			xui::combo( "Target Selection", detail::target_priority_idx, detail::target_priority_items, 4 );
+            xui::combo("Weapon Group", detail::weapon_group_idx, detail::weapon_group_items, 6);
+            auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
+            xui::toggle("Silent Aim", wg.silent, "Aim without moving the screen view");
 			xui::layout::spacing( 3.0f );
 			xui::slider_float( "Field of View", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
 
@@ -71,6 +71,7 @@ namespace rendering {
 
 		if ( xui::begin_child( "##ragebot_accuracy_engine", col_w, body_h, true ) )
 		{
+            auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
 			xui::section_header("ACCURACY ENGINE");
 
             xui::toggle("Auto Stop", wg.autostop, "Decelerate before taking a shot");
@@ -101,6 +102,8 @@ namespace rendering {
 
 			xui::layout::spacing( 8.0f );
 			xui::toggle( "Anti Aim", aa.enabled );
+            xui::toggle("Spinbot", aa.spinbot, "Command-timed rotation; does not rotate the camera");
+            xui::slider_float("Spin Speed", aa.spin_speed, 0.0f, 1440.0f, "%.0f deg/s");
 			xui::layout::spacing( 3.0f );
 			xui::combo( "Pitch", aa.pitch.value, detail::pitch_items, 3 );
 			xui::layout::spacing( 3.0f );

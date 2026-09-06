@@ -19,36 +19,19 @@ namespace features::movement::utils {
     const systems::prediction::state& prestate,
     std::uintptr_t pawn)
 {
-    auto flags = prestate.flags;
-    if (!flags && pawn)
-    {
-        flags = memory::read<std::uint32_t>(
-            pawn + SCHEMA("C_BaseEntity", "m_fFlags"_hash));
-    }
-
-    return prestate.on_ground ||
-           (flags & static_cast<std::uint32_t>(cstypes::entity_flags::on_ground)) != 0;
+    (void)pawn;
+    return (prestate.flags & static_cast<std::uint32_t>(cstypes::entity_flags::on_ground)) != 0;
 }
 
 [[nodiscard]] inline math::vector3 pick_velocity(
     const systems::prediction::state& prestate)
 {
-    auto velocity = prestate.velocity;
-
-    const bool abs_invalid = velocity.length_sqr() < 1.0f;
-    const bool network_valid = prestate.networked_velocity.length_sqr() > 1.0f;
-
-    if (abs_invalid && network_valid)
-    {
-        velocity = prestate.networked_velocity;
-    }
-
-    if (std::fabsf(velocity.z) < 1.0f && std::fabsf(prestate.networked_velocity.z) > 1.0f)
-    {
-        velocity.z = prestate.networked_velocity.z;
-    }
-
-    return velocity;
+    const auto valid = [](const math::vector3& v) {
+        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    };
+    // A zero velocity is valid; mixing components from two snapshots can invent a landing.
+    if (valid(prestate.velocity)) return prestate.velocity;
+    return prestate.networked_velocity;
 }
 
 [[nodiscard]] inline float get_player_maxspeed(std::uintptr_t pawn)

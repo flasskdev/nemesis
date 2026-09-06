@@ -123,6 +123,8 @@ namespace systems {
 
 		void update( );
 		void apply( );
+        void rebase_movement(usercmd* cmd, float source_yaw) const;
+        void sync_movement_buttons(usercmd* cmd) const;
 
 		[[nodiscard]] usercmd* get( ) const { return this->m_current_cmd; }
 		[[nodiscard]] usercmd* get_current_cmd( std::uintptr_t local_controller ) const;

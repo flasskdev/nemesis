@@ -58,6 +58,7 @@ namespace systems {
 
 	void prediction::capture_prestate( std::uintptr_t local_pawn, std::uintptr_t movement_services )
 	{
+        this->m_prestate = {};
 		this->m_prestate.flags = memory::read<std::uint32_t>( local_pawn + SCHEMA( "C_BaseEntity", "m_fFlags"_hash ) );
 		this->m_prestate.networked_velocity = memory::read<math::vector3>( local_pawn + SCHEMA( "C_BaseEntity", "m_vecVelocity"_hash ) );
 		this->m_prestate.velocity = memory::read<math::vector3>( local_pawn + SCHEMA( "C_BaseEntity", "m_vecAbsVelocity"_hash ) );

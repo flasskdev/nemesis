@@ -10,6 +10,9 @@ namespace features::combat {
 
 	void rage::on_create_move( systems::input::usercmd* cmd )
 	{
+		this->m_should_stop = false;
+		this->m_firing_this_tick = false;
+
 		auto& ctx = g_shared.ctx( );
 		const auto local = systems::g_local.get( );
 		this->update_penetration_crosshair( local );
@@ -20,8 +23,6 @@ namespace features::combat {
 			return;
 		}
 
-		this->m_should_stop = false;
-		this->m_firing_this_tick = false;
 
 		if ( !settings::g_combat.m_duckpeek.enabled.value )
 		{
@@ -1561,6 +1562,16 @@ namespace features::combat {
 			aim_angle = corrected;
 		}
 
+        if (!base || cmd->csgo_user_cmd.input_history_size() <= 0 ||
+            !std::isfinite(aim_angle.x) || !std::isfinite(aim_angle.y) ||
+            !std::isfinite(aim_punch.x) || !std::isfinite(aim_punch.y))
+        {
+            m_firing_this_tick = false;
+            return;
+        }
+        const math::vector3 shot_angles{
+            std::clamp(aim_angle.x - aim_punch.x, -89.0f, 89.0f),
+            std::remainder(aim_angle.y - aim_punch.y, 360.0f), 0.0f};
 		g_shared.last_shoot_tick( ) = tick_base;
 
 		if ( settings::g_misc.m_impacts.console_log.value )
@@ -1592,13 +1603,9 @@ namespace features::combat {
 
 			if ( const auto angles = entry->mutable_view_angles( ) )
 			{
-				angles->set_x( aim_angle.x - aim_punch.x );
-				angles->set_y( aim_angle.y - aim_punch.y );
-
-				if ( config.no_spread.value )
-				{
-					angles->set_z( aim_angle.z );
-				}
+                angles->set_x(shot_angles.x);
+                angles->set_y(shot_angles.y);
+                angles->set_z(0.0f);
 			}
 
 			entry->set_render_tick_count( record_time.tick + 1 );
@@ -1652,33 +1659,17 @@ namespace features::combat {
 			cmd->csgo_user_cmd.set_attack1_start_history_index( history_size - 1 );
 		}
 
-		math::vector3 forward{};
-		{
-			if ( const auto angles = base->viewangles( ) )
-			{
-				math::helpers::angle_vectors_left( { angles->x( ), angles->y( ), angles->z( ) }, &forward );
-			}
-		}
-
-		const auto punched_aim = math::vector3{ aim_angle.x - aim_punch.x, aim_angle.y - aim_punch.y, 0.0f };
-		const auto facing_away = forward.dot( ( tgt.hit.record->origin - systems::g_prediction.pre( ).networked_origin ).normalized( ) ) < 0.707107f;
-
-		auto command_aim = punched_aim;
-		if ( facing_away && settings::g_combat.m_antiaim.hide_shots.value )
-		{
-			command_aim.x = 179.9f;
-			command_aim.y = std::remainderf( punched_aim.y + 180.0f, 360.0f );
-		}
-
-		if ( const auto angles = base->mutable_viewangles( ) )
-		{
-			angles->set_x( command_aim.x );
-			angles->set_y( command_aim.y );
-		}
+        // Keep the shot command and history consistent. Do not inject the old 179.9-degree pitch inversion.
+        if (const auto angles = base->mutable_viewangles())
+        {
+            angles->set_x(shot_angles.x);
+            angles->set_y(shot_angles.y);
+            angles->set_z(0.0f);
+        }
 
 		if ( !config.silent.value )
 		{
-			systems::g_input.set_view_angles( punched_aim );
+			systems::g_input.set_view_angles( shot_angles );
 		}
 	}
 
