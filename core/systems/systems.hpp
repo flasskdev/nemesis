@@ -140,7 +140,11 @@ namespace systems {
 		[[nodiscard]] bool is_subtick_overwrite( usercmd* cmd ) const;
 
 	private:
-		usercmd* m_current_cmd{};
+        usercmd* m_current_cmd{};
+        math::vector2 m_original_move{};
+        math::vector2 m_original_angles{};
+        std::uintptr_t m_original_buttons{};
+        std::uintptr_t m_original_changed{};
 		proto::base_usercmd_pb m_backup{};
 
 		bool calculate_crc( proto::base_usercmd_pb* base ) const;

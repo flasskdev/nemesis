@@ -6,6 +6,7 @@
 #include <protection/game_addresses.hpp>
 #include "../systems.hpp"
 #include <core/features/movement/movement_math.hpp>
+#include <utilities/proto/subtick_ops.hpp>
 
 namespace systems {
 
@@ -18,7 +19,18 @@ namespace systems {
 			return;
 		}
 
-		this->m_current_cmd = this->get_current_cmd( local_controller );
+        this->m_current_cmd = this->get_current_cmd(local_controller);
+        if (m_current_cmd)
+        {
+            m_original_buttons = m_current_cmd->buttons.value;
+            m_original_changed = m_current_cmd->buttons.value_changed;
+            if (const auto base = m_current_cmd->csgo_user_cmd.mutable_base())
+            {
+                m_original_move = {base->forwardmove(), base->leftmove()};
+                const auto angles = base->viewangles();
+                m_original_angles = angles ? math::vector2{angles->x(), angles->y()} : math::vector2{};
+            }
+        }
 	}
 
 
@@ -36,7 +48,11 @@ namespace systems {
         if (base->leftmove() > 0.0001f) after |= cstypes::command_buttons::in_moveleft;
         else if (base->leftmove() < -0.0001f) after |= cstypes::command_buttons::in_moveright;
         cmd->buttons.value = after;
-        cmd->buttons.value_changed |= (before ^ after) & mask;
+        if (cmd == m_current_cmd)
+            cmd->buttons.value_changed = (cmd->buttons.value_changed & ~mask) |
+                ((m_original_changed | (m_original_buttons ^ after)) & mask);
+        else
+            cmd->buttons.value_changed |= (before ^ after) & mask;
         cmd->buttons.value_scroll &= ~mask;
     }
 
@@ -72,32 +88,36 @@ namespace systems {
         diag::set_exception_phase("input apply: final movement");
         if (local.is_alive && local.pawn)
         {
-            const auto movement = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pMovementServices"_hash));
-            if (movement)
+            const auto type = memory::read<std::uint8_t>(local.pawn + SCHEMA("C_BaseEntity", "m_nActualMoveType"_hash));
+            const bool walking = type != cstypes::move_type::ladder && type != cstypes::move_type::noclip;
+            const auto angles = base->viewangles();
+            const bool angles_changed = angles &&
+                (std::fabs(features::movement::math2d::yaw(angles->y() - m_original_angles.y)) > 0.0001f ||
+                 std::fabs(angles->x() - m_original_angles.x) > 0.0001f);
+            const auto final_move = features::movement::math2d::limit({base->forwardmove(), base->leftmove()});
+            // Sanitize base values even if a prediction baseline or an allocation is unavailable.
+            if (walking) { base->set_forwardmove(final_move.x); base->set_leftmove(final_move.y); }
+            const bool movement_changed = angles_changed ||
+                !std::isfinite(m_original_move.x) || !std::isfinite(m_original_move.y) ||
+                std::fabs(final_move.x - m_original_move.x) > 0.0001f ||
+                std::fabs(final_move.y - m_original_move.y) > 0.0001f;
+            if (walking && movement_changed)
             {
-                const auto final_move = features::movement::math2d::limit({base->forwardmove(), base->leftmove()});
-                base->set_forwardmove(final_move.x);
-                base->set_leftmove(final_move.y);
-                const float old_f = memory::read<float>(movement + SCHEMA("CPlayer_MovementServices", "m_flCmdForwardMove"_hash));
-                const float old_l = memory::read<float>(movement + SCHEMA("CPlayer_MovementServices", "m_flCmdLeftMove"_hash));
-                if (std::isfinite(old_f) && std::isfinite(old_l))
+                // Prediction can mutate movement services. Use the captured pre-command baseline.
+                const auto& previous = systems::g_prediction.pre().last_movement_impulses;
+                if (std::isfinite(previous.x) && std::isfinite(previous.y))
                 {
-                    const float df = final_move.x - old_f;
-                    const float dl = final_move.y - old_l;
                     proto::subtick_move_step* initial = nullptr;
                     for (int i = 0; i < base->subtick_moves_size(); ++i)
                     {
                         const auto step = base->mutable_subtick_moves(i);
-                        if (!step) continue;
-                        if (step->when() == 0.0f && !initial) initial = step;
+                        if (step && !step->button() && step->when() == 0.0f &&
+                            step->pitch_delta() == 0.0f && step->yaw_delta() == 0.0f)
+                        { initial = step; break; }
                     }
-                    if (!initial && (std::fabs(df) > 0.0001f || std::fabs(dl) > 0.0001f))
-                    {
-                        initial = acquire_subtick_step(base->mutable_subtick_moves());
-                        if (initial) { initial->set_button(0); initial->set_pressed(false); initial->set_when(0.0f); }
-                    }
-                    // Only replace existing analog fields once the required event is available.
-                    if (initial || (std::fabs(df) <= 0.0001f && std::fabs(dl) <= 0.0001f))
+                    if (!initial) initial = acquire_subtick_step(base->mutable_subtick_moves());
+                    // Preserve the original stream on allocation failure. Never clear it first.
+                    if (initial)
                     {
                         for (int i = 0; i < base->subtick_moves_size(); ++i)
                         {
@@ -106,13 +126,28 @@ namespace systems {
                             step->set_analog_forward_delta(0.0f);
                             step->set_analog_left_delta(0.0f);
                         }
-                        if (initial) { initial->set_analog_forward_delta(df); initial->set_analog_left_delta(dl); }
+                        initial->set_button(0);
+                        initial->set_pressed(false);
+                        initial->set_when(0.0f);
+                        initial->set_pitch_delta(0.0f);
+                        initial->set_yaw_delta(0.0f);
+                        initial->set_analog_forward_delta(final_move.x - previous.x);
+                        initial->set_analog_left_delta(final_move.y - previous.y);
+                        constexpr auto direction_mask = cstypes::command_buttons::in_forward |
+                            cstypes::command_buttons::in_back | cstypes::command_buttons::in_moveleft |
+                            cstypes::command_buttons::in_moveright;
+                        proto::subtick_ops::strip_buttons(base->mutable_subtick_moves(), direction_mask, initial);
+                        base->set_forwardmove(final_move.x);
+                        base->set_leftmove(final_move.y);
+                        sync_movement_buttons(m_current_cmd);
                     }
                 }
-                const auto type = memory::read<std::uint8_t>(local.pawn + SCHEMA("C_BaseEntity", "m_nActualMoveType"_hash));
-                if (type != cstypes::move_type::ladder && type != cstypes::move_type::noclip)
-                    sync_movement_buttons(m_current_cmd);
             }
+            // An angle writer owns this command's angles, not its jump/use/duck timestamps.
+            if (angles_changed)
+                for (int i = 0; i < base->subtick_moves_size(); ++i)
+                    if (const auto step = base->mutable_subtick_moves(i))
+                    { step->set_pitch_delta(0.0f); step->set_yaw_delta(0.0f); }
         }
 
 		diag::set_exception_phase( "input apply: buttons" );
@@ -146,27 +181,8 @@ namespace systems {
 			buttons->set_buttonstate3( this->m_current_cmd->buttons.value_scroll );
 		}
 
-        // Stable ordering keeps same-time button edges in their original order.
-        if (const auto steps = base->mutable_subtick_moves(); steps && steps->m_rep)
-        {
-            auto* elements = steps->m_rep->elements;
-            for (int i = 1; i < steps->m_current_size; ++i)
-            {
-                auto* key = elements[i];
-                const auto key_step = proto::impl_ptr<proto::subtick_move_step>(key);
-                if (!key_step) continue;
-                const float when = key_step->when();
-                int j = i - 1;
-                while (j >= 0)
-                {
-                    const auto other = proto::impl_ptr<proto::subtick_move_step>(elements[j]);
-                    if (!other || other->when() <= when) break;
-                    elements[j + 1] = elements[j];
-                    --j;
-                }
-                elements[j + 1] = key;
-            }
-        }
+        // Preserve same-time release/press order, including mixed button/analog records.
+        proto::subtick_ops::stable_sort(base->mutable_subtick_moves());
 
         if (settings::g_movement.movement_debug.value && local.pawn && local.is_alive &&
             (m_current_cmd->command_number % 16) == 0)

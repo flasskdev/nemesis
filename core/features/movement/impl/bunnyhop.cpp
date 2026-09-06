@@ -6,6 +6,7 @@
 #include <protection/game_addresses.hpp>
 #include "../movement.hpp"
 #include "../movement_utils.hpp"
+#include <utilities/proto/subtick_ops.hpp>
 
 namespace features::movement {
 namespace {
@@ -50,39 +51,30 @@ std::optional<float> landing_fraction(std::uintptr_t pawn, std::uintptr_t moveme
     return std::clamp(hit.fraction + edge_epsilon, edge_epsilon, 1.0f - edge_epsilon);
 }
 
-bool jump_event(proto::base_usercmd_pb* base, bool pressed, float when)
+bool replace_jump_events(proto::base_usercmd_pb* base, std::optional<float> when)
 {
-    const auto step = systems::g_input.acquire_subtick_step(base->mutable_subtick_moves());
-    if (!step) return false;
-    step->set_button(cstypes::command_buttons::in_jump);
-    step->set_pressed(pressed);
-    step->set_when(when);
-    step->set_analog_forward_delta(0.0f);
-    step->set_analog_left_delta(0.0f);
-    step->set_pitch_delta(0.0f);
-    step->set_yaw_delta(0.0f);
-    return true;
-}
-
-bool jump_pair(proto::base_usercmd_pb* base, float when)
-{
-    const auto steps = base->mutable_subtick_moves();
-    if (!steps) return false;
-    const int checkpoint = steps->m_current_size;
-    if (jump_event(base, false, 0.0f) && jump_event(base, true, when)) return true;
-    steps->m_current_size = checkpoint;
-    return false;
+    return proto::subtick_ops::replace_button_events(base->mutable_subtick_moves(),
+        cstypes::command_buttons::in_jump, when, [](auto* steps) {
+            return systems::g_input.acquire_subtick_step(steps);
+        });
 }
 }
 
-void bhop::on_create_move(systems::input::usercmd* cmd) const
+void bhop::on_create_move(systems::input::usercmd* cmd)
 {
     if (!cmd || !settings::g_movement.bhop.value || g_jumpbug.active_this_tick() || g_edgebug.active_this_tick()) return;
     const auto automatic = CONVAR("sv_autobunnyhopping");
     if (automatic && automatic->get<bool>()) return;
     constexpr auto jump = static_cast<std::uintptr_t>(cstypes::command_buttons::in_jump);
-    if (!(cmd->buttons.value & jump)) return;
     const auto local = systems::g_local.get();
+    if (!m_have_command || m_pawn != local.pawn || m_command != cmd->command_number)
+    {
+        m_have_command = true;
+        m_pawn = local.pawn;
+        m_command = cmd->command_number;
+        m_jump_intent = ((cmd->buttons.value | cmd->buttons.value_scroll) & jump) != 0;
+    }
+    if (!m_jump_intent) return;
     const auto base = cmd->csgo_user_cmd.mutable_base();
     if (!base || !local.is_alive || !local.pawn || utils::is_movement_blocked(local.pawn)) return;
     const auto& state = systems::g_prediction.pre();
@@ -94,8 +86,8 @@ void bhop::on_create_move(systems::input::usercmd* cmd) const
         const auto movement = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pMovementServices"_hash));
         if (movement) press_when = landing_fraction(local.pawn, movement, state);
     }
-    const bool scheduled = press_when && jump_pair(base, *press_when);
-    if (scheduled || grounded)
+    if (!replace_jump_events(base, press_when)) return;
+    if (press_when)
     {
         cmd->buttons.value |= jump;
         cmd->buttons.value_changed |= jump;
@@ -104,7 +96,6 @@ void bhop::on_create_move(systems::input::usercmd* cmd) const
     {
         cmd->buttons.value &= ~jump;
         cmd->buttons.value_changed |= jump;
-        jump_event(base, false, 0.0f);
     }
     cmd->buttons.value_scroll &= ~jump;
 }

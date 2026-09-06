@@ -14,7 +14,7 @@ namespace features::combat {
         const auto& cfg = settings::g_combat.m_antiaim;
         if (!cmd || (!cfg.enabled.value && !cfg.spinbot.value))
         {
-            m_spin_initialized = false;
+            m_spin.reset();
             return;
         }
         if (systems::g_local.is_in_cinematic() || systems::g_local.is_in_time_freeze()) return;
@@ -40,25 +40,12 @@ namespace features::combat {
         m_modified_angles.x = cfg.enabled.value ? get_pitch(view.x) : view.x;
         if (cfg.spinbot.value)
         {
-            const auto number = cmd->command_number;
-            const auto elapsed = number - m_spin_last_command;
-            if (!m_spin_initialized || m_spin_pawn != local.pawn || elapsed < 0 || elapsed > 4096)
-            {
-                m_spin_angle = view.y;
-                m_spin_initialized = true;
-                m_spin_pawn = local.pawn;
-            }
-            else if (elapsed > 0)
-            {
-                const float speed = std::isfinite(cfg.spin_speed.value) ? std::clamp(cfg.spin_speed.value, 0.0f, 1440.0f) : 360.0f;
-                m_spin_angle = std::remainder(m_spin_angle + float(elapsed) * cstypes::tick_interval * speed, 360.0f);
-            }
-            m_spin_last_command = number;
-            m_modified_angles.y = m_spin_angle;
+            m_modified_angles.y = m_spin.update(view.y, cmd->command_number, local.pawn,
+                cfg.spin_speed.value, cstypes::tick_interval);
         }
         else
         {
-            m_spin_initialized = false;
+            m_spin.reset();
             m_modified_angles.y = get_yaw(view, local);
         }
         if (!std::isfinite(m_modified_angles.y)) return;
@@ -219,6 +206,7 @@ namespace features::combat {
 		auto base_yaw = view_yaw - base_yaw_offset;
 
 		const auto local_game_scene_node = memory::read<std::uintptr_t>( local.pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
+        if (!local_game_scene_node) return base_yaw;
 		const auto local_origin = memory::read<math::vector3>( local_game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) );
 		const auto players = systems::g_entities.get_by_type( systems::entities::type::player );
 		const auto eye_pos = local_origin + memory::read<math::vector3>( local.pawn + SCHEMA( "C_BaseModelEntity", "m_vecViewOffset"_hash ) );
@@ -402,15 +390,9 @@ namespace features::combat {
 				return best_threat_score < std::numeric_limits<float>::max( ) ? std::optional<float>{ best_yaw } : std::nullopt;
 			};
 
-		const auto& prestate = systems::g_prediction.pre();
-		bool on_ground = (prestate.flags & cstypes::entity_flags::on_ground) != 0;
-		if (on_ground)
-		{
-			if (const auto target_yaw = pick_target_yaw())
-			{
-				base_yaw = *target_yaw;
-			}
-		}
+        // Takeoff is not a reason to change the yaw reference from target to camera.
+        if (const auto target_yaw = pick_target_yaw())
+            base_yaw = *target_yaw;
 
 		auto indicator = base_yaw;
 		if ( this->m_yaw_side == -1 )

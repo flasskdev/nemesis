@@ -1776,6 +1776,7 @@ namespace rendering {
             xui::toggle("Air Strafe", mov.airstrafe);
             xui::layout::spacing(3.0f);
             xui::toggle("Fully Directional", mov.airstrafe_fully_directional);
+            xui::slider_float("Strafe Smoothing", mov.airstrafe_heading_slack, 0.0f, 12.0f, "%.1f deg");
             xui::layout::spacing(3.0f);
             xui::toggle("Fast Ladder", mov.fastladder);
             xui::layout::spacing(3.0f);

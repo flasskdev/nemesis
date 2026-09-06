@@ -1,4 +1,6 @@
+#ifndef NEMESIS_PROTO_STANDALONE
 #include <pch/pch.hpp>
+#endif
 #include "proto.hpp"
 
 namespace proto {

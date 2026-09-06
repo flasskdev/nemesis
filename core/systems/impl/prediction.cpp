@@ -234,6 +234,9 @@ namespace systems {
 		guard.save<int>( weapon + SCHEMA( "C_CSWeaponBaseGun", "m_zoomLevel"_hash ) );
 		guard.save<int>( weapon + SCHEMA( "C_CSWeaponBaseGun", "m_iBurstShotsRemaining"_hash ) );
 
+        guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdForwardMove"_hash));
+        guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdLeftMove"_hash));
+        guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdUpMove"_hash));
 		guard.save<float>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_flStamina"_hash ) );
 		guard.save<bool>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_bDucked"_hash ) );
 		guard.save<bool>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_bDucking"_hash ) );

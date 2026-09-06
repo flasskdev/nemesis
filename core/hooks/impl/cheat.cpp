@@ -342,7 +342,7 @@ namespace hooks {
 			}
 
 			features::movement::g_airstrafe.store_angles();
-			systems::g_input.desubtick( current_cmd );
+            // Retain native jump/duck/use timestamps. Finalization replaces only owned fields.
 			systems::g_prediction.capture_prestate( local.pawn, movement_services );
 
 			{

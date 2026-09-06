@@ -124,11 +124,11 @@ class MovementTests(unittest.TestCase):
         def phase(commands):
             angle, last = 17.0, commands[0]
             for command in commands[1:]:
-                angle = math.remainder(angle + (command - last) / 64 * 360, 360)
+                angle = math.remainder(angle + (1 if command > last else 0) / 64 * 360, 360)
                 last = command
             return angle
-        self.assertEqual(phase([100, 101, 101, 102]), phase([100, 102]))
-        self.assertEqual(phase([100, 164]), 17.0)
+        self.assertEqual(phase([100, 101, 101, 102]), phase([100, 101, 102]))
+        self.assertEqual(phase([100, 164]), phase([100, 101]))
 
     def test_source_contracts(self):
         hook = (ROOT / 'core/hooks/impl/cheat.cpp').read_text()
@@ -143,6 +143,52 @@ class MovementTests(unittest.TestCase):
         self.assertIn('if (!features::combat::g_rage.is_firing_this_tick())', hook)
         self.assertLess(hook.index('g_rage.on_create_move'), hook.index('g_misc.antiaim().on_create_move'))
         self.assertLess(hook.index('g_misc.antiaim().on_create_move'), hook.index('g_airstrafe.finalize'))
+
+class CommandSourceContracts(unittest.TestCase):
+    def test_native_subticks_are_not_globally_cleared(self):
+        hook = (ROOT / 'core/hooks/impl/cheat.cpp').read_text()
+        inputs = (ROOT / 'core/systems/impl/input.cpp').read_text()
+        self.assertNotIn('g_input.desubtick(', hook)
+        apply_body = inputs.split('void input::apply( )', 1)[1].split('input::usercmd* input::get_current_cmd', 1)[0]
+        self.assertIn('g_prediction.pre().last_movement_impulses', apply_body)
+        self.assertIn('!step->button()', apply_body)
+        self.assertIn('subtick_ops::strip_buttons', apply_body)
+        self.assertNotIn('m_flCmdForwardMove', apply_body)
+
+    def test_prediction_restores_movement_baseline(self):
+        source = (ROOT / 'core/systems/impl/prediction.cpp').read_text()
+        for name in ('m_flCmdForwardMove', 'm_flCmdLeftMove', 'm_flCmdUpMove'):
+            self.assertIn('guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "' + name + '"_hash))', source)
+
+    def test_yaw_target_does_not_reset_on_takeoff(self):
+        source = (ROOT / 'core/features/combat/impl/misc.cpp').read_text()
+        yaw = source.split('float misc::antiaim::get_yaw(', 1)[1].split('void misc::antiaim::correct_movement', 1)[0]
+        self.assertNotIn('on_ground', yaw)
+        self.assertIn('pick_target_yaw()', yaw)
+
+    def test_silent_strafe_respects_angle_owners(self):
+        source = (ROOT / 'core/features/movement/impl/airstrafe.cpp').read_text()
+        self.assertIn('final_pass && quantized && !aim_owns_angles', source)
+        self.assertIn('!combat.m_antiaim.enabled.value && !combat.m_antiaim.spinbot.value', source)
+        self.assertIn('g_rage.is_firing_this_tick()', source)
+        self.assertIn('in_second_attack', source)
+        self.assertIn('in_use', source)
+        self.assertNotIn('set_view_angles(', source)
+
+    def test_bhop_owns_plain_jump_but_not_duck_jump(self):
+        bhop = (ROOT / 'core/features/movement/impl/bunnyhop.cpp').read_text()
+        jumpbug = (ROOT / 'core/features/movement/impl/jumpbug.cpp').read_text()
+        self.assertIn('if (grounded) press_when = edge_epsilon', bhop)
+        self.assertIn('subtick_ops::replace_button_events', bhop)
+        self.assertIn('m_command != cmd->command_number', bhop)
+        self.assertIn('g_movement.bhop.value && !(buttons.value & cstypes::command_buttons::in_duck)', jumpbug)
+
+    def test_gun_attack_references_writable_history(self):
+        source = (ROOT / 'core/features/combat/impl/rage.cpp').read_text()
+        gun = source.split('void rage::fire_gun(', 1)[1].split('void rage::fire_melee(', 1)[0]
+        self.assertLess(gun.index('if (shot_history_index < 0)'), gun.index('m_firing_this_tick = true'))
+        self.assertIn('set_attack1_start_history_index( shot_history_index )', gun)
+        self.assertIn('entry && entry->view_angles()', gun)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

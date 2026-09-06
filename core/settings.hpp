@@ -1369,6 +1369,7 @@ namespace settings {
         xui::setting movement_debug{ false, {}, "movement debug", "movement" };
 		xui::setting airstrafe{ true, {}, "airstrafe", "movement" };
 		xui::setting airstrafe_fully_directional{ true, {}, "fully directional", "movement - airstrafe" };
+        config::val<float> airstrafe_heading_slack{ 4.0f, "movement - airstrafe", "heading slack degrees" };
 		xui::setting jumpbug{ true, {}, "jumpbug", "movement" };
 		xui::setting fastladder{ true, {}, "fastladder", "movement" };
 		xui::setting edgejump{ false, { 'E', xui::bind_mode::hold_on}, "edgejump", "movement" };

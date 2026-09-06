@@ -25,7 +25,10 @@ namespace features::movement {
 			return;
 		}
 
-		auto& buttons = cmd->buttons;
+        if (!cmd) return;
+        auto& buttons = cmd->buttons;
+        // With bhop enabled, plain jump belongs to bhop. Duck+jump explicitly opts into jumpbug.
+        if (settings::g_movement.bhop.value && !(buttons.value & cstypes::command_buttons::in_duck)) return;
 		if ( !( buttons.value & cstypes::command_buttons::in_jump ) )
 		{
 			return;

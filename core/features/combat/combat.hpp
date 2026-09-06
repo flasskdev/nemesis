@@ -1,6 +1,7 @@
 #pragma once
 
 #include <core/systems/systems.hpp>
+#include "angle_math.hpp"
 
 namespace features::combat {
 
@@ -266,10 +267,7 @@ namespace features::combat {
 			bool m_should_correct{};
 			bool m_antiaim_active{};
 			float m_indicator_yaw{};
-            float m_spin_angle{};
-            std::intptr_t m_spin_last_command{};
-            std::uintptr_t m_spin_pawn{};
-            bool m_spin_initialized{};
+            angle_math::spin_clock m_spin{};
 		};
 
 		class duckpeek

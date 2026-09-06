@@ -89,6 +89,7 @@ namespace rendering {
             xui::toggle("Bunnyhop", settings::g_movement.bhop);
             xui::toggle("Silent Air Strafe", settings::g_movement.airstrafe);
             xui::toggle("Directional WASD", settings::g_movement.airstrafe_fully_directional);
+            xui::slider_float("Strafe Smoothing", settings::g_movement.airstrafe_heading_slack, 0.0f, 12.0f, "%.1f deg");
             xui::layout::spacing(8.0f);
 			xui::section_header("GAMEPLAY & LOGS");
 
