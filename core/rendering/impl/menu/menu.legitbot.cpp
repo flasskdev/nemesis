@@ -31,10 +31,7 @@ namespace rendering {
 
 		if ( xui::begin_child( "##legitbot_main", col_w, body_h, true ) )
 		{
-			xui::text( "LEGITBOT MAIN", tokens::col_accent );
-			xui::layout::spacing( 4.0f );
-			xui::layout::separator( );
-			xui::layout::spacing( 6.0f );
+			xui::section_header("LEGITBOT MAIN");
 
 			xui::toggle( "Enable Legitbot", lb.enabled );
 			xui::layout::spacing( 3.0f );
@@ -71,10 +68,7 @@ namespace rendering {
 
 		if ( xui::begin_child( "##legitbot_trigger_accuracy", col_w, body_h, true ) )
 		{
-			xui::text( "TRIGGER & ACCURACY", tokens::col_accent );
-			xui::layout::spacing( 4.0f );
-			xui::layout::separator( );
-			xui::layout::spacing( 6.0f );
+			xui::section_header("TRIGGER & ACCURACY");
 
 			xui::toggle( "Triggerbot", wg.triggerbot );
 			xui::layout::spacing( 3.0f );

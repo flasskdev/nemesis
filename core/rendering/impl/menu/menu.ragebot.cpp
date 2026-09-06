@@ -9,7 +9,7 @@ namespace rendering {
 
 		constexpr const char* hitbox_names[ ]{ "head", "chest", "stomach", "arms", "legs", "feet" };
 		constexpr const char* pitch_items[ ]{ "none", "down", "up" };
-		constexpr const char* target_priority_items[ ]{ "Max Damage", "Lowest HP", "Closest Distance", "Highest Threat" };
+		constexpr const char* target_priority_items[ ]{ "Highest Damage", "Lowest HP", "Closest Distance", "Highest Threat" };
 		inline int target_priority_idx{ 0 };
 
 	} // namespace detail
@@ -42,20 +42,17 @@ namespace rendering {
 
 		if ( xui::begin_child( "##ragebot_aimbot_main", col_w, body_h, true ) )
 		{
-			xui::text( "AIMBOT MAIN", tokens::col_accent );
-			xui::layout::spacing( 4.0f );
-			xui::layout::separator( );
-			xui::layout::spacing( 6.0f );
+			xui::section_header("AIMBOT MAIN");
 
-			xui::toggle( "Enable Ragebot", rb.enabled );
+			xui::toggle( "Enable Ragebot", rb.enabled, "Activate automated targeting engine" );
 			xui::layout::spacing( 3.0f );
-			xui::toggle( "Silent Aim", wg.silent );
+			xui::toggle( "Silent Aim", wg.silent, "Aim without moving the screen view" );
 			xui::layout::spacing( 3.0f );
-			xui::slider_float( "Target FOV", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
+			xui::combo( "Target Selection", detail::target_priority_idx, detail::target_priority_items, 4 );
+			xui::layout::spacing( 3.0f );
+			xui::slider_float( "Field of View", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
 
 			xui::layout::spacing( 8.0f );
-			xui::toggle( "Autostop", wg.autostop );
-			xui::layout::spacing( 3.0f );
 			xui::toggle( "No Spread", wg.no_spread );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Extrapolation", lg.extrapolation );
@@ -74,16 +71,17 @@ namespace rendering {
 
 		if ( xui::begin_child( "##ragebot_accuracy_engine", col_w, body_h, true ) )
 		{
-			xui::text( "ACCURACY ENGINE", tokens::col_accent );
-			xui::layout::spacing( 4.0f );
-			xui::layout::separator( );
-			xui::layout::spacing( 6.0f );
+			xui::section_header("ACCURACY ENGINE");
 
-			xui::slider_int( "Hitchance", wg.hitchance, 0, 100, "%d%%" );
+            xui::toggle("Auto Stop", wg.autostop, "Decelerate before taking a shot");
+            xui::toggle("Auto Scope", autos.scope, "Scope automatically with sniper rifles");
+            xui::layout::spacing(8.0f);
+            xui::layout::separator();
+            xui::layout::spacing(8.0f);
+
+			xui::slider_int( "Hit Chance", wg.hitchance, 0, 100, "%d%%" );
 			xui::layout::spacing( 3.0f );
-			xui::combo( "Target Priority", detail::target_priority_idx, detail::target_priority_items, 4 );
-			xui::layout::spacing( 3.0f );
-			xui::slider_int( "Minimum Damage", wg.min_damage, 5, 125, "%d" );
+			xui::slider_int( "Minimum Damage", wg.min_damage, 5, 125, "%d hp" );
 
 			xui::layout::spacing( 8.0f );
 			xui::toggle( "Hitchance Override", wg.hitchance_override );

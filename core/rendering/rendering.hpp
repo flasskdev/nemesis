@@ -41,20 +41,20 @@ namespace rendering {
         void toggle() { this->m_open = !this->m_open; }
         [[nodiscard]] bool is_open() const { return this->m_open; }
         void apply_saved_cursor();
+        void update_ui_state();
+        [[nodiscard]] const std::string& user_name() const { return this->m_user_name; }
 
         enum class tab : int
         {
             ragebot, legitbot, movement, visuals, misc, settings, config, count
         };
 
-        // Новая ширина сайдбара для дизайна Mintaly (текст + dot icon)
-        static constexpr float k_sidebar_w = 145.0f;
+        static constexpr float k_sidebar_w = tokens::sidebar_w;
 
     private:
         bool draw_intro();
         void draw_side_bar(float h); // Оставляем один аргумент
         void draw_top_bar(float w);
-        void draw_theme_swatches(float sb_x, float avatar_y);
         void try_load_user_avatar();
         void apply_theme_preset(int preset);
         void sync_theme_style() const;
@@ -87,8 +87,8 @@ namespace rendering {
 
         float m_x{ 100.0f };
         float m_y{ 100.0f };
-        float m_w{ 900.0f };
-        float m_h{ 750.0f };
+        float m_w{ 920.0f };
+        float m_h{ 680.0f };
 
         float m_body_x{};
         float m_body_y{};
@@ -107,7 +107,9 @@ namespace rendering {
         bool m_intro_finished{};
 
         bool m_search_open{};
-        int m_theme_preset{};
+        std::string m_user_name{ "Steam user" };
+        std::uint64_t m_user_steam_id{};
+        int m_user_avatar_image{};
         float m_user_avatar_retry_delay{};
         std::string m_search_query{};
         std::vector<std::size_t> m_search_visible_indices{};

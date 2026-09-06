@@ -85,10 +85,7 @@ namespace rendering {
 
 		if ( xui::begin_child( "##misc_gameplay_logs", col_w, body_h, true ) )
 		{
-			xui::text( "GAMEPLAY & LOGS", tokens::col_accent );
-			xui::layout::spacing( 4.0f );
-			xui::layout::separator( );
-			xui::layout::spacing( 6.0f );
+			xui::section_header("GAMEPLAY & LOGS");
 
 			xui::toggle( "Hit Logs", impacts.hit_log );
 			if ( xui::begin_popup( "##hitlog_popup", 220.0f ) )
@@ -155,10 +152,7 @@ namespace rendering {
 
 		if ( xui::begin_child( "##misc_view_removals", col_w, body_h, true ) )
 		{
-			xui::text( "VIEW & REMOVALS", tokens::col_accent );
-			xui::layout::spacing( 4.0f );
-			xui::layout::separator( );
-			xui::layout::spacing( 6.0f );
+			xui::section_header("VIEW & REMOVALS");
 
 			xui::toggle( "Custom FOV", cam.change_fov );
 			if ( xui::begin_popup( "##fov_popup", 220.0f ) )

@@ -88,6 +88,7 @@ namespace rendering {
 		m_context->OMSetRenderTargets( 1, &this->m_rtv, nullptr );
 
 		xdraw::begin_frame( true );
+		g_menu.update_ui_state( );
 		{
 			auto& dl = xdraw::get( xdraw::layer::bottom );
 

@@ -1313,6 +1313,7 @@ namespace settings {
 		xui::setting reveal_radar{ true, {}, "reveal radar", "misc" };
 		xui::setting disable_game_logs{ true, {}, "disable game logs", "misc" };
 		config::val<int> menu_key{ VK_INSERT, "misc", "menu key" };
+		config::val<int> menu_palette{ 0, "interface", "color palette" };
 
 		struct watermark_cfg
 		{

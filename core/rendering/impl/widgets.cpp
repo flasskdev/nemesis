@@ -7,6 +7,7 @@
 #include <core/features/features.hpp>
 
 #include "../rendering.hpp"
+#include "../theme.hpp"
 #include <utilities/security/security.hpp>
 
 namespace rendering {
@@ -26,21 +27,10 @@ namespace rendering {
 	void widgets::watermark( xdraw::draw_list& draw_list )
 	{
 		const auto [screen_w, screen_h] = xdraw::viewport_size( );
-		const auto& s  = xui::ctx( ).style;
 		const auto& wm = settings::g_misc.m_watermark;
 		const auto framerate = xdraw::framerate( );
 		const auto local = systems::g_local.get( );
 
-		constexpr auto h{ 24.0f };
-		constexpr auto margin{ 10.0f };
-		constexpr auto r{ 8.0f };
-		constexpr auto inner_r{ 6.0f };
-		constexpr auto inner_pad{ 2.0f };
-		constexpr auto text_pad_x{ 8.0f };
-		constexpr auto text_nudge{ 0.5f };
-		constexpr auto section_spacing{ 2.0f };
-		constexpr auto logo_icon_size{ 12.0f };
-		constexpr auto logo_icon_pad{ 7.0f };
 
 		// ── time ────────────────────────────────────────────────────────────
 		SYSTEMTIME st{};
@@ -124,107 +114,76 @@ namespace rendering {
 		}
 
 
-		// ── logo ────────────────────────────────────────────────────────────
-		const auto logo_scale = logo_icon_size / 12.0f;
-		static auto logo_w = 0, logo_h = 0;
-		static const auto logo = xdraw::load_svg( R"(<svg width="15" height="12" viewBox="0 0 15 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.131688 9.02626L6.40009 0.551371C6.94385 -0.18379 8.07861 -0.18379 8.62237 0.551371L14.8681 8.99564C15.2003 9.44476 14.8666 10.0674 14.2937 10.0674H12.9205C12.5679 10.0674 12.2512 9.86022 12.1214 9.54481L10.2638 5.0302C10.1631 4.78558 9.91739 4.62489 9.64393 4.62489C9.52346 4.62489 9.43618 4.73535 9.46834 4.84701L11.2808 11.1405C11.4053 11.5727 11.0674 12 10.6014 12H9.36667C9.09606 12 8.86578 11.8102 8.82422 11.5529L7.71627 3.99646C7.68733 3.81739 7.36739 3.82052 7.33103 3.99836L5.84387 11.5738C5.79319 11.8214 5.56756 12 5.30526 12H4.07334C3.594 12 3.25442 11.5497 3.40311 11.1112L5.4932 4.94752C5.54344 4.79932 5.42867 4.64708 5.26665 4.64708H5.22153C4.95747 4.64708 4.71827 4.79707 4.61165 5.02955L2.5027 9.62798C2.36225 9.93422 2.04374 10.1288 1.69595 10.1208L0.689398 10.0978C0.124293 10.0848 -0.195983 9.46937 0.131756 9.02626H0.131688Z" fill="#111111"/></svg>)", logo_scale, &logo_w, &logo_h );
+        xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+        struct segment { std::string value, unit; float width; };
+        std::vector<segment> segments;
+        const auto add = [&](std::string value, std::string unit = {}) {
+            const auto width = xdraw::measure_text(value).first + xdraw::measure_text(unit).first + 22.0f;
+            segments.push_back({std::move(value), std::move(unit), width});
+        };
+        const auto available = std::max(100.0f, static_cast<float>(screen_w) - 24.0f);
+        if (wm.show_user.value) add(theme::fit_text(g_menu.user_name(), std::min(140.0f, available * 0.25f)));
+        if (has_map) add(theme::fit_text(s_map_name, 130.0f));
+        if (wm.show_ping.value) add(ping_val, " ms");
+        if (has_velocity) add(vel_val, " u/s");
+        if (wm.show_fps.value) add(fps_val, " fps");
+        if (has_tick) add(tick_val, " tick");
+        if (wm.show_time.value) add(time_buf);
 
-		const auto inner_h     = h - inner_pad * 2.0f;
-		const auto logo_draw_w = static_cast<float>( logo_w );
-
-		// ── measure text ─────────────────────────────────────────────────────
-		const auto [name_tw, name_th] = xdraw::measure_text( "mintaly" );
-		const auto [user_tw, user_th] = xdraw::measure_text( "developer" );
-		const auto [ping_vw, ping_vh] = xdraw::measure_text( ping_val );
-		const auto [ping_uw, ping_uh] = xdraw::measure_text( " ms" );
-		const auto [fps_vw,  fps_vh]  = xdraw::measure_text( fps_val );
-		const auto [fps_uw,  fps_uh]  = xdraw::measure_text( " fps" );
-		const auto [time_tw, time_th] = xdraw::measure_text( time_buf );
-
-		float map_tw{}, map_th{};
-		if ( has_map ) std::tie( map_tw, map_th ) = xdraw::measure_text( s_map_name.c_str( ) );
-
-		float tick_vw{}, tick_vh{}, tick_uw{}, tick_uh{};
-		if ( has_tick )
-		{
-			std::tie( tick_vw, tick_vh ) = xdraw::measure_text( tick_val );
-			std::tie( tick_uw, tick_uh ) = xdraw::measure_text( " tick" );
-		}
-
-		float vel_vw{}, vel_vh{}, vel_uw{}, vel_uh{};
-		if ( has_velocity )
-		{
-			std::tie( vel_vw, vel_vh ) = xdraw::measure_text( vel_val );
-			std::tie( vel_uw, vel_uh ) = xdraw::measure_text( " u/s" );
-		}
-
-
-		// ── pill widths ──────────────────────────────────────────────────────
-		const auto logo_pill_w = logo_icon_pad + logo_draw_w + logo_icon_pad + name_tw + text_pad_x;
-		const auto user_pill_w = user_tw + text_pad_x * 2.0f;
-		const auto ping_pill_w = ping_vw + ping_uw + text_pad_x * 2.0f;
-		const auto fps_pill_w  = fps_vw  + fps_uw  + text_pad_x * 2.0f;
-		const auto time_pill_w = time_tw + text_pad_x * 2.0f;
-		const auto map_pill_w  = map_tw  + text_pad_x * 2.0f;
-		const auto tick_pill_w = tick_vw + tick_uw + text_pad_x * 2.0f;
-		const auto vel_pill_w  = vel_vw + vel_uw + text_pad_x * 2.0f;
-
-		// ── dynamic total width ──────────────────────────────────────────────
-		float target_w = inner_pad + logo_pill_w + section_spacing;
-		if ( wm.show_user.value ) target_w += user_pill_w + section_spacing;
-		if ( has_map )            target_w += map_pill_w  + section_spacing;
-		if ( wm.show_ping.value ) target_w += ping_pill_w + section_spacing;
-		if ( has_velocity )       target_w += vel_pill_w  + section_spacing;
-		if ( wm.show_fps.value )  target_w += fps_pill_w  + section_spacing;
-		if ( has_tick )           target_w += tick_pill_w + section_spacing;
-		if ( wm.show_time.value ) target_w += time_pill_w + section_spacing;
-		target_w = target_w - section_spacing + inner_pad;
-
-		static auto smoothed_w{ 0.0f };
-		if ( smoothed_w == 0.0f ) smoothed_w = target_w;
-		smoothed_w += ( target_w - smoothed_w ) * std::min( 8.0f * xdraw::delta_time( ), 1.0f );
-
-		const auto w = smoothed_w;
-		const auto x = static_cast<float>( screen_w ) - w - margin;
-		const auto y = margin;
-
-		draw_list.rect_filled_blurred( x, y, w, h, xdraw::corner_radius{ r } );
-		draw_list.rect_filled( x, y, w, h, s.window_bg, xdraw::corner_radius{ r } );
-
-		auto cx = x + inner_pad;
-
-		auto draw_split_pill = [ & ]( const char* value, float vw, float vh, const char* unit, float uw, float uh, float pill_w )
-			{
-				draw_list.rect_filled( cx, y + inner_pad, pill_w, inner_h, s.child_bg, xdraw::corner_radius{ inner_r } );
-				draw_list.text( cx + text_pad_x, y + ( h - vh ) * 0.5f + text_nudge, value, s.accent );
-				draw_list.text( cx + text_pad_x + vw, y + ( h - uh ) * 0.5f + text_nudge, unit, s.text_dim );
-				cx += pill_w + section_spacing;
-			};
-
-		auto draw_pill = [ & ]( const char* text, float tw, float th, float pill_w )
-			{
-				draw_list.rect_filled( cx, y + inner_pad, pill_w, inner_h, s.child_bg, xdraw::corner_radius{ inner_r } );
-				draw_list.text( cx + text_pad_x, y + ( h - th ) * 0.5f + text_nudge, text, s.accent );
-				cx += pill_w + section_spacing;
-			};
-
-		// logo pill (always shown)
-		draw_list.rect_filled( cx, y + inner_pad, logo_pill_w, inner_h, s.accent, xdraw::corner_radius{ inner_r } );
-		if ( logo )
-			draw_list.image( cx + logo_icon_pad, y + ( h - static_cast<float>( logo_h ) ) * 0.5f,
-				static_cast<float>( logo_w ), static_cast<float>( logo_h ), logo.Get( ), s.checkbox_mark_icon );
-		draw_list.text( cx + logo_icon_pad + logo_draw_w + logo_icon_pad,
-			y + ( h - name_th ) * 0.5f + text_nudge, "mintaly", s.checkbox_mark_icon );
-		cx += logo_pill_w + section_spacing;
-
-		if ( wm.show_user.value ) draw_pill( "developer", user_tw, user_th, user_pill_w );
-		if ( has_map )            draw_pill( s_map_name.c_str( ), map_tw, map_th, map_pill_w );
-		if ( wm.show_ping.value ) draw_split_pill( ping_val, ping_vw, ping_vh, " ms",   ping_uw, ping_uh, ping_pill_w );
-		if ( has_velocity )       draw_split_pill( vel_val,  vel_vw,  vel_vh,  " u/s",  vel_uw,  vel_uh,  vel_pill_w );
-		if ( wm.show_fps.value )  draw_split_pill( fps_val,  fps_vw,  fps_vh,  " fps",  fps_uw,  fps_uh,  fps_pill_w );
-		if ( has_tick )           draw_split_pill( tick_val, tick_vw, tick_vh, " tick", tick_uw, tick_uh, tick_pill_w );
-		if ( wm.show_time.value ) draw_pill( time_buf, time_tw, time_th, time_pill_w );
-	}
+        constexpr float height = 34.0f, pad = 7.0f, gap = 5.0f;
+        const auto brand_width = 29.0f + xdraw::measure_text("mintaly").first + 14.0f;
+        // Wrap on narrow viewports rather than drawing off-screen.
+        std::vector<std::vector<segment>> rows(1);
+        std::vector<float> widths{brand_width + pad * 2.0f};
+        for (auto& item : segments)
+        {
+            if (widths.back() + gap + item.width > available)
+            {
+                rows.emplace_back();
+                widths.push_back(pad * 2.0f);
+            }
+            widths.back() += gap + item.width;
+            rows.back().push_back(std::move(item));
+        }
+        for (std::size_t row = 0; row < rows.size(); ++row)
+        {
+            const auto width = widths[row];
+            const auto x = std::max(4.0f, static_cast<float>(screen_w) - width - 12.0f);
+            const auto y = 12.0f + row * (height + 5.0f);
+            draw_list.rect_filled(x - 2.0f, y + 3.0f, width + 4.0f, height + 2.0f,
+                xdraw::color{0,0,0,30}, xdraw::corner_radius{9.0f});
+            draw_list.rect_filled(x, y, width, height, tokens::col_card, xdraw::corner_radius{7.0f});
+            draw_list.rect(x, y, width, height, tokens::col_border, xdraw::corner_radius{7.0f});
+            draw_list.rect_filled_gradient(x + 10.0f, y, width - 20.0f, 1.5f,
+                tokens::col_accent.alpha(0), tokens::col_accent.alpha(180),
+                tokens::col_accent.alpha(180), tokens::col_accent.alpha(0));
+            auto cx = x + pad;
+            if (row == 0)
+            {
+                draw_list.rect_filled(cx, y + 6.0f, 22.0f, 22.0f, tokens::col_elevated, xdraw::corner_radius{5.0f});
+                draw_list.rect(cx, y + 6.0f, 22.0f, 22.0f, tokens::col_accent.alpha(110), xdraw::corner_radius{5.0f});
+                xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
+                const auto [mw, mh] = xdraw::measure_text("M");
+                draw_list.text(cx + (22.0f - mw) * 0.5f, y + (height - mh) * 0.5f, "M", tokens::col_accent);
+                xdraw::pop_font();
+                const auto th = xdraw::measure_text("mintaly").second;
+                draw_list.text(cx + 29.0f, y + (height - th) * 0.5f, "mintaly", tokens::col_text);
+                cx += brand_width;
+            }
+            for (const auto& item : rows[row])
+            {
+                draw_list.line(cx + gap * 0.5f, y + 10.0f, cx + gap * 0.5f, y + height - 10.0f, tokens::col_border);
+                cx += gap;
+                const auto [vw, vh] = xdraw::measure_text(item.value);
+                const auto uh = xdraw::measure_text(item.unit).second;
+                draw_list.text(cx + 11.0f, y + (height - vh) * 0.5f, item.value, tokens::col_text);
+                if (!item.unit.empty())
+                    draw_list.text(cx + 11.0f + vw, y + (height - uh) * 0.5f, item.unit, tokens::col_text_dim);
+                cx += item.width;
+            }
+        }
+        xdraw::pop_font();
+    }
 
 	void widgets::keybinds( xdraw::draw_list& draw_list )
 	{

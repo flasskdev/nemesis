@@ -7,6 +7,7 @@
 #include <external/config.hpp>
 #include <core/systems/systems.hpp>
 #include "../../rendering.hpp"
+#include "../../theme.hpp"
 
 namespace rendering {
 
@@ -1254,7 +1255,7 @@ namespace rendering {
                 return;
             }
 
-            xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::normal]);
+            xdraw::push_font(rendering::g_fonts.inter_medium[rendering::fonts::size::petite]);
 
             auto& dl = xui::draw::current();
 
@@ -1263,19 +1264,18 @@ namespace rendering {
             const auto ww = this->m_w;
             const auto wh = this->m_h;
 
-            // Top neon accent beam on the window
-            dl.rect_filled_gradient(wx + 24.0f, wy, ww - 48.0f, 2.0f, tokens::col_accent.alpha(0), tokens::col_accent.alpha(210), tokens::col_accent.alpha(210), tokens::col_accent.alpha(0), xdraw::corner_radius{ 1.0f });
-
-            // Monolithic Mintaly Sidebar spanning the full height
             const auto sb_w = menu::k_sidebar_w;
             const auto sb_x = wx + tokens::gap;
             const auto sb_y = wy + tokens::gap;
             const auto sb_h = wh - tokens::gap * 2.0f;
-
-            dl.rect_filled(sb_x, sb_y, sb_w, sb_h, tokens::col_card, xdraw::corner_radius{ tokens::card_rounding });
-            dl.rect(sb_x, sb_y, sb_w, sb_h, tokens::col_elevated.alpha(180), xdraw::corner_radius{ tokens::card_rounding }, 1.0f);
-
-            this->draw_side_bar(sb_h);
+            const auto sidebar_edge = wx + sb_w + tokens::gap;
+            dl.rect_filled(wx + 1.0f, wy + 1.0f, sidebar_edge - wx - 1.0f, wh - 2.0f,
+                xui::lerp(tokens::col_dark, tokens::col_card, 0.12f), xdraw::corner_radius::left(tokens::window_rounding));
+            dl.line(sidebar_edge, wy + 1.0f, sidebar_edge, wy + wh - 1.0f, tokens::col_border);
+            this->draw_side_bar(wh);
+            dl.rect_filled_gradient(wx + tokens::window_rounding, wy + 1.0f, ww - tokens::window_rounding * 2.0f, 2.0f,
+                tokens::col_accent.alpha(0), tokens::col_accent.alpha(220),
+                tokens::col_accent.alpha(220), tokens::col_accent.alpha(0));
 
             const auto content_x = sb_x + sb_w + tokens::gap;
             const auto content_y = sb_y;
@@ -1355,314 +1355,243 @@ namespace rendering {
     void menu::draw_side_bar(float h)
     {
         auto& dl = xui::draw::current();
-        const auto& input = xui::ctx().input;
+        auto& ctx = xui::ctx();
+        const auto& input = ctx.input;
+        const auto sb_x = this->m_x;
+        const auto sb_y = this->m_y;
+        const auto sb_w = menu::k_sidebar_w + tokens::gap;
 
-        const auto sb_x = this->m_x + tokens::gap;
-        const auto sb_y = this->m_y + tokens::gap;
-        const auto sb_w = menu::k_sidebar_w;
+        const auto badge_x = sb_x + 20.0f;
+        const auto badge_y = sb_y + 24.0f;
+        constexpr auto badge_size = 38.0f;
+        for (int i = 3; i > 0; --i)
+            dl.rect(badge_x - i, badge_y - i, badge_size + i * 2.0f, badge_size + i * 2.0f,
+                tokens::col_accent.alpha(static_cast<std::uint8_t>(12 - i * 2)), xdraw::corner_radius{8.0f + i});
+        dl.rect_filled(badge_x, badge_y, badge_size, badge_size, tokens::col_elevated, xdraw::corner_radius{8.0f});
+        dl.rect(badge_x, badge_y, badge_size, badge_size, tokens::col_accent.alpha(150), xdraw::corner_radius{8.0f});
+        xdraw::push_font(g_fonts.inter_bold[fonts::size::big]);
+        const auto [mw, mh] = xdraw::measure_text("M");
+        dl.text(badge_x + (badge_size - mw) * 0.5f, badge_y + (badge_size - mh) * 0.5f, "M", tokens::col_accent);
+        const auto [tw, th] = xdraw::measure_text("mintaly");
+        dl.text(badge_x + badge_size + 13.0f, badge_y + (badge_size - th) * 0.5f, "mintaly", tokens::col_text);
+        xdraw::pop_font();
+        dl.line(sb_x + 1.0f, sb_y + 82.0f, sb_x + sb_w, sb_y + 82.0f, tokens::col_border);
 
-        // Mintaly Brand Header with Neon Square Badge "M" + "mintaly"
+        constexpr std::array<const char*, 7> names{{"Ragebot", "Legitbot", "Movement", "Visuals", "Misc", "Settings", "Configs"}};
+        for (int i = 0; i < static_cast<int>(names.size()); ++i)
         {
-            constexpr auto badge_size{ 28.0f };
-            const auto badge_x = sb_x + 14.0f;
-            const auto badge_y = sb_y + 12.0f;
-
-            // Neon accent badge box
-            dl.rect_filled(badge_x, badge_y, badge_size, badge_size, tokens::col_accent.alpha(32), xdraw::corner_radius{ 7.0f });
-            dl.rect(badge_x, badge_y, badge_size, badge_size, tokens::col_accent.alpha(160), xdraw::corner_radius{ 7.0f }, 1.0f);
-
-            // Bold "M"
-            xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::normal]);
-            const auto [mw, mh] = xdraw::measure_text("M");
-            dl.text(std::floor(badge_x + (badge_size - mw) * 0.5f), std::floor(badge_y + (badge_size - mh) * 0.5f), "M", tokens::col_accent);
-
-            // "mintaly" text
-            const auto [tw, th] = xdraw::measure_text("mintaly");
-            const auto tx = badge_x + badge_size + 8.0f;
-            const auto ty = std::floor(badge_y + (badge_size - th) * 0.5f);
-            dl.text(tx, ty, "mintaly", tokens::col_text);
-            xdraw::pop_font();
-
-            // Subtle divider under brand logo
-            dl.line(sb_x + 12.0f, sb_y + 50.0f, sb_x + sb_w - 12.0f, sb_y + 50.0f, tokens::col_elevated.alpha(160));
-        }
-
-        // Tab names for sidebar
-        constexpr std::array<const char*, 7> tab_names = {
-            "Ragebot",
-            "Legitbot",
-            "Movement",
-            "Visuals",
-            "Misc",
-            "Settings",
-            "Configs"
-        };
-
-        constexpr auto tab_count{ 7 };
-        const auto btn_h = 36.0f; // Height of each tab button
-        const auto btn_gap = 5.0f; // Gap between buttons
-        const auto start_y = sb_y + 58.0f;
-
-        for (auto i = 0; i < tab_count; ++i)
-        {
-            const auto btn_x = sb_x + 8.0f;
-            const auto btn_y = start_y + i * (btn_h + btn_gap);
-            const auto btn_w = sb_w - 16.0f;
-
-            const auto btn = xui::rect{ btn_x, btn_y, btn_w, btn_h };
-            const auto hovered = input.in_rect(btn);
-            const auto is_active = (this->m_tab == i);
-
-            if (!this->m_search_open && hovered && input.mouse_clicked && !xui::ctx().overlay_blocking())
+            const xui::rect button{sb_x + 10.0f, sb_y + 98.0f + i * 42.0f, sb_w - 20.0f, 37.0f};
+            const bool hovered = input.in_rect(button) && !ctx.overlay_blocking();
+            const bool active = this->m_tab == i;
+            if (!this->m_search_open && hovered && input.mouse_clicked)
             {
                 this->m_tab = i;
                 this->m_subtab = 0;
+                ctx.active_window = xui::null_id;
             }
-
-            const auto hover_anim = xui::anim::lerp(xui::fnv1a("sidebar") + i, hovered ? 1.0f : 0.0f, 12.0f);
-            const auto active_anim = xui::anim::lerp(xui::fnv1a("sidebar_active") + i, is_active ? 1.0f : 0.0f, 10.0f);
-
-            // Active / Hovered state visuals
-            if (active_anim > 0.01f || hover_anim > 0.01f)
+            const auto amount = xui::anim::lerp(xui::fnv1a("mintaly_sidebar") + i,
+                active ? 1.0f : hovered ? 0.4f : 0.0f, 14.0f);
+            if (amount > 0.01f)
             {
-                auto bg = tokens::col_accent;
-                bg.a = static_cast<std::uint8_t>(28.0f * active_anim + 14.0f * hover_anim * (1.0f - active_anim));
-                dl.rect_filled(btn.x + 4.0f, btn.y, btn.w - 4.0f, btn.h, bg, xdraw::corner_radius{ tokens::btn_rounding });
-
-                if (active_anim > 0.05f)
-                {
-                    auto border = tokens::col_accent;
-                    border.a = static_cast<std::uint8_t>(90.0f * active_anim);
-                    dl.rect(btn.x + 4.0f, btn.y, btn.w - 4.0f, btn.h, border, xdraw::corner_radius{ tokens::btn_rounding }, 1.0f);
-
-                    // Left vertical neon indicator pill
-                    const auto pill_h = btn.h - 14.0f;
-                    const auto pill_y = btn.y + 7.0f;
-                    dl.rect_filled(btn.x, pill_y, 3.0f, pill_h, tokens::col_accent.alpha(static_cast<std::uint8_t>(255.0f * active_anim)), xdraw::corner_radius{ 1.5f });
+                const auto color = tokens::col_accent.alpha(static_cast<std::uint8_t>(24.0f * amount));
+                dl.rect_filled_gradient(button.x, button.y, button.w, button.h,
+                    color, color.alpha(0), color.alpha(0), color, xdraw::corner_radius{5.0f});
+            }
+            if (active)
+            {
+                dl.rect_filled(button.x - 2.0f, button.y + 6.0f, 7.0f, 25.0f, tokens::col_accent.alpha(28), xdraw::corner_radius{3.5f});
+                dl.rect_filled(button.x, button.y + 8.0f, 3.0f, 21.0f, tokens::col_accent, xdraw::corner_radius{1.5f});
+            }
+            const auto icon_color = active ? tokens::col_accent : xui::lerp(tokens::col_text_dim, tokens::col_text, amount);
+            const auto cx = button.x + 22.0f;
+            const auto cy = button.y + button.h * 0.5f;
+            switch (i)
+            {
+            case 0:
+                dl.circle(cx, cy, 6.0f, icon_color, 1.2f);
+                dl.line(cx - 8, cy, cx - 3, cy, icon_color);
+                dl.line(cx + 3, cy, cx + 8, cy, icon_color);
+                dl.line(cx, cy - 8, cx, cy - 3, icon_color);
+                dl.line(cx, cy + 3, cx, cy + 8, icon_color);
+                break;
+            case 1:
+                dl.circle(cx, cy, 7.0f, icon_color, 1.2f);
+                dl.circle(cx, cy, 2.2f, icon_color, 1.2f);
+                break;
+            case 2: {
+                const std::array<float, 12> points{{cx + 2, cy - 8, cx - 6, cy + 1, cx, cy + 1, cx - 2, cy + 8, cx + 7, cy - 2, cx + 1, cy - 2}};
+                dl.polyline(points, icon_color, true, 1.2f);
+                break;
+            }
+            case 3: {
+                const std::array<float, 16> points{{cx - 8,cy, cx - 4,cy - 4,cx,cy - 5,cx + 4,cy - 4,cx + 8,cy,cx + 4,cy + 4,cx,cy + 5,cx - 4,cy + 4}};
+                dl.polyline(points, icon_color, true, 1.2f);
+                dl.circle(cx, cy, 2.2f, icon_color, 1.2f);
+                break;
+            }
+            case 4:
+                dl.rect(cx - 6, cy - 6, 12, 12, icon_color, xdraw::corner_radius{1.0f});
+                dl.line(cx - 6, cy - 2, cx + 6, cy - 2, icon_color);
+                dl.line(cx - 2, cy - 2, cx - 2, cy + 6, icon_color);
+                break;
+            case 5:
+                dl.circle(cx, cy, 5.0f, icon_color, 1.2f);
+                dl.circle(cx, cy, 2.0f, icon_color, 1.2f);
+                for (int tooth = 0; tooth < 8; ++tooth) {
+                    const auto angle = static_cast<float>(tooth) * 0.785398163f;
+                    dl.line(cx + std::cos(angle) * 5.0f, cy + std::sin(angle) * 5.0f,
+                        cx + std::cos(angle) * 8.0f, cy + std::sin(angle) * 8.0f, icon_color, 1.2f);
                 }
+                break;
+            case 6:
+                dl.line(cx, cy - 7, cx, cy + 2, icon_color, 1.2f);
+                dl.line(cx - 3, cy - 1, cx, cy + 2, icon_color, 1.2f);
+                dl.line(cx + 3, cy - 1, cx, cy + 2, icon_color, 1.2f);
+                dl.line(cx - 6, cy + 2, cx - 6, cy + 6, icon_color, 1.2f);
+                dl.line(cx - 6, cy + 6, cx + 6, cy + 6, icon_color, 1.2f);
+                dl.line(cx + 6, cy + 6, cx + 6, cy + 2, icon_color, 1.2f);
+                break;
             }
-
-            // Dot icon on the left
-            const auto dot_cx = btn.x + 18.0f;
-            const auto dot_cy = btn.y + btn.h * 0.5f;
-            constexpr auto dot_r = 3.2f;
-
-            if (is_active)
-            {
-                // Glowing dot for active tab
-                dl.circle_filled(dot_cx, dot_cy, dot_r + 3.0f, tokens::col_accent.alpha(70));
-                dl.circle_filled(dot_cx, dot_cy, dot_r, tokens::col_accent);
-            }
-            else
-            {
-                auto dot_col = tokens::col_text_dim.alpha(static_cast<std::uint8_t>(100.0f + 120.0f * hover_anim));
-                dl.circle_filled(dot_cx, dot_cy, dot_r, dot_col);
-            }
-
-            // Text color
-            auto text_col = tokens::col_text_dim;
-            if (is_active)
-            {
-                text_col = tokens::col_text;
-            }
-            else if (hovered)
-            {
-                text_col = xui::lerp(tokens::col_text_dim, tokens::col_text, hover_anim);
-            }
-
-            // Draw text aligned with dot icon
-            const auto [tw, th] = xdraw::measure_text(tab_names[i]);
-            const auto tx = btn.x + 30.0f;
-            const auto ty = std::floor(btn.y + (btn.h - th) * 0.5f);
-
-            dl.text(tx, ty, tab_names[i], text_col);
-        }
-
-        // Bottom footer in sidebar: Software info
-        {
-            const auto footer_y = sb_y + h - 36.0f;
-            dl.line(sb_x + 12.0f, footer_y, sb_x + sb_w - 12.0f, footer_y, tokens::col_elevated.alpha(160));
-
-            xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::petite]);
-            const auto footer_text = "Mintaly CS2";
-            const auto [fw, fh] = xdraw::measure_text(footer_text);
-            dl.text(std::floor(sb_x + (sb_w - fw) * 0.5f), footer_y + 10.0f, footer_text, tokens::col_text_dim.alpha(140));
+            xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+            const auto text_h = xdraw::measure_text(names[i]).second;
+            dl.text(button.x + 43.0f, button.y + (button.h - text_h) * 0.5f,
+                names[i], active ? tokens::col_text : icon_color);
             xdraw::pop_font();
         }
+
+        const auto footer_y = sb_y + h - 64.0f;
+        dl.line(sb_x + 1.0f, footer_y, sb_x + sb_w, footer_y, tokens::col_border);
+        constexpr float avatar_size = 36.0f;
+        const auto avatar_x = sb_x + 18.0f;
+        const auto avatar_y = footer_y + 14.0f;
+        if (this->m_textures.user.resource)
+        {
+            dl.image(avatar_x, avatar_y, avatar_size, avatar_size,
+                this->m_textures.user.resource.Get(), xdraw::corner_radius{avatar_size * 0.5f});
+        }
+        else
+        {
+            dl.circle_filled(avatar_x + 18, avatar_y + 18, 18, tokens::col_elevated);
+            dl.circle(avatar_x + 18, avatar_y + 13, 5, tokens::col_text_dim, 1.2f);
+            dl.rect(avatar_x + 9, avatar_y + 21, 18, 9, tokens::col_text_dim, xdraw::corner_radius{4.5f});
+        }
+        dl.circle(avatar_x + 18, avatar_y + 18, 18, tokens::col_border);
+        const auto text_x = avatar_x + avatar_size + 12.0f;
+        const auto text_w = sb_x + sb_w - text_x - 16.0f;
+        xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
+        dl.text(text_x, footer_y + 17.0f, theme::fit_text(this->m_user_name, text_w), tokens::col_text);
+        xdraw::pop_font();
+        dl.text(text_x, footer_y + 34.0f, "Steam", tokens::col_text_dim);
     }
 
     void menu::try_load_user_avatar()
     {
-        if (this->m_textures.user.resource)
-        {
-            return;
-        }
-
-        this->m_user_avatar_retry_delay -= xdraw::delta_time();
-        if (this->m_user_avatar_retry_delay > 0.0f)
-        {
-            return;
-        }
-
+        this->m_user_avatar_retry_delay -= std::max(0.0f, xdraw::delta_time());
+        if (this->m_user_avatar_retry_delay > 0.0f) return;
         this->m_user_avatar_retry_delay = 1.0f;
 
         const auto steam_id = steam::user::get_steam_id();
-        if (!steam_id)
+        if (steam_id != this->m_user_steam_id)
         {
-            return;
+            this->m_textures.user = {};
+            this->m_user_avatar_image = 0;
+            this->m_user_name = "Steam user";
+            this->m_user_steam_id = steam_id;
         }
+        if (!steam_id) return;
+
+        if (const auto* name = steam::friends::get_persona_name(); name && *name)
+            this->m_user_name = name;
 
         const auto image = steam::friends::get_medium_friend_avatar(steam_id);
-        if (image <= 0)
+        if (image == 0)
         {
+            this->m_textures.user = {};
+            this->m_user_avatar_image = 0;
             return;
         }
+        // -1 means Steam is still downloading the avatar. Retry next second.
+        if (image < 0 || (image == this->m_user_avatar_image && this->m_textures.user.resource)) return;
 
         std::uint32_t width{}, height{};
-        if (!steam::utils::get_image_size(image, &width, &height) || !width || !height)
-        {
-            return;
-        }
+        if (!steam::utils::get_image_size(image, &width, &height) ||
+            !width || !height || width > 512 || height > 512) return;
 
-        std::vector<std::uint8_t> rgba(width * height * 4);
-        if (!steam::utils::get_image_rgba(image, rgba.data(), static_cast<int>(rgba.size())))
-        {
-            return;
-        }
-
-        this->m_textures.user.resource = xdraw::create_srv_from_rgba(rgba.data(), static_cast<int>(width), static_cast<int>(height));
+        std::vector<std::uint8_t> rgba(static_cast<std::size_t>(width) * height * 4);
+        if (!steam::utils::get_image_rgba(image, rgba.data(), static_cast<int>(rgba.size()))) return;
+        auto resource = xdraw::create_srv_from_rgba(rgba.data(), static_cast<int>(width), static_cast<int>(height));
+        if (!resource) return;
+        this->m_textures.user.resource = std::move(resource);
         this->m_textures.user.width = static_cast<int>(width);
         this->m_textures.user.height = static_cast<int>(height);
-    }
-
-    void menu::draw_theme_swatches(float sb_x, float avatar_y)
-    {
-        if (this->m_search_open)
-        {
-            return;
-        }
-
-        auto& dl = xui::draw::current();
-        const auto& input = xui::ctx().input;
-
-        static constexpr xdraw::color k_preset_colors[5]
-        {
-            xdraw::color{ 0, 255, 136, 255 },
-            xdraw::color{ 190, 164, 255, 255 },
-            xdraw::color{ 122, 224, 181, 255 },
-            xdraw::color{ 255, 171, 112, 255 },
-            xdraw::color{ 210, 214, 224, 255 },
-        };
-
-        constexpr auto swatch_count{ 5 };
-        constexpr auto dot_d{ 6.0f };
-        constexpr auto dot_gap{ 3.0f };
-
-        const auto block_h = swatch_count * dot_d + (swatch_count - 1) * dot_gap;
-        const auto swatch_y = avatar_y - block_h - 10.0f;
-        const auto cx = sb_x + menu::k_sidebar_w * 0.5f;
-
-        for (auto i = 0; i < swatch_count; ++i)
-        {
-            const auto dot_y = swatch_y + static_cast<float>(i) * (dot_d + dot_gap);
-            const auto hit = xui::rect{ cx - dot_d * 0.5f - 2.0f, dot_y - 2.0f, dot_d + 4.0f, dot_d + 4.0f };
-            const auto hovered = input.in_rect(hit);
-            const auto is_active = (this->m_theme_preset == i);
-
-            const auto hover_anim = xui::anim::lerp(xui::fnv1a("theme_swatch") + i, (hovered || is_active) ? 1.0f : 0.0f, 14.0f);
-            const auto radius = dot_d * 0.5f + hover_anim * 0.75f;
-            const auto cy = dot_y + dot_d * 0.5f;
-
-            if (is_active)
-            {
-                dl.circle_filled(cx, cy, radius + 1.5f, tokens::col_text.alpha(200));
-            }
-
-            dl.circle_filled(cx, cy, radius, k_preset_colors[i]);
-
-            if (!xui::ctx().overlay_blocking() && hovered && input.mouse_clicked)
-            {
-                this->apply_theme_preset(i);
-            }
-        }
+        this->m_user_avatar_image = image;
     }
 
     void menu::apply_theme_preset(int preset)
     {
-        this->m_theme_preset = std::clamp(preset, 0, 4);
+        settings::g_misc.menu_palette.value = theme::normalize(preset);
+        theme::apply(settings::g_misc.menu_palette.value);
+        this->sync_theme_style();
+    }
 
-        switch (this->m_theme_preset)
-        {
-        default:
-        case 0:
-            tokens::col_accent = xdraw::color{ 0, 255, 136, 255 };
-            tokens::col_dark = xdraw::color{ 12, 16, 15, 255 };
-            tokens::col_text = xdraw::color{ 245, 251, 247, 245 };
-            tokens::col_text_dim = xdraw::color{ 126, 142, 137, 200 };
-            tokens::col_card = xdraw::color{ 22, 28, 27, 210 };
-            tokens::col_elevated = xdraw::color{ 28, 36, 34, 220 };
-            break;
-        case 1:
-            tokens::col_accent = xdraw::color{ 190, 164, 255, 255 };
-            tokens::col_dark = xdraw::color{ 18, 17, 23, 255 };
-            tokens::col_text = xdraw::color{ 235, 229, 255, 235 };
-            tokens::col_text_dim = xdraw::color{ 190, 164, 255, 88 };
-            tokens::col_card = xdraw::color{ 18, 17, 23, 88 };
-            tokens::col_elevated = xdraw::color{ 34, 31, 43, 125 };
-            break;
-        case 2:
-            tokens::col_accent = xdraw::color{ 122, 224, 181, 255 };
-            tokens::col_dark = xdraw::color{ 14, 20, 19, 255 };
-            tokens::col_text = xdraw::color{ 222, 246, 238, 235 };
-            tokens::col_text_dim = xdraw::color{ 122, 224, 181, 88 };
-            tokens::col_card = xdraw::color{ 14, 20, 19, 88 };
-            tokens::col_elevated = xdraw::color{ 25, 39, 35, 125 };
-            break;
-        case 3:
-            tokens::col_accent = xdraw::color{ 255, 171, 112, 255 };
-            tokens::col_dark = xdraw::color{ 22, 17, 15, 255 };
-            tokens::col_text = xdraw::color{ 255, 232, 214, 235 };
-            tokens::col_text_dim = xdraw::color{ 255, 171, 112, 88 };
-            tokens::col_card = xdraw::color{ 22, 17, 15, 88 };
-            tokens::col_elevated = xdraw::color{ 43, 32, 26, 125 };
-            break;
-        case 4:
-            tokens::col_accent = xdraw::color{ 210, 214, 224, 255 };
-            tokens::col_dark = xdraw::color{ 18, 18, 20, 255 };
-            tokens::col_text = xdraw::color{ 232, 235, 242, 235 };
-            tokens::col_text_dim = xdraw::color{ 210, 214, 224, 82 };
-            tokens::col_card = xdraw::color{ 18, 18, 20, 92 };
-            tokens::col_elevated = xdraw::color{ 35, 35, 39, 126 };
-            break;
-        }
+    void menu::update_ui_state()
+    {
+        // Called before widgets, also while the menu is closed.
+        const auto preset = theme::normalize(settings::g_misc.menu_palette.value);
+        settings::g_misc.menu_palette.value = preset;
+        theme::apply(preset);
+        this->sync_theme_style();
+        this->try_load_user_avatar();
     }
 
     void menu::sync_theme_style() const
     {
         auto& style = xui::ctx().style;
-        style.window_bg = tokens::col_elevated.alpha(175);
+        style.window_rounding = tokens::window_rounding;
+        style.rounding = tokens::card_rounding;
+        style.border_thickness = 1.0f;
+        style.window_pad_x = 18.0f;
+        style.window_pad_y = 14.0f;
+        style.item_spacing_x = 8.0f;
+        style.item_spacing_y = 5.0f;
+        style.slider_h = 4.0f;
+        style.combo_h = 30.0f;
+        style.combo_item_h = 28.0f;
+        style.button_rounding = 5.0f;
+        style.window_bg = tokens::col_dark;
+        style.window_border = tokens::col_border;
         style.child_bg = tokens::col_card;
-        style.checkbox_bg = tokens::col_card;
+        style.child_border = tokens::col_border;
+        style.checkbox_bg = tokens::col_elevated;
+        style.checkbox_border = tokens::col_border;
         style.checkbox_mark = tokens::col_accent;
         style.checkbox_mark_icon = tokens::col_dark;
-        style.slider_track = tokens::col_card;
+        style.slider_track = tokens::col_border;
         style.slider_fill = tokens::col_accent;
-        style.button_bg = tokens::col_card;
-        style.button_hovered = tokens::col_card.alpha(120);
-        style.button_active = tokens::col_accent;
-        style.keybind_bg = tokens::col_card;
+        style.button_bg = tokens::col_elevated;
+        style.button_border = tokens::col_border;
+        style.button_hovered = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.12f);
+        style.button_active = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.24f);
+        style.keybind_bg = tokens::col_elevated;
+        style.keybind_border = tokens::col_border;
         style.keybind_waiting = tokens::col_accent;
-        style.combo_bg = tokens::col_card;
+        style.combo_bg = tokens::col_elevated;
+        style.combo_border = tokens::col_border;
         style.combo_arrow = tokens::col_text_dim;
-        style.combo_hovered = tokens::col_card.alpha(120);
-        style.combo_popup_bg = tokens::col_elevated.alpha(170);
-        style.combo_popup_item_hovered = tokens::col_card.alpha(125);
-        style.combo_popup_item_selected = tokens::col_accent.alpha(42);
-        style.popup_bg = tokens::col_elevated.alpha(170);
-        style.picker_bg = tokens::col_card;
-        style.picker_popup_bg = tokens::col_elevated.alpha(170);
-        style.text_input_bg = tokens::col_card;
-        style.separator = tokens::col_accent.alpha(30);
+        style.combo_hovered = style.button_hovered;
+        style.combo_popup_bg = tokens::col_card;
+        style.combo_popup_border = tokens::col_border;
+        style.combo_popup_item_hovered = tokens::col_elevated;
+        style.combo_popup_item_selected = tokens::col_accent.alpha(30);
+        style.popup_bg = tokens::col_card;
+        style.popup_border = tokens::col_border;
+        style.picker_bg = tokens::col_elevated;
+        style.picker_border = tokens::col_border;
+        style.picker_popup_bg = tokens::col_card;
+        style.picker_popup_border = tokens::col_border;
+        style.text_input_bg = tokens::col_elevated;
+        style.text_input_border = tokens::col_border;
+        style.separator = tokens::col_border;
         style.text = tokens::col_text;
         style.text_dim = tokens::col_text_dim;
         style.accent = tokens::col_accent;
@@ -1678,16 +1607,7 @@ namespace rendering {
 
         // Page title ("Ragebot", etc.)
         constexpr const char* page_titles[7] = {
-            "Ragebot", "Legitbot", "Movement", "Visuals", "Misc", "Settings", "Configs"
-        };
-        constexpr const char* page_subtitles[7] = {
-            "// AIMBOT & COMBAT ENGINE",
-            "// LEGITIMATE AIM & HUMANIZED RECOIL",
-            "// MOVEMENT ASSIST & STRAFE UTILITY",
-            "// PLAYER OVERLAY & WORLD CHAMS",
-            "// GAMEPLAY UTILITIES & EXPLOITS",
-            "// THEME, BINDS & INTERFACE CONFIG",
-            "// PRESETS & PROFILE REGISTRY"
+            "RAGEBOT", "LEGITBOT", "MOVEMENT", "VISUALS", "MISC", "SETTINGS", "CONFIGS"
         };
 
         const auto tab_idx = std::clamp(this->m_tab, 0, 6);
@@ -1696,15 +1616,11 @@ namespace rendering {
         xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::big]);
         const auto [title_w, title_h] = xdraw::measure_text(page_title);
         const auto title_y = bar_y + (tokens::subtab_bar_h - title_h) * 0.5f;
-        dl.text(content_x + 6.0f, title_y, page_title, tokens::col_text);
+        dl.text(content_x, title_y, page_title, tokens::col_text);
         xdraw::pop_font();
 
-        // Mintaly Category Subtitle
-        xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::petite]);
-        const auto [sub_w, sub_h] = xdraw::measure_text(page_subtitles[tab_idx]);
-        const auto sub_y = bar_y + (tokens::subtab_bar_h - sub_h) * 0.5f + 1.0f;
-        dl.text(content_x + 14.0f + title_w, sub_y, page_subtitles[tab_idx], tokens::col_accent.alpha(160));
-        xdraw::pop_font();
+        dl.line(this->m_x + menu::k_sidebar_w + tokens::gap, this->m_y + 67.0f,
+            this->m_x + this->m_w - 1.0f, this->m_y + 67.0f, tokens::col_border);
 
         // Utility: Search button on the right
         const auto inner_pad{ 4.0f };
@@ -1851,10 +1767,7 @@ namespace rendering {
         xui::layout::set_cursor(content_x - wx, body_y - wy);
         if (xui::begin_child("##movement_main", col_w, body_h, true))
         {
-            xui::text("MOVEMENT MAIN", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::layout::separator();
-            xui::layout::spacing(6.0f);
+            xui::section_header("MOVEMENT MAIN");
 
             xui::toggle("Bunny Hop", mov.bhop);
             xui::layout::spacing(3.0f);
@@ -1877,10 +1790,7 @@ namespace rendering {
         xui::layout::set_cursor(right_x - wx, body_y - wy);
         if (xui::begin_child("##movement_assist", col_w, body_h, true))
         {
-            xui::text("MOVEMENT ASSIST", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::layout::separator();
-            xui::layout::spacing(6.0f);
+            xui::section_header("MOVEMENT ASSIST");
 
             xui::toggle("Jump Bug", mov.jumpbug);
             xui::layout::spacing(3.0f);
@@ -1929,10 +1839,7 @@ namespace rendering {
         xui::layout::set_cursor(content_x - wx, body_y - wy);
         if (xui::begin_child("##visuals_player_esp", col_w, body_h, true))
         {
-            xui::text("PLAYER ESP", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::layout::separator();
-            xui::layout::spacing(6.0f);
+            xui::section_header("PLAYER ESP");
 
             xui::toggle("Enable ESP", ov.enabled);
             xui::layout::spacing(3.0f);
@@ -1959,10 +1866,7 @@ namespace rendering {
         xui::layout::set_cursor(right_x - wx, body_y - wy);
         if (xui::begin_child("##visuals_chams_world", col_w, body_h, true))
         {
-            xui::text("CHAMS & WORLD", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::layout::separator();
-            xui::layout::spacing(6.0f);
+            xui::section_header("CHAMS & WORLD");
 
             xui::toggle("Player Chams", chams.enabled);
             xui::layout::spacing(3.0f);
@@ -1988,93 +1892,60 @@ namespace rendering {
     void menu::draw_settings(float col_w) const
     {
         auto& m = settings::g_misc;
-
         const auto wx = this->m_x;
         const auto wy = this->m_y;
-        const auto content_x = wx + tokens::gap + menu::k_sidebar_w + tokens::gap;
-        const auto body_y = wy + tokens::gap + tokens::subtab_bar_h + tokens::gap;
-        const auto body_h = this->m_body_h;
-        const auto right_x = content_x + col_w + tokens::gap;
-
-        // LEFT COLUMN: INTERFACE & THEME
-        xui::layout::set_cursor(content_x - wx, body_y - wy);
-        if (xui::begin_child("##settings_appearance", col_w, body_h, true))
+        const auto right_x = this->m_body_x + col_w + tokens::gap;
+        xui::layout::set_cursor(this->m_body_x - wx, this->m_body_y - wy);
+        if (xui::begin_child("##settings_appearance", col_w, this->m_body_h, true))
         {
-            xui::text("INTERFACE & THEME", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::layout::separator();
-            xui::layout::spacing(6.0f);
+            xui::section_header("INTERFACE & THEME");
+            std::array<const char*, theme::presets.size()> names{};
+            for (std::size_t i = 0; i < names.size(); ++i) names[i] = theme::presets[i].name;
+            if (xui::combo("Color Palette", m.menu_palette.value, names.data(), static_cast<int>(names.size())))
+                const_cast<menu*>(this)->apply_theme_preset(m.menu_palette.value);
 
-            xui::text("Color Theme Presets:", tokens::col_text);
-            xui::layout::spacing(4.0f);
-
-            static const char* preset_names[5] = {
-                "0: Mintaly (Neon Green)",
-                "1: Cyber Violet",
-                "2: Aqua Marine",
-                "3: Sunset Orange",
-                "4: Frost White"
-            };
-
-            for (int i = 0; i < 5; ++i)
+            const auto row = xui::layout::item(xui::layout::item_width(), 28.0f);
+            auto& dl = xui::draw::current();
+            const auto step = row.w / static_cast<float>(names.size());
+            for (int i = 0; i < static_cast<int>(names.size()); ++i)
             {
-                const bool is_active = (this->m_theme_preset == i);
-                if (is_active)
-                {
-                    xui::push_style_color(xui::style_col::button_bg, tokens::col_accent.alpha(60));
-                }
-
-                char btn_lbl[64];
-                std::snprintf(btn_lbl, sizeof(btn_lbl), "%s%s", preset_names[i], is_active ? " [ACTIVE]" : "");
-                if (xui::button(btn_lbl, 0.0f, 26.0f))
-                {
+                const auto cx = row.x + (i + 0.5f) * step;
+                const auto cy = row.y + row.h * 0.5f;
+                if (m.menu_palette.value == i) dl.circle(cx, cy, 8.0f, tokens::col_text, 1.2f);
+                dl.circle_filled(cx, cy, 5.5f, theme::presets[i].accent);
+                const xui::rect hit{cx - step * 0.5f, row.y, step, row.h};
+                if (!xui::ctx().overlay_blocking() && xui::ctx().input.in_rect(hit) && xui::ctx().input.mouse_clicked)
                     const_cast<menu*>(this)->apply_theme_preset(i);
-                }
-
-                if (is_active)
-                {
-                    xui::pop_style_color(1);
-                }
-                xui::layout::spacing(2.0f);
             }
-
-            xui::layout::spacing(8.0f);
-            xui::toggle("Watermark", m.m_watermark.enabled);
-            xui::layout::spacing(4.0f);
+            xui::text("Palette is saved inside your config.", tokens::col_text_dim);
+            xui::text("Use Configs > Save after changing it.", tokens::col_text_dim);
+            xui::layout::spacing(12.0f);
+            xui::layout::separator();
+            xui::layout::spacing(10.0f);
             xui::keybind("Menu Key", m.menu_key.value);
-
             xui::end_child();
         }
 
-        // RIGHT COLUMN: SYSTEM & CONTROLS
-        xui::layout::set_cursor(right_x - wx, body_y - wy);
-        if (xui::begin_child("##settings_system", col_w, body_h, true))
+        xui::layout::set_cursor(right_x - wx, this->m_body_y - wy);
+        if (xui::begin_child("##settings_system", col_w, this->m_body_h, true))
         {
-            xui::text("SYSTEM & CONTROLS", tokens::col_accent);
-            xui::layout::spacing(4.0f);
+            xui::section_header("WATERMARK & CONTROLS");
+            xui::toggle("Watermark", m.m_watermark.enabled);
+            xui::toggle("Steam Username", m.m_watermark.show_user);
+            xui::toggle("FPS", m.m_watermark.show_fps);
+            xui::toggle("Ping", m.m_watermark.show_ping);
+            xui::toggle("Clock", m.m_watermark.show_time);
+            xui::toggle("Map", m.m_watermark.show_map);
+            xui::toggle("Tick Rate", m.m_watermark.show_tick);
+            xui::toggle("Velocity", m.m_watermark.show_velocity);
+            xui::layout::spacing(8.0f);
             xui::layout::separator();
-            xui::layout::spacing(6.0f);
-
             xui::toggle("Disable Game Logs", m.disable_game_logs);
-            xui::layout::spacing(3.0f);
             xui::toggle("Preserve Killfeed", m.preserve_killfeed);
-            xui::layout::spacing(3.0f);
             xui::toggle("Reveal Radar", m.reveal_radar);
-
-            xui::layout::spacing(12.0f);
-            xui::text("MENU SHORTCUTS", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::text("Open/Close Menu: INSERT", tokens::col_text_dim);
-            xui::text("Quick Search: Click Search Icon or /", tokens::col_text_dim);
-
-            xui::layout::spacing(12.0f);
-            xui::text("SOFTWARE INFORMATION", tokens::col_accent);
-            xui::layout::spacing(4.0f);
-            xui::text("Mintaly - Next-Gen CS2 Software", tokens::col_text);
-            xui::text("GUI Framework: in-house xui / xdraw", tokens::col_text_dim);
-
             xui::end_child();
         }
     }
+
 
 } // namespace rendering

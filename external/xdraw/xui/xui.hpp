@@ -136,6 +136,7 @@ namespace xui {
 	struct style
 	{
 		float rounding{ 12.0f };
+		float window_rounding{ 18.0f };
 		float checkbox_rounding{ 4.0f };
 		float slider_rounding{ 0.1f };
 		float button_rounding{ 8.0f };
@@ -218,6 +219,7 @@ namespace xui {
 	enum class style_var
 	{
 		rounding,
+		window_rounding,
 		checkbox_rounding,
 		slider_rounding,
 		button_rounding,
@@ -441,6 +443,8 @@ namespace xui {
 		std::uintptr_t group_id{ null_id };
 		bool scrollable{};
 		float scroll_y{};
+		bool last_item_is_toggle{ false };
+		float last_toggle_x{ 0.0f };
 	}; 
 	
 	struct child_scroll_state
@@ -542,7 +546,8 @@ namespace xui {
 
 	bool button( std::string_view label, float w = 0.0f, float h = 26.0f );
 	bool checkbox( std::string_view label, setting& s );
-	bool toggle( std::string_view label, setting& s );
+	bool toggle( std::string_view label, setting& s, std::string_view description = {} );
+	void section_header( std::string_view label );
 
 	bool slider_float( std::string_view label, float& v, float v_min, float v_max, std::string_view fmt = "%.2f" );
 	bool slider_int( std::string_view label, int& v, int v_min, int v_max, std::string_view fmt = "%d" );
