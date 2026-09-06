@@ -243,25 +243,23 @@ namespace features::combat {
 
 	class misc
 	{
-	public:
+	private:
 		class antiaim
 		{
 		public:
 			void on_create_move( systems::input::usercmd* cmd );
 			void on_render( xdraw::draw_list& draw_list ) const;
-			void correct_movement( systems::input::usercmd* cmd );
 
-			[[nodiscard]] bool is_active( ) const { return this->m_antiaim_active; }
 			[[nodiscard]] bool has_modified_angles( ) const { return this->m_should_correct || this->m_modified_angles.y != this->m_old_angles.y; }
 			[[nodiscard]] const math::vector3& get_modified_angles( ) const { return this->m_modified_angles; }
 
 		private:
 			[[nodiscard]] float get_pitch( float view_pitch );
 			[[nodiscard]] float get_yaw( const math::vector3& view_angles, const systems::local::snapshot& local );
+			void correct_movement( systems::input::usercmd* cmd );
 			[[nodiscard]] bool is_near_ladder( std::uintptr_t local_pawn ) const;
 
 			math::vector3 m_old_angles{};
-			float m_movement_yaw{};
 			math::vector3 m_modified_angles{};
 
 			int m_yaw_side{};
@@ -313,7 +311,6 @@ namespace features::combat {
 			[[nodiscard]] float get_effective_accel_base( std::uintptr_t local_pawn, std::uintptr_t movement_services, std::uint32_t flags, float max_weapon_speed ) const;
 		};
 
-	private:
 		antiaim m_antiaim{};
 		duckpeek m_duckpeek{};
 		quickpeek m_quickpeek{};

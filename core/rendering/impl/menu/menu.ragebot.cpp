@@ -7,12 +7,14 @@ namespace rendering {
 
 	namespace detail {
 
-		constexpr const char* hitbox_names[]{ "head", "chest", "stomach", "arms", "legs", "feet" };
-		constexpr const char* pitch_items[]{ "none", "down", "up" };
+		constexpr const char* hitbox_names[ ]{ "head", "chest", "stomach", "arms", "legs", "feet" };
+		constexpr const char* pitch_items[ ]{ "none", "down", "up" };
+		constexpr const char* target_priority_items[ ]{ "Max Damage", "Lowest HP", "Closest Distance", "Highest Threat" };
+		inline int target_priority_idx{ 0 };
 
 	} // namespace detail
 
-	void menu::draw_ragebot(float group_w) const
+	void menu::draw_ragebot( float group_w ) const
 	{
 		auto& s = settings::g_combat;
 		auto& rb = s.m_ragebot;
@@ -24,131 +26,95 @@ namespace rendering {
 		auto& autos = s.m_autos;
 		auto& lg = s.m_lagcomp;
 
-		auto& wg = rb.groups[this->m_subtab];
+		auto& wg = rb.groups[ 0 ];
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
-		const auto content_x = wx + tokens::gap + tokens::sidebar_w + tokens::gap;
+		const auto content_x = wx + tokens::gap + menu::k_sidebar_w + tokens::gap;
 		const auto body_y = wy + tokens::gap + tokens::subtab_bar_h + tokens::gap;
-		const auto content_w = this->m_w - tokens::gap * 2.0f - tokens::sidebar_w - tokens::gap;
-		const auto col_w = (content_w - tokens::gap) * 0.5f;
+		const auto body_h = this->m_body_h;
+		const auto content_w = this->m_w - tokens::gap * 2.0f - menu::k_sidebar_w - tokens::gap;
+		const auto col_w = ( content_w - tokens::gap ) * 0.5f;
 		const auto right_x = content_x + col_w + tokens::gap;
 
-		xui::layout::set_cursor(content_x - wx, body_y - wy);
+		// LEFT COLUMN: AIMBOT MAIN
+		xui::layout::set_cursor( content_x - wx, body_y - wy );
 
-		if (xui::begin_child("##ragebot_aimbot", col_w))
+		if ( xui::begin_child( "##ragebot_aimbot_main", col_w, body_h, true ) )
 		{
-			xui::checkbox("enabled", rb.enabled);
-			xui::checkbox("silent", wg.silent);
-			xui::checkbox("nospread", wg.no_spread);
-			//xui::checkbox( "air forceshot", wg.force_shot_air );
-			//xui::checkbox( "on ground forceshot", wg.force_shot );
-			xui::checkbox("extrapolation", lg.extrapolation);
-			xui::checkbox("autostop", wg.autostop);
-			if (this->m_subtab == 4)
-			{
-				xui::checkbox("autoscope", autos.scope);
-			}
-			xui::slider_float("fov", wg.max_fov, 1.0f, 180.0f, "%.0f°");
-			xui::slider_int("hitchance", wg.hitchance, 0, 100, "%d%%");
-			xui::slider_int("mindamage", wg.min_damage, 5, 125, "%d");
-			/*xui::slider_int( "max backtrack", s.m_lagcomp.max_backtrack_ticks, 1, 16, "%d tick(s)" );*/
+			xui::text( "AIMBOT MAIN", tokens::col_accent );
+			xui::layout::spacing( 4.0f );
+			xui::layout::separator( );
+			xui::layout::spacing( 6.0f );
 
-			xui::checkbox("hitchance override", wg.hitchance_override);
-			if (xui::begin_popup("##hitchance_popup", 220.0f))
-			{
-				xui::slider_int("value##hc", wg.hitchance_override_value, 0, 100, "%d%%");
-				xui::end_popup();
-			}
+			xui::toggle( "Enable Ragebot", rb.enabled );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Silent Aim", wg.silent );
+			xui::layout::spacing( 3.0f );
+			xui::slider_float( "Target FOV", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
 
-			xui::checkbox("mindamage override", wg.min_damage_override);
-			if (xui::begin_popup("##mindamage_popup", 220.0f))
-			{
-				xui::slider_int("value##md", wg.min_damage_override_value, 0, 130, "%d");
-				xui::end_popup();
-			}
+			xui::layout::spacing( 8.0f );
+			xui::toggle( "Autostop", wg.autostop );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "No Spread", wg.no_spread );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Extrapolation", lg.extrapolation );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Force Bodyaim", wg.body_aim );
+			xui::layout::spacing( 3.0f );
+			xui::slider_float( "Pointscale", wg.pointscale, 0.0f, 100.0f, "%.0f%%" );
+			xui::layout::spacing( 4.0f );
+			xui::multicombo( "Hitboxes", wg.hitboxes, detail::hitbox_names, 6 );
 
-			xui::end_child();
+			xui::end_child( );
 		}
 
-		if (xui::begin_child("##ragebot_extras", col_w, 190.0f, true))
+		// RIGHT COLUMN: ACCURACY ENGINE
+		xui::layout::set_cursor( right_x - wx, body_y - wy );
+
+		if ( xui::begin_child( "##ragebot_accuracy_engine", col_w, body_h, true ) )
 		{
-			xui::checkbox("force bodyaim", wg.body_aim);
-			xui::checkbox("dynamic point scale", wg.dynamic_pointscale);
-			xui::checkbox("debug multipoints", wg.debug_multipoints);
-			xui::slider_float("pointscale", wg.pointscale, 0.0f, 100.0f, "%.0f%%");
-			xui::multicombo("hitboxes", wg.hitboxes, detail::hitbox_names, 6);
+			xui::text( "ACCURACY ENGINE", tokens::col_accent );
+			xui::layout::spacing( 4.0f );
+			xui::layout::separator( );
+			xui::layout::spacing( 6.0f );
 
-			xui::end_child();
-		}
+			xui::slider_int( "Hitchance", wg.hitchance, 0, 100, "%d%%" );
+			xui::layout::spacing( 3.0f );
+			xui::combo( "Target Priority", detail::target_priority_idx, detail::target_priority_items, 4 );
+			xui::layout::spacing( 3.0f );
+			xui::slider_int( "Minimum Damage", wg.min_damage, 5, 125, "%d" );
 
-		xui::layout::set_cursor(right_x - wx, body_y - wy);
-
-		if (xui::begin_child("##ragebot_antiaim", col_w))
-		{
-			xui::checkbox("anti aim", aa.enabled);
-
-			xui::combo("pitch", aa.pitch.value, detail::pitch_items, 3);
-
-			xui::checkbox("compensate roll", aa.auto_yaw_adjust);
-			xui::checkbox("force left", aa.manual_left);
-			xui::checkbox("force right", aa.manual_right);
-			xui::checkbox("hide onshot", aa.hide_shots);
-			xui::checkbox("avoid backstab", aa.avoid_backstab);
-			xui::checkbox("spinbot", aa.spinbot);
-			if (xui::begin_popup("##spinbot_settings", 220.0f))
+			xui::layout::spacing( 8.0f );
+			xui::toggle( "Hitchance Override", wg.hitchance_override );
+			if ( xui::begin_popup( "##hitchance_popup", 220.0f ) )
 			{
-				xui::slider_float("spin speed", aa.spin_speed, 1.0f, 100.0f, "%.0f°");
-				xui::end_popup();
-			}
-			xui::checkbox("direction indicator", aa.direction_indicator);
-
-			if (xui::begin_popup("##aa_indicator", 220.0f))
-			{
-				xui::color_picker("color##aa_ind", aa.direction_indicator_color);
-				xui::checkbox("glow##aa_ind", aa.direction_indicator_glow);
-				xui::slider_float("glow strength##aa_ind", aa.direction_indicator_glow_strength, 0.1f, 1.0f, "%.2f");
-				xui::end_popup();
+				xui::slider_int( "value##hc", wg.hitchance_override_value, 0, 100, "%d%%" );
+				xui::end_popup( );
 			}
 
-			xui::end_child();
-		}
-
-		if (xui::begin_child("##ragebot_otherbots", col_w))
-		{
-			xui::checkbox("auto revolver", autos.revolver);
-
-			xui::checkbox("zeusbot", zb.enabled);
-			if (xui::begin_popup("##zb_settings", 220.0f))
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Mindamage Override", wg.min_damage_override );
+			if ( xui::begin_popup( "##mindamage_popup", 220.0f ) )
 			{
-				xui::slider_float("max fov##zb", zb.max_fov, 1, 180, "%.0f°");
-				xui::checkbox("drop after##zb", zb.drop_after);
-				xui::end_popup();
+				xui::slider_int( "value##md", wg.min_damage_override_value, 0, 130, "%d" );
+				xui::end_popup( );
 			}
 
-			xui::checkbox("knifebot", kb.enabled);
-			if (xui::begin_popup("##kb_settings", 220.0f))
-			{
-				xui::slider_float("max fov##kb", kb.max_fov, 1, 180, "%.0f°");
-				xui::end_popup();
-			}
+			xui::layout::spacing( 8.0f );
+			xui::toggle( "Anti Aim", aa.enabled );
+			xui::layout::spacing( 3.0f );
+			xui::combo( "Pitch", aa.pitch.value, detail::pitch_items, 3 );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Quick Peek Assist", qp.enabled );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Auto Revolver", autos.revolver );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Zeusbot", zb.enabled );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Knifebot", kb.enabled );
 
-			xui::end_child();
-		}
-
-		if (xui::begin_child("##ragebot_peek", col_w))
-		{
-			xui::checkbox("quick peek assist", qp.enabled);
-			if (xui::begin_popup("##qp_colors", 220.0f))
-			{
-				xui::color_picker("base color##qp", qp.color);
-				xui::color_picker("retracting color##qp", qp.retrack_color);
-				xui::end_popup();
-			}
-
-			xui::checkbox("duck peek assist", dp.enabled);
-
-			xui::end_child();
+			xui::end_child( );
 		}
 	}
 

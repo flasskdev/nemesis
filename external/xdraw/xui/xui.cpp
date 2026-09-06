@@ -1749,50 +1749,32 @@ namespace xui {
 			w = layout::item_width( );
 		}
 
-		auto actual_h = h;
-		if ( actual_h <= 0.0f )
-		{
-			if ( scrollable )
-			{
-				actual_h = 150.0f;
-			}
-			else
-			{
-				const auto it = c.child_height_cache.find( id );
-				actual_h = ( it != c.child_height_cache.end( ) ) ? it->second : 100.0f;
-			}
-		}
-
 		auto pwin = layout::current_window( );
 		const auto consumed_y = pwin->cursor_y + ( pwin->line_h > 0.0f ? pwin->line_h + s.item_spacing_y : 0.0f );
 		const auto max_h = parent->bounds.h - consumed_y - s.window_pad_y;
 
-		if ( max_h > 0.0f )
+		auto actual_h = h;
+		if ( actual_h <= 0.0f )
+		{
+			actual_h = max_h > 0.0f ? max_h : 550.0f;
+		}
+		else if ( max_h > 0.0f )
 		{
 			actual_h = std::min( actual_h, max_h );
 		}
 
 		const auto abs = layout::item( w, actual_h );
 		auto scroll_y{ 0.0f };
-		auto sb_inset{ 0.0f };
 
 		if ( scrollable )
 		{
 			auto& cs = c.child_scroll_cache[ id ];
 			scroll_y = cs.scroll;
-
-			constexpr auto k_scrollbar_w{ 6.0f };
-			constexpr auto k_scrollbar_pad{ 8.0f };
-			constexpr auto k_scrollbar_content_gap{ 0.0f };
-
-			const auto shrink_phase = std::clamp( cs.scrollbar_anim / 0.5f, 0.0f, 1.0f );
-			const auto shrink_eased = ease::out_cubic( shrink_phase );
-			sb_inset = ( k_scrollbar_w + k_scrollbar_pad + k_scrollbar_content_gap ) * shrink_eased;
 		}
 
 		window_state state{};
 		state.title = std::string( title );
-		state.bounds = rect{ abs.x, abs.y, abs.w - sb_inset, abs.h };
+		state.bounds = rect{ abs.x, abs.y, abs.w, abs.h };
 		state.cursor_x = s.window_pad_x;
 		state.cursor_y = s.window_pad_y - scroll_y;
 		state.is_child = true;
@@ -1832,80 +1814,13 @@ namespace xui {
 			{
 				const auto max_scroll = std::max( 0.0f, true_content_h - visible_h );
 				auto& cs = c.child_scroll_cache[ win->group_id ];
-
-				constexpr auto k_scrollbar_w{ 6.0f };
-				constexpr auto k_scrollbar_pad{ 8.0f };
-				constexpr auto k_scrollbar_content_gap{ 0.0f };
-
-				const auto shrink_phase = std::clamp( cs.scrollbar_anim / 0.5f, 0.0f, 1.0f );
-				const auto shrink_eased = ease::out_cubic( shrink_phase );
-				const auto inset = ( k_scrollbar_w + k_scrollbar_pad + k_scrollbar_content_gap ) * shrink_eased;
-				const auto full_w = win->bounds.w + inset;
-				const auto full_right = win->bounds.right( ) + inset;
-				const auto full_bounds = rect{ win->bounds.x, win->bounds.y, full_w, win->bounds.h };
-
-				const auto popup_hovered = !c.overlay_blocking( ) && input.in_rect( full_bounds );
-				const auto sb_target = ( popup_hovered || cs.scrollbar_dragging ) && max_scroll > 0.0f ? 1.0f : 0.0f;
 				const auto dt = xdraw::delta_time( );
-				const auto sb_speed = sb_target > cs.scrollbar_anim ? 7.0f : 12.0f;
-				cs.scrollbar_anim += ( sb_target - cs.scrollbar_anim ) * std::min( sb_speed * dt, 1.0f );
 
-				const auto sb_alpha_phase = std::clamp( ( cs.scrollbar_anim - 0.3f ) / 0.7f, 0.0f, 1.0f );
-				const auto sb_alpha = ease::out_cubic( sb_alpha_phase );
-
-				const auto track = rect
-				{
-					std::floorf( full_right - k_scrollbar_w - k_scrollbar_pad ),
-					std::floorf( win->bounds.y + k_scrollbar_pad ),
-					k_scrollbar_w,
-					std::floorf( win->bounds.h - k_scrollbar_pad * 2.0f )
-				};
-
-				const auto thumb_h_unclamped = ( max_scroll > 0.0f ) ? ( track.h * ( visible_h / true_content_h ) ) : track.h;
-				const auto thumb_h = std::floorf( std::max( 20.0f, thumb_h_unclamped ) );
-				const auto rel = max_scroll > 0.0f ? ( cs.scroll / max_scroll ) : 0.0f;
-				const auto thumb_y = std::floorf( track.y + rel * ( track.h - thumb_h ) );
-				const auto thumb = rect{ track.x, thumb_y, track.w, thumb_h };
+				const auto popup_hovered = !c.overlay_blocking( ) && input.in_rect( win->bounds );
 
 				if ( max_scroll > 0.0f && !c.overlay_blocking( ) )
 				{
-					if ( input.mouse_clicked && thumb.contains( input.mouse_x, input.mouse_y ) )
-					{
-						cs.scrollbar_dragging = true;
-						cs.scrollbar_drag_offset = input.mouse_y - thumb.y;
-						c.active_child_scroll = win->group_id;
-						c.active_window = null_id;
-					}
-					else if ( input.mouse_clicked && track.contains( input.mouse_x, input.mouse_y ) )
-					{
-						const auto target_y = input.mouse_y - thumb.h * 0.5f;
-						const auto rel_click = std::clamp( ( target_y - track.y ) / ( track.h - thumb.h ), 0.0f, 1.0f );
-						cs.scroll_target = rel_click * max_scroll;
-						cs.scrollbar_dragging = true;
-						cs.scrollbar_drag_offset = thumb.h * 0.5f;
-						c.active_child_scroll = win->group_id;
-						c.active_window = null_id;
-					}
-
-					if ( cs.scrollbar_dragging )
-					{
-						if ( !input.mouse_down )
-						{
-							cs.scrollbar_dragging = false;
-							if ( c.active_child_scroll == win->group_id )
-							{
-								c.active_child_scroll = null_id;
-							}
-						}
-						else
-						{
-							const auto rel_drag = std::clamp( ( input.mouse_y - cs.scrollbar_drag_offset - track.y ) / ( track.h - thumb.h ), 0.0f, 1.0f );
-							cs.scroll_target = rel_drag * max_scroll;
-							cs.scroll = cs.scroll_target;
-						}
-					}
-
-					if ( popup_hovered && input.scroll_delta != 0.0f && !cs.scrollbar_dragging )
+					if ( popup_hovered && input.scroll_delta != 0.0f )
 					{
 						cs.scroll_target -= input.scroll_delta * 40.0f;
 					}
@@ -1916,51 +1831,6 @@ namespace xui {
 				cs.scroll = std::clamp( cs.scroll, 0.0f, max_scroll );
 
 				draw::current( ).pop_clip( );
-
-				if ( max_scroll > 0.0f )
-				{
-					constexpr auto fade_h{ 16.0f };
-					const auto cr = std::min( s.rounding, fade_h );
-					auto& dl = draw::current( );
-
-					auto bg_solid = s.child_bg;
-					auto bg_clear = s.child_bg;
-					bg_clear.a = 0;
-
-					const auto top_t = std::clamp( cs.scroll / fade_h, 0.0f, 1.0f );
-					if ( top_t > 0.01f )
-					{
-						auto top = bg_solid;
-						top.a = static_cast< std::uint8_t >( bg_solid.a * top_t );
-						dl.rect_filled_gradient( win->bounds.x, win->bounds.y, full_w, fade_h, top, top, bg_clear, bg_clear, xdraw::corner_radius{ cr, cr, 0.0f, 0.0f } );
-					}
-
-					const auto remaining = max_scroll - cs.scroll;
-					const auto bot_t = std::clamp( remaining / fade_h, 0.0f, 1.0f );
-					if ( bot_t > 0.01f )
-					{
-						auto bot = bg_solid;
-						bot.a = static_cast< std::uint8_t >( bg_solid.a * bot_t );
-						dl.rect_filled_gradient( win->bounds.x, win->bounds.bottom( ) - fade_h, full_w, fade_h, bg_clear, bg_clear, bot, bot, xdraw::corner_radius{ 0.0f, 0.0f, cr, cr } );
-					}
-				}
-
-				if ( max_scroll > 0.0f && sb_alpha > 0.01f )
-				{
-					auto& dl = draw::current( );
-					const auto thumb_hovered = thumb.contains( input.mouse_x, input.mouse_y );
-					const auto thumb_active = thumb_hovered || cs.scrollbar_dragging;
-
-					auto track_col = xdraw::color{ 255, 255, 255, 30 };
-					track_col.a = static_cast< std::uint8_t >( track_col.a * sb_alpha );
-
-					auto thumb_col = thumb_active ? xdraw::color{ 255, 255, 255, 150 } : xdraw::color{ 255, 255, 255, 100 };
-					thumb_col.a = static_cast< std::uint8_t >( thumb_col.a * sb_alpha );
-
-					const auto track_r = k_scrollbar_w * 0.5f;
-					dl.rect_filled( track.x, track.y, track.w, track.h, track_col, xdraw::corner_radius{ track_r } );
-					dl.rect_filled( thumb.x, thumb.y, thumb.w, thumb.h, thumb_col, xdraw::corner_radius{ track_r } );
-				}
 			}
 			else
 			{
@@ -2200,10 +2070,10 @@ namespace xui {
 			float norm_pos,
 			const style& st )
 		{
-			constexpr auto thumb_r{ 4.0f };
 			const auto track_r = track_h * 0.5f;
-			const auto thumb_cx = track_x + std::clamp( norm_pos, 0.0f, 1.0f ) * track_w;
-			const auto fill_w = std::max( thumb_r, thumb_cx - track_x );
+			const auto clamped_norm = std::clamp( norm_pos, 0.0f, 1.0f );
+			const auto thumb_cx = track_x + clamped_norm * track_w;
+			const auto fill_w = std::max( track_h * 0.5f, thumb_cx - track_x );
 
 			dl.rect_filled( track_x, track_y, track_w, track_h, st.slider_track, xdraw::corner_radius{ track_r } );
 
@@ -2212,6 +2082,14 @@ namespace xui {
 				dl.rect_filled( track_x, track_y, fill_w, track_h, st.slider_fill, xdraw::corner_radius{ track_r } );
 			}
 
+			// Green circular handle (thumb) matching Mintaly design
+			constexpr auto handle_r{ 7.0f };
+			const auto handle_cy = track_y + track_h * 0.5f;
+
+			// Neon glow halo
+			dl.circle_filled( thumb_cx, handle_cy, handle_r + 3.0f, st.slider_fill.alpha( 75 ) );
+			// Solid handle circle
+			dl.circle_filled( thumb_cx, handle_cy, handle_r, st.slider_fill );
 		}
 
 		class checkbox_bind_overlay : public overlay
@@ -2666,6 +2544,98 @@ namespace xui {
 				}
 			}
 		}
+
+		return changed;
+	}
+
+	bool toggle( std::string_view label, setting& s )
+	{
+		auto win = layout::current_window( );
+		if ( !win )
+		{
+			return false;
+		}
+
+		binds::register_setting( &s );
+
+		if ( s.name.empty( ) )
+		{
+			const auto [display, full] = parse_label( label );
+			s.name = std::string( display );
+		}
+
+		auto& c = get_ctx( );
+		const auto id = make_id( label );
+		const auto [display, full] = parse_label( label );
+		const auto& st = c.style;
+		const auto& input = c.input;
+
+		const auto [avail_w, avail_h] = layout::avail( );
+		constexpr auto row_h{ 28.0f };
+		constexpr auto toggle_w{ 42.0f };
+		constexpr auto toggle_h{ 22.0f };
+		constexpr auto thumb_r{ 7.5f };
+		const auto abs = layout::item( avail_w, row_h );
+
+		const auto can_interact = !c.overlay_blocking( );
+		auto changed{ false };
+
+		const auto hovered = can_interact && input.in_rect( abs );
+		if ( hovered && input.mouse_clicked )
+		{
+			s.value = !s.value;
+			s.bind.active = s.value;
+
+			if ( s.value && s.bind.excludes )
+			{
+				s.bind.excludes->bind.active = false;
+				s.bind.excludes->value = false;
+			}
+
+			changed = true;
+		}
+
+		const auto check_anim = anim::lerp( id, s.value ? 1.0f : 0.0f, 10.0f );
+		const auto hover_anim = anim::lerp( id + 1, hovered ? 1.0f : 0.0f, 12.0f );
+		const auto ease_t = ease::smoothstep( check_anim );
+
+		auto& dl = draw::current( );
+
+		// Label on the LEFT
+		if ( !display.empty( ) )
+		{
+			const auto [lw, lh] = xdraw::measure_text( display );
+			const auto tx = abs.x + 2.0f;
+			const auto ty = abs.y + ( row_h - lh ) * 0.5f;
+			auto label_col = lerp( st.text_dim, st.text, std::max( check_anim * 0.5f + 0.5f, hover_anim ) );
+			dl.text( tx, ty, display, label_col );
+		}
+
+		// Toggle Pill on the RIGHT
+		const auto pill_x = abs.right( ) - toggle_w - 2.0f;
+		const auto pill_y = abs.y + ( row_h - toggle_h ) * 0.5f;
+		const auto track_r = toggle_h * 0.5f;
+
+		// Track fill
+		auto track_bg = lerp( st.checkbox_bg, st.accent, ease_t );
+		dl.rect_filled( pill_x, pill_y, toggle_w, toggle_h, track_bg, xdraw::corner_radius{ track_r } );
+
+		// Soft glowing rim when active
+		if ( ease_t > 0.05f )
+		{
+			auto glow_col = st.accent;
+			glow_col.a = static_cast< std::uint8_t >( 70.0f * ease_t );
+			dl.rect( pill_x - 1.0f, pill_y - 1.0f, toggle_w + 2.0f, toggle_h + 2.0f, glow_col, xdraw::corner_radius{ track_r + 1.0f }, 1.0f );
+		}
+
+		// Sliding Thumb (circle)
+		const auto thumb_min_x = pill_x + 3.0f + thumb_r;
+		const auto thumb_max_x = pill_x + toggle_w - 3.0f - thumb_r;
+		const auto thumb_cx = std::lerp( thumb_min_x, thumb_max_x, ease_t );
+		const auto thumb_cy = pill_y + toggle_h * 0.5f;
+
+		auto thumb_col = lerp( xdraw::color{ 125, 140, 135, 255 }, xdraw::color{ 10, 20, 16, 255 }, ease_t );
+		dl.circle_filled( thumb_cx, thumb_cy, thumb_r, thumb_col );
 
 		return changed;
 	}

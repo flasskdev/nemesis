@@ -180,6 +180,11 @@ namespace rendering {
 			return;
 		}
 
+		xui::text( "CONFIG PROFILES", tokens::col_accent );
+		xui::layout::spacing( 4.0f );
+		xui::layout::separator( );
+		xui::layout::spacing( 8.0f );
+
 		xui::text_input( "##cfg_search", detail::search_buf, 64, "search configs..." );
 
 		constexpr auto btn_h{ 28.0f };

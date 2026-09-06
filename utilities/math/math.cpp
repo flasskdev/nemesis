@@ -290,14 +290,18 @@ namespace math {
 
 		void normalize_angles( vector3& angles )
 		{
-			angles.x = std::clamp( std::remainder( angles.x, 360.0f ), -89.0f, 89.0f );
-			angles.y = std::remainder( angles.y, 360.0f );
+			while ( angles.y > 180.0f ) { angles.y -= 360.0f; }
+			while ( angles.y < -180.0f ) { angles.y += 360.0f; }
+			while ( angles.x > 89.0f ) { angles.x -= 180.0f; }
+			while ( angles.x < -89.0f ) { angles.x += 180.0f; }
+
 			angles.z = 0.0f;
 		}
 
 		void normalize_angle( float& angle )
 		{
-			angle = std::remainder( angle, 360.0f );
+			while ( angle > 180.0f ) { angle -= 360.0f; }
+			while ( angle < -180.0f ) { angle += 360.0f; }
 		}
 
 		vector3 vector_to_angle( const vector3& forward )
@@ -339,7 +343,9 @@ namespace math {
 
 		float normalize_yaw( float yaw )
 		{
-			return std::remainder( yaw, 360.0f );
+			while ( yaw > 180.0f ) { yaw -= 360.0f; }
+			while ( yaw < -180.0f ) { yaw += 360.0f; }
+			return yaw;
 		}
 
 	} // namespace helpers

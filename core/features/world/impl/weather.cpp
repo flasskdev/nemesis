@@ -95,7 +95,7 @@ namespace features::world {
 
 			std::uintptr_t m_unknown3{};
 			std::uintptr_t m_unknown4{};
-		} buffer{};
+		} buffer;
 
 		memory::call<void>(PATTERN (patterns::init_particle_path_buffer_alt), &buffer, particle_path.c_str() );
 

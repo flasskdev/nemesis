@@ -540,8 +540,9 @@ namespace xui {
 
 	void text( std::string_view label, xdraw::color col );
 
-	bool button( std::string_view label, float w, float h );
+	bool button( std::string_view label, float w = 0.0f, float h = 26.0f );
 	bool checkbox( std::string_view label, setting& s );
+	bool toggle( std::string_view label, setting& s );
 
 	bool slider_float( std::string_view label, float& v, float v_min, float v_max, std::string_view fmt = "%.2f" );
 	bool slider_int( std::string_view label, int& v, int v_min, int v_max, std::string_view fmt = "%d" );

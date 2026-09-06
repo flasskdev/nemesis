@@ -123,7 +123,6 @@ namespace systems {
 
 		void update( );
 		void apply( );
-		void rebase_movement( usercmd* cmd, float source_yaw ) const;
 
 		[[nodiscard]] usercmd* get( ) const { return this->m_current_cmd; }
 		[[nodiscard]] usercmd* get_current_cmd( std::uintptr_t local_controller ) const;
@@ -138,23 +137,9 @@ namespace systems {
 		[[nodiscard]] usercmd* get_command_by_sequence( std::uintptr_t local_controller, int sequence ) const;
 		[[nodiscard]] bool is_subtick_overwrite( usercmd* cmd ) const;
 
-		void reset()
-		{
-			this->m_last_sent_forward = 0.0f;
-			this->m_last_sent_left = 0.0f;
-			this->m_suppress_auto_move_delta = false;
-		}
-		void suppress_auto_move_delta(bool value)
-		{
-			this->m_suppress_auto_move_delta = value;
-		}
-
 	private:
 		usercmd* m_current_cmd{};
 		proto::base_usercmd_pb m_backup{};
-		float m_last_sent_forward{ 0.0f };
-		float m_last_sent_left{ 0.0f };
-		bool m_suppress_auto_move_delta{ false };
 
 		bool calculate_crc( proto::base_usercmd_pb* base ) const;
 	};
@@ -273,14 +258,11 @@ namespace systems {
 		struct state
 		{
 			std::uint32_t flags{};
-			bool on_ground{};
-
 			math::vector3 networked_velocity{};
 			math::vector3 velocity{};
 			math::vector3 origin{};
 			math::vector3 networked_origin{};
 			math::vector3 last_movement_impulses{};
-
 			float surface_friction{};
 			float stamina{};
 		};
@@ -559,15 +541,15 @@ namespace systems {
 	{
 	private:
 		struct render_viewport_t {
-			int version{ 1 };
-			int top_left_x{};
-			int top_left_y{};
-			int width{};
-			int height{};
-			float min_z{ 0.0f };
-			float max_z{ 1.0f };
+			int version;
+			int top_left_x;
+			int top_left_y;
+			int width;
+			int height;
+			float min_z;
+			float max_z;
 
-			render_viewport_t( ) = default;
+			render_viewport_t( ) : version( 1 ) {}
 
 			void Init( ) {
 				memset( this, 0, sizeof( render_viewport_t ) );
