@@ -57,6 +57,7 @@ namespace features::misc {
 		this->do_player_alpha_changing();
 		this->do_reveal_radar();
 		this->do_name_changing();
+		this->do_viewmodel_adjust();
 	}
 
 	void other::do_reveal_radar() const
@@ -327,7 +328,6 @@ namespace features::misc {
 		}
 	}
 
-<<<<<<< HEAD
 	void other::do_viewmodel_adjust()
 	{
 		const auto& cfg = settings::g_misc.m_viewmodel_adjust;
@@ -435,7 +435,5 @@ namespace features::misc {
 		if (!cfg.enabled.value)
 			this->m_vm_missing_mask = 0;
 	}
-=======
->>>>>>> 0c3e237cc0455ca339beb9958f2d2a876c9b0a8a
 
 } // namespace features::misc

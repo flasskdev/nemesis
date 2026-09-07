@@ -10,8 +10,6 @@
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
 #include "../hooks.hpp"
-#include <cmath>
-#include <core/settings.hpp>
 
 namespace hooks {
 
@@ -31,7 +29,6 @@ namespace hooks {
 			{ &m_add_entity, &add_entity, xs ("add_entity"), PATTERN (patterns::add_entity) },
 			{ &m_remove_entity, &remove_entity, xs ("remove_entity"), PATTERN (patterns::remove_entity) },
 			{ &m_render_view, &render_view, xs ("render_view"), PATTERN (patterns::render_view) },
-            { &m_calculate_viewmodel, &calculate_viewmodel, xs("calculate_viewmodel"), PATTERN(patterns::calculate_viewmodel) },
 			{ &m_draw_skybox_array, &draw_skybox_array, xs ("draw_skybox_array"), PATTERN (patterns::draw_skybox_array) },
 			{ &m_light_scene_object, &light_scene_object, xs ("light_scene_object"), PATTERN (patterns::light_scene_object) },
 			{ &m_draw_scene_object_array, &draw_scene_object_array, xs ("draw_scene_object_array"), PATTERN (patterns::draw_scene_object_array) },
@@ -94,7 +91,6 @@ namespace hooks {
 		m_add_entity.reset( );
 		m_remove_entity.reset( );
 		m_render_view.reset( );
-        m_calculate_viewmodel.reset();
 		m_draw_skybox_array.reset( );
 		m_light_scene_object.reset( );
 		m_draw_scene_object_array.reset( );
@@ -462,20 +458,6 @@ namespace hooks {
 
 		m_remove_entity.call<void>( thisptr, entity, handle );
 	}
-
-    void __fastcall cheat::calculate_viewmodel(std::uintptr_t thisptr, float* offsets, float* fov)
-    {
-        m_calculate_viewmodel.call<void>(thisptr, offsets, fov);
-        const auto& cfg = settings::g_misc.m_viewmodel_adjust;
-        if (!cfg.enabled.value) return;
-        if (offsets) {
-            if (std::isfinite(cfg.offset_x.value)) offsets[0] = cfg.offset_x.value;
-            if (std::isfinite(cfg.offset_y.value)) offsets[1] = cfg.offset_y.value;
-            if (std::isfinite(cfg.offset_z.value)) offsets[2] = cfg.offset_z.value;
-        }
-        if (fov && std::isfinite(cfg.fov.value))
-            *fov = std::clamp(cfg.fov.value, 1.0f, 179.0f);
-    }
 
 	void __fastcall cheat::render_view( std::uintptr_t thisptr )
 	{
