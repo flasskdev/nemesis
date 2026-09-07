@@ -1,7 +1,6 @@
 #pragma once
 
 #include <core/systems/systems.hpp>
-#include "angle_math.hpp"
 
 namespace features::combat {
 
@@ -251,7 +250,7 @@ namespace features::combat {
 			void on_create_move( systems::input::usercmd* cmd );
 			void on_render( xdraw::draw_list& draw_list ) const;
 
-			[[nodiscard]] bool has_modified_angles( ) const { return this->m_antiaim_active; }
+			[[nodiscard]] bool has_modified_angles( ) const { return this->m_should_correct || this->m_modified_angles.y != this->m_old_angles.y; }
 			[[nodiscard]] const math::vector3& get_modified_angles( ) const { return this->m_modified_angles; }
 
 		private:
@@ -267,7 +266,6 @@ namespace features::combat {
 			bool m_should_correct{};
 			bool m_antiaim_active{};
 			float m_indicator_yaw{};
-            angle_math::spin_clock m_spin{};
 		};
 
 		class duckpeek

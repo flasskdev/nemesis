@@ -8,6 +8,8 @@ namespace rendering {
 	namespace detail {
 
 		constexpr const char* hitbox_names_legit[ ]{ "head", "chest", "stomach", "arms", "legs" };
+		constexpr const char* weapon_group_items_legit[]{ "Pistol", "SMG", "Rifle", "Shotgun", "Sniper", "LMG" };
+		inline int weapon_group_idx_legit{ 2 };
 
 	} // namespace detail
 
@@ -15,7 +17,7 @@ namespace rendering {
 	{
 		auto& s = settings::g_combat;
 		auto& lb = s.m_legitbot;
-		auto& wg = lb.groups[ 0 ];
+		auto& wg = lb.groups[ std::clamp( detail::weapon_group_idx_legit, 0, 5 ) ];
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
@@ -34,6 +36,8 @@ namespace rendering {
 			xui::section_header("LEGITBOT MAIN");
 
 			xui::toggle( "Enable Legitbot", lb.enabled );
+			xui::layout::spacing( 3.0f );
+			xui::combo( "Weapon Group", detail::weapon_group_idx_legit, detail::weapon_group_items_legit, 6 );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Aimbot", wg.aimbot );
 			xui::layout::spacing( 3.0f );

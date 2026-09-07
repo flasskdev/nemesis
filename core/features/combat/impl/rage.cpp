@@ -10,9 +10,6 @@ namespace features::combat {
 
 	void rage::on_create_move( systems::input::usercmd* cmd )
 	{
-		this->m_should_stop = false;
-		this->m_firing_this_tick = false;
-
 		auto& ctx = g_shared.ctx( );
 		const auto local = systems::g_local.get( );
 		this->update_penetration_crosshair( local );
@@ -23,6 +20,8 @@ namespace features::combat {
 			return;
 		}
 
+		this->m_should_stop = false;
+		this->m_firing_this_tick = false;
 
 		if ( !settings::g_combat.m_duckpeek.enabled.value )
 		{
@@ -1055,10 +1054,6 @@ namespace features::combat {
 
 		for ( auto i = 0; i < static_cast< int >( hits.size( ) ); ++i )
 		{
-            const auto& candidate = hits[i];
-            if (!candidate.record || !candidate.record->valid || candidate.health <= 0 ||
-                !std::isfinite(candidate.damage) || candidate.damage < 0.0f || !std::isfinite(candidate.fov) ||
-                !std::isfinite(candidate.aim_angle.x) || !std::isfinite(candidate.aim_angle.y)) continue;
 			auto rec = hits[ i ].record;
 			auto found{ false };
 
@@ -1152,7 +1147,6 @@ namespace features::combat {
 				const auto hc = config.no_spread.value
 					? 1.0f
 					: g_shared.calculate_hitchance( h.source_eye.position, h.aim_angle, h.hitbox, bone, eval_inaccuracy, aim_ctx.spread );
-                if (!std::isfinite(hc) || hc < 0.0f || hc > 1.0f) continue;
 				const auto hp = static_cast< float >( h.health );
 				const auto can_kill = h.damage >= hp;
 				const auto passes_hitchance = config.no_spread.value || hc >= needed_hc;
@@ -1525,11 +1519,12 @@ namespace features::combat {
 
 	void rage::fire_gun( systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local )
 	{
-        if (!cmd || !local.pawn || !local.controller || !tgt.hit.record || !tgt.hit.record->valid)
+		if ( !tgt.hit.record || !tgt.hit.record->valid )
 		{
 			return;
 		}
 
+		this->m_firing_this_tick = true;
 
 		const auto base = cmd->csgo_user_cmd.mutable_base( );
 		const auto tick_base = memory::read<int>( local.controller + SCHEMA( "CBasePlayerController", "m_nTickBase"_hash ) );
@@ -1566,25 +1561,6 @@ namespace features::combat {
 			aim_angle = corrected;
 		}
 
-        if (!base || !base->viewangles() || cmd->csgo_user_cmd.input_history_size() <= 0 ||
-            !std::isfinite(aim_angle.x) || !std::isfinite(aim_angle.y) ||
-            !std::isfinite(aim_punch.x) || !std::isfinite(aim_punch.y))
-        {
-            m_firing_this_tick = false;
-            return;
-        }
-        const math::vector3 shot_angles{
-            std::clamp(aim_angle.x - aim_punch.x, -89.0f, 89.0f),
-            std::remainder(aim_angle.y - aim_punch.y, 360.0f), 0.0f};
-        if (!std::isfinite(shot_angles.x) || !std::isfinite(shot_angles.y)) return;
-        int shot_history_index = -1;
-        for (int i = cmd->csgo_user_cmd.input_history_size() - 1; i >= 0; --i)
-        {
-            const auto entry = cmd->csgo_user_cmd.mutable_input_history(i);
-            if (entry && entry->view_angles()) { shot_history_index = i; break; }
-        }
-        if (shot_history_index < 0) return;
-        m_firing_this_tick = true;
 		g_shared.last_shoot_tick( ) = tick_base;
 
 		if ( settings::g_misc.m_impacts.console_log.value )
@@ -1616,9 +1592,13 @@ namespace features::combat {
 
 			if ( const auto angles = entry->mutable_view_angles( ) )
 			{
-                angles->set_x(shot_angles.x);
-                angles->set_y(shot_angles.y);
-                angles->set_z(0.0f);
+				angles->set_x( aim_angle.x - aim_punch.x );
+				angles->set_y( aim_angle.y - aim_punch.y );
+
+				if ( config.no_spread.value )
+				{
+					angles->set_z( aim_angle.z );
+				}
 			}
 
 			entry->set_render_tick_count( record_time.tick + 1 );
@@ -1669,20 +1649,36 @@ namespace features::combat {
 
 		if ( history_size > 0 )
 		{
-			cmd->csgo_user_cmd.set_attack1_start_history_index( shot_history_index );
+			cmd->csgo_user_cmd.set_attack1_start_history_index( history_size - 1 );
 		}
 
-        // Keep the shot command and history consistent. Do not inject the old 179.9-degree pitch inversion.
-        if (const auto angles = base->mutable_viewangles())
-        {
-            angles->set_x(shot_angles.x);
-            angles->set_y(shot_angles.y);
-            angles->set_z(0.0f);
-        }
+		math::vector3 forward{};
+		{
+			if ( const auto angles = base->viewangles( ) )
+			{
+				math::helpers::angle_vectors_left( { angles->x( ), angles->y( ), angles->z( ) }, &forward );
+			}
+		}
+
+		const auto punched_aim = math::vector3{ aim_angle.x - aim_punch.x, aim_angle.y - aim_punch.y, 0.0f };
+		const auto facing_away = forward.dot( ( tgt.hit.record->origin - systems::g_prediction.pre( ).networked_origin ).normalized( ) ) < 0.707107f;
+
+		auto command_aim = punched_aim;
+		if ( facing_away && settings::g_combat.m_antiaim.hide_shots.value )
+		{
+			command_aim.x = 179.9f;
+			command_aim.y = std::remainderf( punched_aim.y + 180.0f, 360.0f );
+		}
+
+		if ( const auto angles = base->mutable_viewangles( ) )
+		{
+			angles->set_x( command_aim.x );
+			angles->set_y( command_aim.y );
+		}
 
 		if ( !config.silent.value )
 		{
-			systems::g_input.set_view_angles( shot_angles );
+			systems::g_input.set_view_angles( punched_aim );
 		}
 	}
 

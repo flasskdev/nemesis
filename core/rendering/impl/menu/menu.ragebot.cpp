@@ -100,10 +100,15 @@ namespace rendering {
 				xui::end_popup( );
 			}
 
-			xui::layout::spacing( 8.0f );
 			xui::toggle( "Anti Aim", aa.enabled );
-            xui::toggle("Spinbot", aa.spinbot, "Command-timed rotation; does not rotate the camera");
-            xui::slider_float("Spin Speed", aa.spin_speed, 0.0f, 1440.0f, "%.0f deg/s");
+			if ( xui::begin_popup( "##aa_popup", 220.0f ) )
+			{
+				xui::checkbox( "auto yaw adjust", aa.auto_yaw_adjust );
+				xui::checkbox( "hide onshot", aa.hide_shots );
+				xui::checkbox( "avoid backstab", aa.avoid_backstab );
+				xui::checkbox( "direction indicator", aa.direction_indicator );
+				xui::end_popup( );
+			}
 			xui::layout::spacing( 3.0f );
 			xui::combo( "Pitch", aa.pitch.value, detail::pitch_items, 3 );
 			xui::layout::spacing( 3.0f );

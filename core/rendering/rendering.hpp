@@ -46,7 +46,7 @@ namespace rendering {
 
         enum class tab : int
         {
-            ragebot, legitbot, movement, visuals, misc, settings, config, count
+            ragebot, legitbot, movement, visuals, skins, misc, settings, config, count
         };
 
         static constexpr float k_sidebar_w = tokens::sidebar_w;
@@ -161,6 +161,7 @@ namespace rendering {
             { { "general" }, 1 },
             { { "general" }, 1 },
             { { "general" }, 1 },
+            { { "guns", "knives", "gloves", "agents" }, 4 },
             { { "general" }, 1 },
             { { "general" }, 1 },
             { { "general" }, 1 }

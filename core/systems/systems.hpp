@@ -123,8 +123,6 @@ namespace systems {
 
 		void update( );
 		void apply( );
-        void rebase_movement(usercmd* cmd, float source_yaw) const;
-        void sync_movement_buttons(usercmd* cmd) const;
 
 		[[nodiscard]] usercmd* get( ) const { return this->m_current_cmd; }
 		[[nodiscard]] usercmd* get_current_cmd( std::uintptr_t local_controller ) const;
@@ -140,11 +138,7 @@ namespace systems {
 		[[nodiscard]] bool is_subtick_overwrite( usercmd* cmd ) const;
 
 	private:
-        usercmd* m_current_cmd{};
-        math::vector2 m_original_move{};
-        math::vector2 m_original_angles{};
-        std::uintptr_t m_original_buttons{};
-        std::uintptr_t m_original_changed{};
+		usercmd* m_current_cmd{};
 		proto::base_usercmd_pb m_backup{};
 
 		bool calculate_crc( proto::base_usercmd_pb* base ) const;

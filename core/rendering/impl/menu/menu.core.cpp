@@ -52,16 +52,36 @@ namespace rendering {
             {
                 return { 3, 0 };
             }
+            if (category_lower.find("skin") != std::string::npos || category_lower.find("changer") != std::string::npos)
+            {
+                return { 4, 0 };
+            }
             if (category_lower.find("config") != std::string::npos)
             {
-                return { 6, 0 };
+                return { 7, 0 };
             }
             if (category_lower.find("setting") != std::string::npos || category_lower.find("theme") != std::string::npos || category_lower.find("watermark") != std::string::npos || category_lower.find("keybind") != std::string::npos)
             {
-                return { 5, 0 };
+                return { 6, 0 };
             }
-            return { 4, 0 }; // misc
+            return { 5, 0 }; // misc
         }
+
+        constexpr const char* k_cham_material_names[]{
+            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl",
+            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)"
+        };
+        constexpr auto k_cham_material_count = static_cast<int>(settings::esp::cham_ids::count);
+
+        constexpr const char* k_cham_visible_material_names[]{
+            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl"
+        };
+        constexpr int k_cham_visible_material_count = 11;
+
+        constexpr const char* k_cham_wall_material_names[]{
+            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)"
+        };
+        constexpr int k_cham_wall_material_count = 8;
 
     } // namespace detail
 
@@ -958,7 +978,7 @@ namespace rendering {
         }
 
         const auto& chosen = this->m_search_entries[this->m_search_visible_indices[index]];
-        this->m_tab = std::clamp(chosen.tab, 0, 6);
+        this->m_tab = std::clamp(chosen.tab, 0, 7);
         this->m_subtab = std::clamp(chosen.subtab, 0, k_subtab_defs[this->m_tab].count - 1);
         xui::set_highlight_target(chosen.name, 1.2f);
         this->close_search();
@@ -1314,9 +1334,10 @@ namespace rendering {
             case 1: this->draw_legitbot(col_w); break;
             case 2: this->draw_movement(col_w); break;
             case 3: this->draw_visuals(col_w); break;
-            case 4: this->draw_misc(col_w); break;
-            case 5: this->draw_settings(col_w); break;
-            case 6: this->draw_config(col_w); break;
+            case 4: this->draw_skins(col_w); break;
+            case 5: this->draw_misc(col_w); break;
+            case 6: this->draw_settings(col_w); break;
+            case 7: this->draw_config(col_w); break;
             }
 
             xui::end_window();
@@ -1366,9 +1387,9 @@ namespace rendering {
         constexpr auto badge_size = 38.0f;
         for (int i = 3; i > 0; --i)
             dl.rect(badge_x - i, badge_y - i, badge_size + i * 2.0f, badge_size + i * 2.0f,
-                tokens::col_accent.alpha(static_cast<std::uint8_t>(12 - i * 2)), xdraw::corner_radius{8.0f + i});
-        dl.rect_filled(badge_x, badge_y, badge_size, badge_size, tokens::col_elevated, xdraw::corner_radius{8.0f});
-        dl.rect(badge_x, badge_y, badge_size, badge_size, tokens::col_accent.alpha(150), xdraw::corner_radius{8.0f});
+                tokens::col_accent.alpha(static_cast<std::uint8_t>(12 - i * 2)), xdraw::corner_radius{ 8.0f + i });
+        dl.rect_filled(badge_x, badge_y, badge_size, badge_size, tokens::col_elevated, xdraw::corner_radius{ 8.0f });
+        dl.rect(badge_x, badge_y, badge_size, badge_size, tokens::col_accent.alpha(150), xdraw::corner_radius{ 8.0f });
         xdraw::push_font(g_fonts.inter_bold[fonts::size::big]);
         const auto [mw, mh] = xdraw::measure_text("M");
         dl.text(badge_x + (badge_size - mw) * 0.5f, badge_y + (badge_size - mh) * 0.5f, "M", tokens::col_accent);
@@ -1377,10 +1398,10 @@ namespace rendering {
         xdraw::pop_font();
         dl.line(sb_x + 1.0f, sb_y + 82.0f, sb_x + sb_w, sb_y + 82.0f, tokens::col_border);
 
-        constexpr std::array<const char*, 7> names{{"Ragebot", "Legitbot", "Movement", "Visuals", "Misc", "Settings", "Configs"}};
+        constexpr std::array<const char*, 8> names{ {"Ragebot", "Legitbot", "Movement", "Visuals", "Skins", "Misc", "Settings", "Configs"} };
         for (int i = 0; i < static_cast<int>(names.size()); ++i)
         {
-            const xui::rect button{sb_x + 10.0f, sb_y + 98.0f + i * 42.0f, sb_w - 20.0f, 37.0f};
+            const xui::rect button{ sb_x + 10.0f, sb_y + 98.0f + i * 42.0f, sb_w - 20.0f, 37.0f };
             const bool hovered = input.in_rect(button) && !ctx.overlay_blocking();
             const bool active = this->m_tab == i;
             if (!this->m_search_open && hovered && input.mouse_clicked)
@@ -1395,12 +1416,12 @@ namespace rendering {
             {
                 const auto color = tokens::col_accent.alpha(static_cast<std::uint8_t>(24.0f * amount));
                 dl.rect_filled_gradient(button.x, button.y, button.w, button.h,
-                    color, color.alpha(0), color.alpha(0), color, xdraw::corner_radius{5.0f});
+                    color, color.alpha(0), color.alpha(0), color, xdraw::corner_radius{ 5.0f });
             }
             if (active)
             {
-                dl.rect_filled(button.x - 2.0f, button.y + 6.0f, 7.0f, 25.0f, tokens::col_accent.alpha(28), xdraw::corner_radius{3.5f});
-                dl.rect_filled(button.x, button.y + 8.0f, 3.0f, 21.0f, tokens::col_accent, xdraw::corner_radius{1.5f});
+                dl.rect_filled(button.x - 2.0f, button.y + 6.0f, 7.0f, 25.0f, tokens::col_accent.alpha(28), xdraw::corner_radius{ 3.5f });
+                dl.rect_filled(button.x, button.y + 8.0f, 3.0f, 21.0f, tokens::col_accent, xdraw::corner_radius{ 1.5f });
             }
             const auto icon_color = active ? tokens::col_accent : xui::lerp(tokens::col_text_dim, tokens::col_text, amount);
             const auto cx = button.x + 22.0f;
@@ -1419,22 +1440,29 @@ namespace rendering {
                 dl.circle(cx, cy, 2.2f, icon_color, 1.2f);
                 break;
             case 2: {
-                const std::array<float, 12> points{{cx + 2, cy - 8, cx - 6, cy + 1, cx, cy + 1, cx - 2, cy + 8, cx + 7, cy - 2, cx + 1, cy - 2}};
+                const std::array<float, 12> points{ {cx + 2, cy - 8, cx - 6, cy + 1, cx, cy + 1, cx - 2, cy + 8, cx + 7, cy - 2, cx + 1, cy - 2} };
                 dl.polyline(points, icon_color, true, 1.2f);
                 break;
             }
             case 3: {
-                const std::array<float, 16> points{{cx - 8,cy, cx - 4,cy - 4,cx,cy - 5,cx + 4,cy - 4,cx + 8,cy,cx + 4,cy + 4,cx,cy + 5,cx - 4,cy + 4}};
+                const std::array<float, 16> points{ {cx - 8,cy, cx - 4,cy - 4,cx,cy - 5,cx + 4,cy - 4,cx + 8,cy,cx + 4,cy + 4,cx,cy + 5,cx - 4,cy + 4} };
                 dl.polyline(points, icon_color, true, 1.2f);
                 dl.circle(cx, cy, 2.2f, icon_color, 1.2f);
                 break;
             }
-            case 4:
-                dl.rect(cx - 6, cy - 6, 12, 12, icon_color, xdraw::corner_radius{1.0f});
+            case 4: // Skins
+                dl.line(cx, cy - 7, cx + 7, cy, icon_color, 1.2f);
+                dl.line(cx + 7, cy, cx, cy + 7, icon_color, 1.2f);
+                dl.line(cx, cy + 7, cx - 7, cy, icon_color, 1.2f);
+                dl.line(cx - 7, cy, cx, cy - 7, icon_color, 1.2f);
+                dl.circle_filled(cx, cy, 2.0f, icon_color);
+                break;
+            case 5: // Misc
+                dl.rect(cx - 6, cy - 6, 12, 12, icon_color, xdraw::corner_radius{ 1.0f });
                 dl.line(cx - 6, cy - 2, cx + 6, cy - 2, icon_color);
                 dl.line(cx - 2, cy - 2, cx - 2, cy + 6, icon_color);
                 break;
-            case 5:
+            case 6: // Settings
                 dl.circle(cx, cy, 5.0f, icon_color, 1.2f);
                 dl.circle(cx, cy, 2.0f, icon_color, 1.2f);
                 for (int tooth = 0; tooth < 8; ++tooth) {
@@ -1443,7 +1471,7 @@ namespace rendering {
                         cx + std::cos(angle) * 8.0f, cy + std::sin(angle) * 8.0f, icon_color, 1.2f);
                 }
                 break;
-            case 6:
+            case 7: // Configs
                 dl.line(cx, cy - 7, cx, cy + 2, icon_color, 1.2f);
                 dl.line(cx - 3, cy - 1, cx, cy + 2, icon_color, 1.2f);
                 dl.line(cx + 3, cy - 1, cx, cy + 2, icon_color, 1.2f);
@@ -1467,13 +1495,13 @@ namespace rendering {
         if (this->m_textures.user.resource)
         {
             dl.image(avatar_x, avatar_y, avatar_size, avatar_size,
-                this->m_textures.user.resource.Get(), xdraw::corner_radius{avatar_size * 0.5f});
+                this->m_textures.user.resource.Get(), xdraw::corner_radius{ avatar_size * 0.5f });
         }
         else
         {
             dl.circle_filled(avatar_x + 18, avatar_y + 18, 18, tokens::col_elevated);
             dl.circle(avatar_x + 18, avatar_y + 13, 5, tokens::col_text_dim, 1.2f);
-            dl.rect(avatar_x + 9, avatar_y + 21, 18, 9, tokens::col_text_dim, xdraw::corner_radius{4.5f});
+            dl.rect(avatar_x + 9, avatar_y + 21, 18, 9, tokens::col_text_dim, xdraw::corner_radius{ 4.5f });
         }
         dl.circle(avatar_x + 18, avatar_y + 18, 18, tokens::col_border);
         const auto text_x = avatar_x + avatar_size + 12.0f;
@@ -1606,11 +1634,11 @@ namespace rendering {
         const auto bar_y = this->m_y + tokens::gap;
 
         // Page title ("Ragebot", etc.)
-        constexpr const char* page_titles[7] = {
-            "RAGEBOT", "LEGITBOT", "MOVEMENT", "VISUALS", "MISC", "SETTINGS", "CONFIGS"
+        constexpr const char* page_titles[8] = {
+            "RAGEBOT", "LEGITBOT", "MOVEMENT", "VISUALS", "SKINS", "MISC", "SETTINGS", "CONFIGS"
         };
 
-        const auto tab_idx = std::clamp(this->m_tab, 0, 6);
+        const auto tab_idx = std::clamp(this->m_tab, 0, 7);
         const auto page_title = page_titles[tab_idx];
 
         xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::big]);
@@ -1618,6 +1646,46 @@ namespace rendering {
         const auto title_y = bar_y + (tokens::subtab_bar_h - title_h) * 0.5f;
         dl.text(content_x, title_y, page_title, tokens::col_text);
         xdraw::pop_font();
+
+        if (this->m_tab == 4) // Skins subtabs (Guns, Knives, Gloves, Agents)
+        {
+            constexpr std::array<const char*, 4> skin_subtabs{ "Guns", "Knives", "Gloves", "Agents" };
+            float curr_x = content_x + title_w + 24.0f;
+            const auto pill_y = bar_y + (tokens::subtab_bar_h - 26.0f) * 0.5f;
+            xdraw::push_font(rendering::g_fonts.inter_medium[rendering::fonts::size::petite]);
+            for (int s = 0; s < 4; ++s)
+            {
+                const auto [tw, th] = xdraw::measure_text(skin_subtabs[s]);
+                const auto pw = tw + 20.0f;
+                const auto ph = 26.0f;
+                const xui::rect pill_rect{ curr_x, pill_y, pw, ph };
+                const bool is_active = (this->m_subtab == s);
+                const bool is_hovered = input.in_rect(pill_rect) && !xui::ctx().overlay_blocking();
+
+                if (is_hovered && input.mouse_clicked)
+                {
+                    const_cast<menu*>(this)->m_subtab = s;
+                }
+
+                if (is_active)
+                {
+                    dl.rect_filled(curr_x, pill_y, pw, ph, tokens::col_accent.alpha(35), xdraw::corner_radius{ 13.0f });
+                    dl.rect(curr_x, pill_y, pw, ph, tokens::col_accent, xdraw::corner_radius{ 13.0f }, 1.0f);
+                    dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, skin_subtabs[s], tokens::col_accent);
+                }
+                else
+                {
+                    if (is_hovered)
+                    {
+                        dl.rect_filled(curr_x, pill_y, pw, ph, tokens::col_elevated.alpha(120), xdraw::corner_radius{ 13.0f });
+                    }
+                    dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, skin_subtabs[s], is_hovered ? tokens::col_text : tokens::col_text_dim);
+                }
+
+                curr_x += pw + 8.0f;
+            }
+            xdraw::pop_font();
+        }
 
         dl.line(this->m_x + menu::k_sidebar_w + tokens::gap, this->m_y + 67.0f,
             this->m_x + this->m_w - 1.0f, this->m_y + 67.0f, tokens::col_border);
@@ -1771,12 +1839,7 @@ namespace rendering {
 
             xui::toggle("Bunny Hop", mov.bhop);
             xui::layout::spacing(3.0f);
-            xui::toggle("Auto Strafe", mov.m_test_strafer.enabled);
-            xui::layout::spacing(3.0f);
-            xui::toggle("Air Strafe", mov.airstrafe);
-            xui::layout::spacing(3.0f);
-            xui::toggle("Fully Directional", mov.airstrafe_fully_directional);
-            xui::slider_float("Strafe Smoothing", mov.airstrafe_heading_slack, 0.0f, 12.0f, "%.1f deg");
+            xui::toggle("Air Strafe", mov.m_test_strafer.enabled);
             xui::layout::spacing(3.0f);
             xui::toggle("Fast Ladder", mov.fastladder);
             xui::layout::spacing(3.0f);
@@ -1809,11 +1872,6 @@ namespace rendering {
             xui::toggle("Slow Walk", mov.slowwalk);
             xui::slider_float("Slow Walk Speed", mov.slowwalk_speed, 10.0f, 150.0f, "%.0f u/s");
 
-            xui::layout::spacing(8.0f);
-            xui::toggle("Velocity Debug", mov.m_velocity_debug.enabled);
-            xui::layout::spacing(3.0f);
-            xui::toggle("Reset Peak on Land", mov.m_velocity_debug.reset_on_land);
-
             xui::end_child();
         }
     }
@@ -1822,6 +1880,11 @@ namespace rendering {
     {
         auto& esp = settings::g_esp;
         auto& p = esp.m_player;
+
+        // Определяем текущие настройки на основе subtab (Enemy/Team)
+        // В draw_visuals обычно отображается Enemy (subtab 0), если не указано иное.
+        // Для простоты берем enemy, так как в оригинальном коде visuals часто показывает общие или enemy настройки.
+        // Если нужно переключение Enemy/Team, это делается через m_subtab, но здесь оставим как в примере player.cpp для subtab 0 (Enemy)
         auto& ov = p.m_overlay[0];
         auto& chams = p.m_chams.enemy;
         auto& glow = p.m_glow.enemy;
@@ -1844,21 +1907,212 @@ namespace rendering {
 
             xui::toggle("Enable ESP", ov.enabled);
             xui::layout::spacing(3.0f);
+
+            // Box ESP
             xui::toggle("Box ESP", ov.m_box.enabled);
+            if (xui::begin_popup("##box_popup", 220.0f))
+            {
+                constexpr const char* box_styles[]{ "full", "cornered" };
+                xui::combo("style##box", ov.m_box.style.value, box_styles, 2);
+                xui::checkbox("fill", ov.m_box.fill);
+                xui::checkbox("outline", ov.m_box.outline);
+                xui::slider_float("corner length", ov.m_box.corner_length, 2.0f, 20.0f, "%.0f");
+                xui::color_picker("visible color##box", ov.m_box.visible_color);
+                xui::color_picker("occluded color##box", ov.m_box.occluded_color);
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // Name ESP
             xui::toggle("Name ESP", ov.m_name.enabled);
+            if (xui::begin_popup("##name_popup", 220.0f))
+            {
+                xui::color_picker("color##name", ov.m_name.color);
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // Health Bar
             xui::toggle("Health Bar", ov.m_health_bar.enabled);
+            if (xui::begin_popup("##health_popup", 220.0f))
+            {
+                constexpr const char* bar_positions[]{ "left", "top", "bottom" };
+                xui::combo("position##hp", ov.m_health_bar.position.value, bar_positions, 3);
+                xui::checkbox("outline##hp", ov.m_health_bar.outline_setting);
+                xui::checkbox("gradient##hp", ov.m_health_bar.gradient);
+                xui::checkbox("show value##hp", ov.m_health_bar.show_value);
+                xui::checkbox("glow##hp", ov.m_health_bar.glow);
+                xui::color_picker("full color##hp", ov.m_health_bar.full_color);
+                xui::color_picker("low color##hp", ov.m_health_bar.low_color);
+                xui::color_picker("background##hp", ov.m_health_bar.background_color);
+                xui::color_picker("outline color##hp", ov.m_health_bar.outline_color);
+                xui::color_picker("text color##hp", ov.m_health_bar.text_color);
+                xui::color_picker("glow color##hp", ov.m_health_bar.glow_color);
+                xui::slider_float("glow strength##hp", ov.m_health_bar.glow_strength, 0.1f, 1.0f, "%.2f");
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // Weapon Text
             xui::toggle("Weapon Text", ov.m_weapon.enabled);
+            if (xui::begin_popup("##weapon_popup", 220.0f))
+            {
+                constexpr const char* display_types[]{ "text", "icon", "text + icon" };
+                xui::combo("display##wep", ov.m_weapon.display.value, display_types, 3);
+                xui::color_picker("text color##wep", ov.m_weapon.text_color);
+                xui::color_picker("icon color##wep", ov.m_weapon.icon_color);
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // Skeleton
             xui::toggle("Skeleton", ov.m_skeleton.enabled);
+            if (xui::begin_popup("##skeleton_popup", 220.0f))
+            {
+                constexpr const char* skel_modes[]{ "normal", "backtrack" };
+                xui::combo("mode##skel", ov.m_skeleton.type.value, skel_modes, 2);
+                xui::slider_float("thickness##skel", ov.m_skeleton.thickness, 0.5f, 4.0f, "%.1f");
+                xui::color_picker("visible color##skel", ov.m_skeleton.visible_color);
+                xui::color_picker("occluded color##skel", ov.m_skeleton.occluded_color);
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // Ammo Bar
             xui::toggle("Ammo Bar", ov.m_ammo_bar.enabled);
+            if (xui::begin_popup("##ammo_popup", 220.0f))
+            {
+                constexpr const char* bar_positions[]{ "left", "top", "bottom" };
+                xui::combo("position##ammo", ov.m_ammo_bar.position.value, bar_positions, 3);
+                xui::checkbox("outline##ammo", ov.m_ammo_bar.outline_setting);
+                xui::checkbox("gradient##ammo", ov.m_ammo_bar.gradient);
+                xui::checkbox("show value##ammo", ov.m_ammo_bar.show_value);
+                xui::checkbox("glow##ammo", ov.m_ammo_bar.glow);
+                xui::color_picker("full color##ammo", ov.m_ammo_bar.full_color);
+                xui::color_picker("low color##ammo", ov.m_ammo_bar.low_color);
+                xui::color_picker("background##ammo", ov.m_ammo_bar.background_color);
+                xui::color_picker("outline color##ammo", ov.m_ammo_bar.outline_color);
+                xui::color_picker("text color##ammo", ov.m_ammo_bar.text_color);
+                xui::color_picker("glow color##ammo", ov.m_ammo_bar.glow_color);
+                xui::slider_float("glow strength##ammo", ov.m_ammo_bar.glow_strength, 0.1f, 1.0f, "%.2f");
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // Info Flags
             xui::toggle("Info Flags", ov.m_info_flags.enabled);
+            if (xui::begin_popup("##flags_popup", 220.0f))
+            {
+                constexpr const char* flag_names[]{ "money", "armor", "kit", "scoped", "defusing", "flashed", "ping", "distance" };
+                xui::multicombo("flags##mc", ov.m_info_flags.flags, flag_names, settings::esp::player::overlay::info_flags::count);
+                xui::color_picker("money##flags", ov.m_info_flags.money_color);
+                xui::color_picker("armor##flags", ov.m_info_flags.armor_color);
+                xui::color_picker("kit##flags", ov.m_info_flags.kit_color);
+                xui::color_picker("scoped##flags", ov.m_info_flags.scoped_color);
+                xui::color_picker("defusing##flags", ov.m_info_flags.defusing_color);
+                xui::color_picker("flashed##flags", ov.m_info_flags.flashed_color);
+                xui::color_picker("distance##flags", ov.m_info_flags.distance_color);
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
+
+            // OOF Arrows
             xui::toggle("OOF Arrows", ov.m_oof_arrow.enabled);
+            if (xui::begin_popup("##oof_popup", 220.0f))
+            {
+                xui::checkbox("glow##oof", ov.m_oof_arrow.glow);
+                xui::slider_float("width##oof", ov.m_oof_arrow.width, 4.0f, 40.0f, "%.0f");
+                xui::slider_float("height##oof", ov.m_oof_arrow.height, 4.0f, 40.0f, "%.0f");
+                xui::slider_float("radius x##oof", ov.m_oof_arrow.radius_x, 50.0f, 600.0f, "%.0f");
+                xui::slider_float("radius y##oof", ov.m_oof_arrow.radius_y, 50.0f, 600.0f, "%.0f");
+                xui::slider_float("glow strength##oof", ov.m_oof_arrow.glow_strength, 0.1f, 1.0f, "%.2f");
+                xui::color_picker("visible color##oof", ov.m_oof_arrow.visible_color);
+                xui::color_picker("occluded color##oof", ov.m_oof_arrow.occluded_color);
+                xui::end_popup();
+            }
+            xui::layout::spacing(3.0f);
+
+            xui::toggle("Player Chams", chams.enabled);
+            if (chams.enabled && !chams.primary.enabled && !chams.secondary.enabled && !chams.overlay.enabled)
+            {
+                chams.primary.enabled.value = true;
+            }
+            if (xui::begin_popup("##player_chams_popup", 220.0f))
+            {
+                xui::checkbox("visible chams", chams.primary.enabled);
+                xui::color_picker("visible color", chams.primary.color);
+                xui::combo("visible material", chams.primary.material.value, detail::k_cham_visible_material_names, detail::k_cham_visible_material_count);
+
+                xui::layout::spacing(5.0f);
+
+                xui::checkbox("through wall", chams.secondary.enabled);
+                if (chams.secondary.enabled)
+                {
+                    xui::color_picker("wall color", chams.secondary.color);
+                    int wall_mat_idx = static_cast<int>(chams.secondary.material.value) - 11;
+                    if (wall_mat_idx < 0 || wall_mat_idx >= detail::k_cham_wall_material_count) wall_mat_idx = 2; // flat (iz)
+                    if (xui::combo("wall material", wall_mat_idx, detail::k_cham_wall_material_names, detail::k_cham_wall_material_count))
+                    {
+                        chams.secondary.material.value = static_cast<settings::esp::cham_ids>(wall_mat_idx + 11);
+                    }
+                }
+
+                xui::layout::spacing(5.0f);
+
+                xui::checkbox("overlay", chams.overlay.enabled);
+                if (chams.overlay.enabled)
+                {
+                    xui::color_picker("overlay color", chams.overlay.color);
+                    xui::combo("overlay material", chams.overlay.material.value, detail::k_cham_material_names, detail::k_cham_material_count);
+                }
+
+                xui::end_popup();
+            }
+            xui::layout::spacing(3.0f);
+
+            xui::toggle("Visible Chams", chams.primary.enabled);
+            if (chams.primary.enabled)
+            {
+                chams.enabled.value = true;
+            }
+            if (xui::begin_popup("##visible_chams_popup", 220.0f))
+            {
+                xui::color_picker("visible color", chams.primary.color);
+                xui::combo("visible material", chams.primary.material.value, detail::k_cham_visible_material_names, detail::k_cham_visible_material_count);
+
+                xui::layout::spacing(5.0f);
+
+                xui::checkbox("through wall", chams.secondary.enabled);
+                if (chams.secondary.enabled)
+                {
+                    xui::color_picker("wall color", chams.secondary.color);
+                    int wall_mat_idx = static_cast<int>(chams.secondary.material.value) - 11;
+                    if (wall_mat_idx < 0 || wall_mat_idx >= detail::k_cham_wall_material_count) wall_mat_idx = 2; // flat (iz)
+                    if (xui::combo("wall material", wall_mat_idx, detail::k_cham_wall_material_names, detail::k_cham_wall_material_count))
+                    {
+                        chams.secondary.material.value = static_cast<settings::esp::cham_ids>(wall_mat_idx + 11);
+                    }
+                }
+
+                xui::layout::spacing(5.0f);
+
+                xui::checkbox("overlay", chams.overlay.enabled);
+                if (chams.overlay.enabled)
+                {
+                    xui::color_picker("overlay color", chams.overlay.color);
+                    xui::combo("overlay material", chams.overlay.material.value, detail::k_cham_material_names, detail::k_cham_material_count);
+                }
+
+                xui::end_popup();
+            }
+            xui::layout::spacing(3.0f);
+
+            xui::toggle("Player Glow", glow.enabled);
+            if (xui::begin_popup("##glow_popup", 220.0f))
+            {
+                xui::color_picker("color##glow", glow.color);
+                xui::end_popup();
+            }
 
             xui::end_child();
         }
@@ -1867,25 +2121,23 @@ namespace rendering {
         xui::layout::set_cursor(right_x - wx, body_y - wy);
         if (xui::begin_child("##visuals_chams_world", col_w, body_h, true))
         {
-            xui::section_header("CHAMS & WORLD");
-
-            xui::toggle("Player Chams", chams.enabled);
+            xui::section_header("WORLD");
+            xui::toggle("Dropped Items ESP", item.m_overlay.enabled);
             xui::layout::spacing(3.0f);
-            xui::toggle("Player Glow", glow.enabled);
-            xui::layout::spacing(3.0f);
-            xui::toggle("Dropped Items ESP", item.m_overlay.group_toggle(0));
-            xui::layout::spacing(3.0f);
-            xui::toggle("Projectile ESP", proj.m_overlay.group_toggle(0));
-
+            xui::toggle("Projectile ESP", proj.m_overlay.enabled);
             xui::layout::spacing(8.0f);
             xui::toggle("Custom Skybox", scene.skybox.custom_skybox);
             xui::layout::spacing(3.0f);
             xui::toggle("World Lighting", scene.lighting);
             xui::layout::spacing(3.0f);
             xui::toggle("World Color", scene.world_setting);
+            if (xui::begin_popup("##world_color_popup", 220.0f))
+            {
+                xui::color_picker("color##world", scene.world_color);
+                xui::end_popup();
+            }
             xui::layout::spacing(3.0f);
             xui::toggle("Bloom Effect", scene.bloom);
-
             xui::end_child();
         }
     }
@@ -1914,13 +2166,10 @@ namespace rendering {
                 const auto cy = row.y + row.h * 0.5f;
                 if (m.menu_palette.value == i) dl.circle(cx, cy, 8.0f, tokens::col_text, 1.2f);
                 dl.circle_filled(cx, cy, 5.5f, theme::presets[i].accent);
-                const xui::rect hit{cx - step * 0.5f, row.y, step, row.h};
+                const xui::rect hit{ cx - step * 0.5f, row.y, step, row.h };
                 if (!xui::ctx().overlay_blocking() && xui::ctx().input.in_rect(hit) && xui::ctx().input.mouse_clicked)
                     const_cast<menu*>(this)->apply_theme_preset(i);
             }
-            xui::text("Palette is saved inside your config.", tokens::col_text_dim);
-            xui::text("Use Configs > Save after changing it.", tokens::col_text_dim);
-            xui::layout::spacing(12.0f);
             xui::layout::separator();
             xui::layout::spacing(10.0f);
             xui::keybind("Menu Key", m.menu_key.value);
@@ -1939,11 +2188,6 @@ namespace rendering {
             xui::toggle("Map", m.m_watermark.show_map);
             xui::toggle("Tick Rate", m.m_watermark.show_tick);
             xui::toggle("Velocity", m.m_watermark.show_velocity);
-            xui::layout::spacing(8.0f);
-            xui::layout::separator();
-            xui::toggle("Disable Game Logs", m.disable_game_logs);
-            xui::toggle("Preserve Killfeed", m.preserve_killfeed);
-            xui::toggle("Reveal Radar", m.reveal_radar);
             xui::end_child();
         }
     }

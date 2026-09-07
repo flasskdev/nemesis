@@ -5,8 +5,6 @@
 #include <utilities/logging/logging.hpp>
 #include <protection/game_addresses.hpp>
 #include "../systems.hpp"
-#include <core/features/movement/movement_math.hpp>
-#include <utilities/proto/subtick_ops.hpp>
 
 namespace systems {
 
@@ -19,58 +17,8 @@ namespace systems {
 			return;
 		}
 
-        this->m_current_cmd = this->get_current_cmd(local_controller);
-        if (m_current_cmd)
-        {
-            m_original_buttons = m_current_cmd->buttons.value;
-            m_original_changed = m_current_cmd->buttons.value_changed;
-            if (const auto base = m_current_cmd->csgo_user_cmd.mutable_base())
-            {
-                m_original_move = {base->forwardmove(), base->leftmove()};
-                const auto angles = base->viewangles();
-                m_original_angles = angles ? math::vector2{angles->x(), angles->y()} : math::vector2{};
-            }
-        }
+		this->m_current_cmd = this->get_current_cmd( local_controller );
 	}
-
-
-    void input::sync_movement_buttons(usercmd* cmd) const
-    {
-        if (!cmd) return;
-        const auto base = cmd->csgo_user_cmd.mutable_base();
-        if (!base) return;
-        constexpr auto mask = static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward |
-            cstypes::command_buttons::in_back | cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright);
-        const auto before = cmd->buttons.value;
-        auto after = before & ~mask;
-        if (base->forwardmove() > 0.0001f) after |= cstypes::command_buttons::in_forward;
-        else if (base->forwardmove() < -0.0001f) after |= cstypes::command_buttons::in_back;
-        if (base->leftmove() > 0.0001f) after |= cstypes::command_buttons::in_moveleft;
-        else if (base->leftmove() < -0.0001f) after |= cstypes::command_buttons::in_moveright;
-        cmd->buttons.value = after;
-        if (cmd == m_current_cmd)
-            cmd->buttons.value_changed = (cmd->buttons.value_changed & ~mask) |
-                ((m_original_changed | (m_original_buttons ^ after)) & mask);
-        else
-            cmd->buttons.value_changed |= (before ^ after) & mask;
-        cmd->buttons.value_scroll &= ~mask;
-    }
-
-    void input::rebase_movement(usercmd* cmd, float source_yaw) const
-    {
-        if (!cmd || !std::isfinite(source_yaw)) return;
-        const auto local = systems::g_local.get();
-        if (!local.pawn) return;
-        const auto type = memory::read<std::uint8_t>(local.pawn + SCHEMA("C_BaseEntity", "m_nActualMoveType"_hash));
-        if (type == cstypes::move_type::ladder || type == cstypes::move_type::noclip) return;
-        const auto base = cmd->csgo_user_cmd.mutable_base();
-        if (!base || !base->viewangles() || !std::isfinite(base->viewangles()->y())) return;
-        const auto move = features::movement::math2d::rebase(
-            {base->forwardmove(), base->leftmove()}, source_yaw, base->viewangles()->y());
-        base->set_forwardmove(move.x);
-        base->set_leftmove(move.y);
-        sync_movement_buttons(cmd);
-    }
 
 	void input::apply( )
 	{
@@ -85,70 +33,35 @@ namespace systems {
 			return;
 		}
 
-        diag::set_exception_phase("input apply: final movement");
-        if (local.is_alive && local.pawn)
-        {
-            const auto type = memory::read<std::uint8_t>(local.pawn + SCHEMA("C_BaseEntity", "m_nActualMoveType"_hash));
-            const bool walking = type != cstypes::move_type::ladder && type != cstypes::move_type::noclip;
-            const auto angles = base->viewangles();
-            const bool angles_changed = angles &&
-                (std::fabs(features::movement::math2d::yaw(angles->y() - m_original_angles.y)) > 0.0001f ||
-                 std::fabs(angles->x() - m_original_angles.x) > 0.0001f);
-            const auto final_move = features::movement::math2d::limit({base->forwardmove(), base->leftmove()});
-            // Sanitize base values even if a prediction baseline or an allocation is unavailable.
-            if (walking) { base->set_forwardmove(final_move.x); base->set_leftmove(final_move.y); }
-            const bool movement_changed = angles_changed ||
-                !std::isfinite(m_original_move.x) || !std::isfinite(m_original_move.y) ||
-                std::fabs(final_move.x - m_original_move.x) > 0.0001f ||
-                std::fabs(final_move.y - m_original_move.y) > 0.0001f;
-            if (walking && movement_changed)
-            {
-                // Prediction can mutate movement services. Use the captured pre-command baseline.
-                const auto& previous = systems::g_prediction.pre().last_movement_impulses;
-                if (std::isfinite(previous.x) && std::isfinite(previous.y))
-                {
-                    proto::subtick_move_step* initial = nullptr;
-                    for (int i = 0; i < base->subtick_moves_size(); ++i)
-                    {
-                        const auto step = base->mutable_subtick_moves(i);
-                        if (step && !step->button() && step->when() == 0.0f &&
-                            step->pitch_delta() == 0.0f && step->yaw_delta() == 0.0f)
-                        { initial = step; break; }
-                    }
-                    if (!initial) initial = acquire_subtick_step(base->mutable_subtick_moves());
-                    // Preserve the original stream on allocation failure. Never clear it first.
-                    if (initial)
-                    {
-                        for (int i = 0; i < base->subtick_moves_size(); ++i)
-                        {
-                            const auto step = base->mutable_subtick_moves(i);
-                            if (!step) continue;
-                            step->set_analog_forward_delta(0.0f);
-                            step->set_analog_left_delta(0.0f);
-                        }
-                        initial->set_button(0);
-                        initial->set_pressed(false);
-                        initial->set_when(0.0f);
-                        initial->set_pitch_delta(0.0f);
-                        initial->set_yaw_delta(0.0f);
-                        initial->set_analog_forward_delta(final_move.x - previous.x);
-                        initial->set_analog_left_delta(final_move.y - previous.y);
-                        constexpr auto direction_mask = cstypes::command_buttons::in_forward |
-                            cstypes::command_buttons::in_back | cstypes::command_buttons::in_moveleft |
-                            cstypes::command_buttons::in_moveright;
-                        proto::subtick_ops::strip_buttons(base->mutable_subtick_moves(), direction_mask, initial);
-                        base->set_forwardmove(final_move.x);
-                        base->set_leftmove(final_move.y);
-                        sync_movement_buttons(m_current_cmd);
-                    }
-                }
-            }
-            // An angle writer owns this command's angles, not its jump/use/duck timestamps.
-            if (angles_changed)
-                for (int i = 0; i < base->subtick_moves_size(); ++i)
-                    if (const auto step = base->mutable_subtick_moves(i))
-                    { step->set_pitch_delta(0.0f); step->set_yaw_delta(0.0f); }
-        }
+		auto has_move_subticks = [] (proto::base_usercmd_pb* base_cmd) {
+			// just use protobufs atp
+			for (size_t i = 0; i < base_cmd->subtick_moves_size (); i++) {
+				proto::subtick_move_step* step = base_cmd->mutable_subtick_moves (i);
+				if (step->m_has_bits.test (0x8) || step->m_has_bits.test (0x10))
+					return true;
+
+				if (step->m_has_bits.test (0x1))
+					return true;
+			}
+
+			return false;
+		};
+
+		// fix movement for ag2
+		diag::set_exception_phase( "input apply: subtick movement" );
+		if (!has_move_subticks (base)) {
+			if (const auto step = systems::g_input.acquire_subtick_step (base->mutable_subtick_moves ())) {
+
+				const auto movement_services = local.pawn ? memory::read<std::uintptr_t> (local.pawn + SCHEMA ("C_BasePlayerPawn", "m_pMovementServices"_hash)) : 0;
+				if (movement_services) {
+					step->set_button (0);
+					step->set_pressed (false);
+					step->set_when (0.0f);
+					step->set_analog_forward_delta (base->forwardmove () - memory::read<float> (movement_services + SCHEMA ("CPlayer_MovementServices", "m_flCmdForwardMove"_hash)));
+					step->set_analog_left_delta (base->leftmove () - memory::read<float> (movement_services + SCHEMA ("CPlayer_MovementServices", "m_flCmdLeftMove"_hash)));
+				}
+			}
+		}
 
 		diag::set_exception_phase( "input apply: buttons" );
 		auto buttons = const_cast<proto::in_button_state_pb*>( base->buttons_pb( ) );
@@ -181,28 +94,6 @@ namespace systems {
 			buttons->set_buttonstate3( this->m_current_cmd->buttons.value_scroll );
 		}
 
-        // Preserve same-time release/press order, including mixed button/analog records.
-        proto::subtick_ops::stable_sort(base->mutable_subtick_moves());
-
-        if (settings::g_movement.movement_debug.value && local.pawn && local.is_alive &&
-            (m_current_cmd->command_number % 16) == 0)
-        {
-            const auto velocity = memory::read<math::vector3>(local.pawn + SCHEMA("C_BaseEntity", "m_vecAbsVelocity"_hash));
-            const auto flags = memory::read<std::uint32_t>(local.pawn + SCHEMA("C_BaseEntity", "m_fFlags"_hash));
-            const auto aa = CONVAR("sv_airaccelerate");
-            const auto cap = CONVAR("sv_air_max_wishspeed");
-            const auto quant = CONVAR("sv_quantize_movement_input");
-            const auto bhop = CONVAR("sv_enablebunnyhopping");
-            logging::console::print(
-                xs("[movement] cmd={} speed_xy={:.2f} grounded={} jump={} camera_yaw={:.2f} cmd_yaw={:.2f} f={:.3f} l={:.3f} steps={} airaccel={:.2f} aircap={:.2f} quantized={} sv_bhop={}"),
-                m_current_cmd->command_number, velocity.length_2d(),
-                (flags & cstypes::entity_flags::on_ground) != 0,
-                (m_current_cmd->buttons.value & cstypes::command_buttons::in_jump) != 0,
-                get_view_angles().y, base->viewangles() ? base->viewangles()->y() : 0.0f,
-                base->forwardmove(), base->leftmove(), base->subtick_moves_size(),
-                aa ? aa->get<float>() : -1.0f, cap ? cap->get<float>() : -1.0f,
-                quant ? int(quant->get<bool>()) : -1, bhop ? int(bhop->get<bool>()) : -1);
-        }
 		diag::set_exception_phase( "input apply: crc" );
 		this->calculate_crc( base );
 	}
@@ -257,9 +148,7 @@ namespace systems {
 		if ( move_step )
 		{
 			memory::call<std::uintptr_t>(PATTERN (patterns::utl_vector_push), reinterpret_cast< std::uintptr_t >( subtick_moves ), reinterpret_cast< std::uintptr_t >( move_step ) );
-            const auto step = proto::impl_ptr<proto::subtick_move_step>(move_step);
-            *step = {};
-            return step;
+			return proto::impl_ptr<proto::subtick_move_step>( move_step );
 		}
 
 		return nullptr;

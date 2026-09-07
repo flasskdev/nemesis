@@ -12,12 +12,12 @@ namespace steam {
 	} // namespace detail
 
 	bool utils::initialize () {
-		if (!detail::utils_interface) detail::utils_interface = memory::call<std::uintptr_t> (MODULE_EXPORT ("steam_api64.dll:SteamAPI_SteamUtils_v010"));
+		detail::utils_interface = memory::call<std::uintptr_t> (MODULE_EXPORT ("steam_api64.dll:SteamAPI_SteamUtils_v010"));
 		return detail::utils_interface != 0;
 	}
 
 	bool utils::get_image_size (int image, std::uint32_t* width, std::uint32_t* height) {
-		if (image <= 0 || !width || !height || !initialize()) {
+		if (image <= 0) {
 			return false;
 		}
 
@@ -25,7 +25,7 @@ namespace steam {
 	}
 
 	bool utils::get_image_rgba (int image, std::uint8_t* dest, int dest_size) {
-		if (image <= 0 || !dest || dest_size <= 0 || !initialize()) {
+		if (image <= 0) {
 			return false;
 		}
 

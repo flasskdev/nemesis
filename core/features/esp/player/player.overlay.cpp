@@ -640,18 +640,36 @@ namespace features::esp::player {
 		}
 	}
 
-	void overlay::add_name( xdraw::draw_list& draw_list, const systems::bounds::data& bounds, const info& info, const settings::esp::player::overlay::name& cfg, draw_offsets& offsets )
+	void overlay::add_name(xdraw::draw_list& draw_list, const systems::bounds::data& bounds, const info& info, const settings::esp::player::overlay::name& cfg, draw_offsets& offsets)
 	{
-		//xdraw::push_font( rendering::g_fonts.inter_medium[ rendering::fonts::size::normal ] );
+		// 1. Устанавливаем меньший размер шрифта
+		xdraw::push_font(rendering::g_fonts.smallest_pixel7[rendering::fonts::size::normal]);
 
-		const auto [text_w, text_h] = xdraw::measure_text( info.name );
-		const auto text_x = std::floorf( bounds.min.x + ( bounds.width( ) * 0.5f ) - ( text_w * 0.5f ) );
-		const auto text_y = std::floorf( bounds.min.y - text_h - 2.0f - offsets.top );
+		const auto [text_w, text_h] = xdraw::measure_text(info.name);
+		const auto text_x = std::floorf(bounds.min.x + (bounds.width() * 0.5f) - (text_w * 0.5f));
+		const auto text_y = std::floorf(bounds.min.y - text_h - 2.0f - offsets.top);
 
-		draw_list.text( text_x, text_y, info.name, cfg.color );
+		// 2. Делаем обводку больше (толще)
+		// Отрисовываем черный контур со смещением в 4 стороны для увеличения толщины
+		const xdraw::color outline_color{ 0, 0, 0, 255 };
+
+		// Смещение на 1 пиксель в каждую сторону создает более толстую обводку, чем стандартный outlined
+		draw_list.text(text_x - 1, text_y, info.name, outline_color);
+		draw_list.text(text_x + 1, text_y, info.name, outline_color);
+		draw_list.text(text_x, text_y - 1, info.name, outline_color);
+		draw_list.text(text_x, text_y + 1, info.name, outline_color);
+
+		// Диагональные смещения для еще большей толщины (опционально, можно убрать если слишком жирно)
+		draw_list.text(text_x - 1, text_y - 1, info.name, outline_color);
+		draw_list.text(text_x + 1, text_y - 1, info.name, outline_color);
+		draw_list.text(text_x - 1, text_y + 1, info.name, outline_color);
+		draw_list.text(text_x + 1, text_y + 1, info.name, outline_color);
+
+		// Отрисовка основного текста
+		draw_list.text(text_x, text_y, info.name, cfg.color);
+
 		offsets.top += text_h + 2.0f;
-
-		//xdraw::pop_font( );
+		xdraw::pop_font();
 	}
 
 	void overlay::add_weapon( xdraw::draw_list& draw_list, const systems::bounds::data& bounds, const info& info, const settings::esp::player::overlay::weapon& cfg, draw_offsets& offsets )

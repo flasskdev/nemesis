@@ -58,7 +58,6 @@ namespace systems {
 
 	void prediction::capture_prestate( std::uintptr_t local_pawn, std::uintptr_t movement_services )
 	{
-        this->m_prestate = {};
 		this->m_prestate.flags = memory::read<std::uint32_t>( local_pawn + SCHEMA( "C_BaseEntity", "m_fFlags"_hash ) );
 		this->m_prestate.networked_velocity = memory::read<math::vector3>( local_pawn + SCHEMA( "C_BaseEntity", "m_vecVelocity"_hash ) );
 		this->m_prestate.velocity = memory::read<math::vector3>( local_pawn + SCHEMA( "C_BaseEntity", "m_vecAbsVelocity"_hash ) );
@@ -234,9 +233,6 @@ namespace systems {
 		guard.save<int>( weapon + SCHEMA( "C_CSWeaponBaseGun", "m_zoomLevel"_hash ) );
 		guard.save<int>( weapon + SCHEMA( "C_CSWeaponBaseGun", "m_iBurstShotsRemaining"_hash ) );
 
-        guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdForwardMove"_hash));
-        guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdLeftMove"_hash));
-        guard.save<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdUpMove"_hash));
 		guard.save<float>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_flStamina"_hash ) );
 		guard.save<bool>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_bDucked"_hash ) );
 		guard.save<bool>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_bDucking"_hash ) );

@@ -7,72 +7,81 @@
 #include <protection/game_addresses.hpp>
 namespace features::combat {
 
-    void misc::antiaim::on_create_move(systems::input::usercmd* cmd)
-    {
-        m_antiaim_active = false;
-        m_should_correct = false;
-        const auto& cfg = settings::g_combat.m_antiaim;
-        if (!cmd || (!cfg.enabled.value && !cfg.spinbot.value))
-        {
-            m_spin.reset();
-            return;
-        }
-        if (systems::g_local.is_in_cinematic() || systems::g_local.is_in_time_freeze()) return;
-        const auto local = systems::g_local.get();
-        const auto base = cmd->csgo_user_cmd.mutable_base();
-        if (!local.pawn || !local.is_alive || !base || !base->mutable_viewangles()) return;
-        const auto& ctx = g_shared.ctx();
-        constexpr auto interaction = static_cast<std::uintptr_t>(cstypes::command_buttons::in_use |
-            cstypes::command_buttons::in_attack | cstypes::command_buttons::in_second_attack);
-        if ((cmd->buttons.value & interaction) || g_rage.is_firing_this_tick()) return;
-        const auto& legit_cfg = settings::g_combat.m_legitbot.get_group(ctx.weapon_type);
-        if (settings::g_combat.m_legitbot.enabled.value &&
-            (legit_cfg.aimbot.value || legit_cfg.standalone_rcs.value)) return;
-        if (ctx.weapon_type == cstypes::weapon_type::grenade && ctx.weapon &&
-            memory::read<float>(ctx.weapon + SCHEMA("C_BaseCSGrenade", "m_fThrowTime"_hash)) > 0.0f) return;
-        const auto type = memory::read<std::uint8_t>(local.pawn + SCHEMA("C_BaseEntity", "m_nActualMoveType"_hash));
-        if (type == cstypes::move_type::ladder || type == cstypes::move_type::noclip || is_near_ladder(local.pawn)) return;
-        const auto view = systems::g_input.get_view_angles();
-        if (!std::isfinite(view.x) || !std::isfinite(view.y) || !std::isfinite(base->viewangles()->y())) return;
-        m_yaw_side = cfg.manual_left.value != cfg.manual_right.value ? (cfg.manual_left.value ? -1 : 1) : 0;
-        m_old_angles = {base->viewangles()->x(), base->viewangles()->y(), base->viewangles()->z()};
-        m_modified_angles = view;
-        m_modified_angles.x = cfg.enabled.value ? get_pitch(view.x) : view.x;
-        if (cfg.spinbot.value)
-        {
-            m_modified_angles.y = m_spin.update(view.y, cmd->command_number, local.pawn,
-                cfg.spin_speed.value, cstypes::tick_interval);
-        }
-        else
-        {
-            m_spin.reset();
-            m_modified_angles.y = get_yaw(view, local);
-        }
-        if (!std::isfinite(m_modified_angles.y)) return;
-        m_modified_angles.x = std::clamp(m_modified_angles.x, -89.0f, 89.0f);
-        m_modified_angles.y = std::remainder(m_modified_angles.y, 360.0f);
-        m_modified_angles.z = 0.0f;
-        auto angles = base->mutable_viewangles();
-        angles->set_x(m_modified_angles.x);
-        angles->set_y(m_modified_angles.y);
-        angles->set_z(0.0f);
-        // This path only runs on non-shot commands; shot history belongs to the aim writer.
-        for (int i = 0; i < cmd->csgo_user_cmd.input_history_size(); ++i)
-        {
-            const auto entry = cmd->csgo_user_cmd.mutable_input_history(i);
-            if (!entry) continue;
-            if (const auto history = entry->mutable_view_angles())
-            {
-                history->set_x(m_modified_angles.x);
-                history->set_y(m_modified_angles.y);
-                history->set_z(0.0f);
-            }
-        }
-        m_indicator_yaw = m_modified_angles.y;
-        m_antiaim_active = true;
-        m_should_correct = true;
-        correct_movement(cmd);
-    }
+	void misc::antiaim::on_create_move(systems::input::usercmd* cmd)
+	{
+		this->m_antiaim_active = false;
+
+		if (!settings::g_combat.m_antiaim.enabled.value)
+			return;
+
+		if (systems::g_local.is_in_cinematic() || systems::g_local.is_in_time_freeze())
+			return;
+
+		if ( settings::g_combat.m_antiaim.manual_left.value && settings::g_combat.m_antiaim.manual_right.value )
+		{
+			settings::g_combat.m_antiaim.manual_right.value = false;
+			settings::g_combat.m_antiaim.manual_right.bind.active = false;
+		}
+
+		if ( settings::g_combat.m_antiaim.manual_left.value )
+		{
+			this->m_yaw_side = -1;
+		}
+		else if ( settings::g_combat.m_antiaim.manual_right.value )
+		{
+			this->m_yaw_side = 1;
+		}
+		else
+		{
+			this->m_yaw_side = 0;
+		}
+
+		const auto local = systems::g_local.get( );
+		const auto base = cmd->csgo_user_cmd.mutable_base( );
+		const auto view_angles = systems::g_input.get_view_angles( );
+		const auto& ctx = g_shared.ctx( );
+
+		if ( cmd->buttons.value & cstypes::command_buttons::in_use )
+		{
+			return;
+		}
+
+		if ( ctx.weapon_type == cstypes::weapon_type::grenade )
+		{
+			if ( memory::read<float>( ctx.weapon + SCHEMA( "C_BaseCSGrenade", "m_fThrowTime"_hash ) ) > 0.0f )  // bail regardless of pin state
+			{
+				return;
+			}
+		}
+
+		const auto move_type = memory::read<int>( local.pawn + SCHEMA( "C_BaseEntity", "m_nActualMoveType"_hash ) );
+		if ( move_type == cstypes::move_type::ladder || move_type == cstypes::move_type::noclip )
+		{
+			return;
+		}
+
+		if ( this->is_near_ladder( local.pawn ) )
+		{
+			return;
+		}
+
+		this->m_old_angles = view_angles;
+		this->m_antiaim_active = true;
+
+		this->m_modified_angles = this->m_old_angles;
+		this->m_modified_angles.x = this->get_pitch( this->m_old_angles.x );
+		this->m_modified_angles.y = this->get_yaw( this->m_old_angles, local );
+
+		math::helpers::normalize_angles( this->m_modified_angles );
+
+		base->mutable_viewangles( )->set_x( this->m_modified_angles.x );
+		base->mutable_viewangles( )->set_y( this->m_modified_angles.y );
+		base->mutable_viewangles( )->set_z( this->m_modified_angles.z );
+
+		this->m_should_correct = true;
+
+		this->correct_movement( cmd );
+	}
 
 	void misc::antiaim::on_render( xdraw::draw_list& draw_list ) const
 	{
@@ -206,7 +215,6 @@ namespace features::combat {
 		auto base_yaw = view_yaw - base_yaw_offset;
 
 		const auto local_game_scene_node = memory::read<std::uintptr_t>( local.pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
-        if (!local_game_scene_node) return base_yaw;
 		const auto local_origin = memory::read<math::vector3>( local_game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) );
 		const auto players = systems::g_entities.get_by_type( systems::entities::type::player );
 		const auto eye_pos = local_origin + memory::read<math::vector3>( local.pawn + SCHEMA( "C_BaseModelEntity", "m_vecViewOffset"_hash ) );
@@ -390,9 +398,15 @@ namespace features::combat {
 				return best_threat_score < std::numeric_limits<float>::max( ) ? std::optional<float>{ best_yaw } : std::nullopt;
 			};
 
-        // Takeoff is not a reason to change the yaw reference from target to camera.
-        if (const auto target_yaw = pick_target_yaw())
-            base_yaw = *target_yaw;
+		const auto& prestate = systems::g_prediction.pre();
+		bool on_ground = (prestate.flags & cstypes::entity_flags::on_ground) != 0;
+		if (on_ground)
+		{
+			if (const auto target_yaw = pick_target_yaw())
+			{
+				base_yaw = *target_yaw;
+			}
+		}
 
 		auto indicator = base_yaw;
 		if ( this->m_yaw_side == -1 )
@@ -422,12 +436,67 @@ namespace features::combat {
 		return yaw;
 	}
 
-    void misc::antiaim::correct_movement(systems::input::usercmd* cmd)
-    {
-        if (!m_should_correct) return;
-        m_should_correct = false;
-        systems::g_input.rebase_movement(cmd, m_old_angles.y);
-    }
+	void misc::antiaim::correct_movement (systems::input::usercmd* cmd) {
+		if (!this->m_should_correct) {
+			return;
+		}
+
+		this->m_should_correct = false;
+
+		const auto base = cmd->csgo_user_cmd.mutable_base ();
+		const auto forward_move = base->forwardmove ();
+		const auto side_move = base->leftmove ();
+
+		if (forward_move == 0.0f && side_move == 0.0f) {
+			return;
+		}
+
+		math::vector3 new_forward {}, new_left {};
+		math::helpers::angle_vectors_left (this->m_modified_angles, &new_forward, &new_left, nullptr);
+
+		math::vector3 old_forward {}, old_left {};
+		math::helpers::angle_vectors_left (this->m_old_angles, &old_forward, &old_left, nullptr);
+
+		new_forward.z = 0.0f; new_left.z = 0.0f;
+		old_forward.z = 0.0f; old_left.z = 0.0f;
+		new_forward.normalize ();
+		new_left.normalize ();
+		old_forward.normalize ();
+		old_left.normalize ();
+
+		const auto intent = old_forward * forward_move + old_left * -side_move;
+		const auto intent_len = intent.length ();
+
+		if (intent_len == 0.0f) {
+			return;
+		}
+
+		const auto intent_dir = intent / intent_len;
+		const auto corrected_forward = new_forward.dot (intent_dir) * intent_len;
+		const auto corrected_side = -new_left.dot (intent_dir) * intent_len;
+
+		base->set_forwardmove (std::clamp (corrected_forward, -1.0f, 1.0f));
+		base->set_leftmove (std::clamp (corrected_side, -1.0f, 1.0f));
+
+		if (systems::g_prediction.pre ().flags & cstypes::entity_flags::on_ground) {
+			auto buttons = cmd->buttons.value;
+			buttons &= ~static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward | cstypes::command_buttons::in_back | cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright);
+
+			if (base->forwardmove () > 0.0f) {
+				buttons |= cstypes::command_buttons::in_forward;
+			} else if (base->forwardmove () < 0.0f) {
+				buttons |= cstypes::command_buttons::in_back;
+			}
+
+			if (base->leftmove () > 0.0f) {
+				buttons |= cstypes::command_buttons::in_moveleft;
+			} else if (base->leftmove () < 0.0f) {
+				buttons |= cstypes::command_buttons::in_moveright;
+			}
+
+			cmd->buttons.value = buttons;
+		}
+	}
 
 	bool misc::antiaim::is_near_ladder( std::uintptr_t local_pawn ) const
 	{
@@ -743,7 +812,6 @@ namespace features::combat {
 
 	void misc::autostop::on_create_move( systems::input::usercmd* cmd )
 	{
-        if (!cmd || (cmd->buttons.value & cstypes::command_buttons::in_jump)) return;
 		if ( !features::combat::g_rage.should_stop( ) )
 		{
 			return;
@@ -829,8 +897,37 @@ namespace features::combat {
 		base->set_forwardmove( forward_move );
 		base->set_leftmove( left_move );
 
-        systems::g_input.sync_movement_buttons(cmd);
+		const auto subtick_moves = base->mutable_subtick_moves( );
+		if ( subtick_moves )
+		{
+			const auto step = systems::g_input.acquire_subtick_step( subtick_moves );
+			if ( step )
+			{
+				step->set_button( 0 );
+				step->set_pressed( false );
+				step->set_when( 0.0f );
+				step->set_analog_forward_delta( forward_move - prestate.last_movement_impulses.x );
+				step->set_analog_left_delta( left_move - prestate.last_movement_impulses.y );
+			}
+		}
 
+		if ( forward_move > 0.0f )
+		{
+			cmd->buttons.value |= cstypes::command_buttons::in_forward;
+		}
+		else if ( forward_move < 0.0f )
+		{
+			cmd->buttons.value |= cstypes::command_buttons::in_back;
+		}
+
+		if ( left_move > 0.0f )
+		{
+			cmd->buttons.value |= cstypes::command_buttons::in_moveleft;
+		}
+		else if ( left_move < 0.0f )
+		{
+			cmd->buttons.value |= cstypes::command_buttons::in_moveright;
+		}
 	}
 
 	float misc::autostop::get_effective_accel_base( std::uintptr_t local_pawn, std::uintptr_t movement_services, std::uint32_t flags, float max_weapon_speed ) const

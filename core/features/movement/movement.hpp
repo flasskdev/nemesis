@@ -2,37 +2,11 @@
 
 namespace features::movement {
 
-    class airstrafe
-    {
-    public:
-        void store_angles();
-        void on_create_move(systems::input::usercmd* cmd);
-        void finalize(systems::input::usercmd* cmd, bool final_pass = true);
-        [[nodiscard]] bool active_this_tick() const { return m_active_this_tick; }
-    private:
-        math::vector3 m_input_angles{};
-        std::uintptr_t m_input_buttons{};
-        math::vector2 m_input_move{};
-        math::vector2 m_previous_world{};
-        math::vector2 m_reference_world{};
-        std::uintptr_t m_strafe_pawn{};
-        std::intptr_t m_strafe_command{};
-        float m_target_yaw{};
-        bool m_input_valid{};
-        bool m_active_this_tick{};
-        bool m_braking{};
-    };
-
-    class bhop
-    {
-    public:
-        void on_create_move(systems::input::usercmd* cmd);
-    private:
-        std::uintptr_t m_pawn{};
-        std::intptr_t m_command{};
-        bool m_have_command{};
-        bool m_jump_intent{};
-    };
+	class bhop
+	{
+	public:
+		void on_create_move( systems::input::usercmd* cmd ) const;
+	};
 
 	class jumpbug
 	{
@@ -92,7 +66,14 @@ namespace features::movement {
 		[[nodiscard]] bool handled_this_tick( ) const { return this->m_handled_this_tick; }
 
 	private:
+		void quantized_path( systems::input::usercmd* cmd );
+		[[nodiscard]] bool apply_yaw_subtick( proto::base_usercmd_pb* base, float when, float yaw_delta ) const;
+		void check_button( std::uintptr_t current_buttons, std::uintptr_t button );
+		[[nodiscard]] static math::vector2 movement_from_buttons( std::uintptr_t pressed );
 
+		std::uintptr_t m_last_buttons{};
+		std::uintptr_t m_last_pressed{};
+		int m_substep_counter{};
 		bool m_handled_this_tick{};
 	};
 
