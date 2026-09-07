@@ -14,14 +14,27 @@ namespace rendering {
 
 	void widgets::draw( )
 	{
-		auto& dl = xdraw::get( );
+		const auto [screen_w, screen_h] = xdraw::viewport_size( );
+		if ( screen_w <= 0 || screen_h <= 0 )
+			return;
+
+		// HUD widgets must not inherit a menu/popup clip rectangle.
+		auto& dl = xdraw::get( xdraw::layer::top );
+		dl.push_clip_absolute( 0.0f, 0.0f, static_cast<float>( screen_w ), static_cast<float>( screen_h ) );
+		xdraw::push_font( g_fonts.inter_medium[fonts::size::petite] );
 
 		if ( settings::g_misc.m_watermark.enabled.value )
 		{
 			this->watermark( dl );
 		}
 
-		this->keybinds( dl );
+		if ( settings::g_misc.m_widgets.keybinds_list.value )
+		{
+			this->keybinds( dl );
+		}
+
+		xdraw::pop_font( );
+		dl.pop_clip( );
 	}
 
 	void widgets::watermark( xdraw::draw_list& draw_list )
@@ -362,7 +375,8 @@ namespace rendering {
 			e.has_value_pill = false;
 		}
 
-		if ( count > 0 )
+		// Keep the header visible as a preview while the menu is open.
+		if ( count > 0 || g_menu.is_open( ) )
 			container_alpha.fade_in( 0.2f );
 		else
 			container_alpha.fade_out( 0.2f );

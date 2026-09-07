@@ -27,6 +27,7 @@ namespace rendering {
         ID3D11Device* m_device{ nullptr };
         ID3D11DeviceContext* m_context{ nullptr };
         ID3D11RenderTargetView* m_rtv{ nullptr };
+        D3D11_VIEWPORT m_viewport{};
         HWND m_window{ nullptr };
         bool m_initialized{ false };
         bool m_ui_assets_ready{ false };

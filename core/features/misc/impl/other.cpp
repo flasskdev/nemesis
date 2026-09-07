@@ -331,50 +331,109 @@ namespace features::misc {
 	void other::do_viewmodel_adjust()
 	{
 		const auto& cfg = settings::g_misc.m_viewmodel_adjust;
-		if (!cfg.enabled.value)
+		auto* owner = addresses::globals::cvar;
+		if (!owner)
 		{
-			this->m_cached_vm_x = std::numeric_limits<float>::quiet_NaN();
-			this->m_cached_vm_y = std::numeric_limits<float>::quiet_NaN();
-			this->m_cached_vm_z = std::numeric_limits<float>::quiet_NaN();
-			this->m_cached_vm_fov = std::numeric_limits<float>::quiet_NaN();
-			return;
+			return; // Do not cache an unsuccessful lookup; retry on the next update.
 		}
 
-		const auto set_float_cvar = [](std::uint32_t hash, float value)
+		const auto owner_address = reinterpret_cast<std::uintptr_t>(owner);
+		if (this->m_vm_owner != owner_address)
+		{
+			this->m_vm_cvars = {};
+			this->m_vm_preset_address = 0;
+			this->m_vm_preset_captured = false;
+			this->m_vm_missing_mask = 0;
+			this->m_vm_owner = owner_address;
+		}
+
+		const auto sanitize = [](float value, float low, float high, float fallback)
+		{
+			return std::isfinite(value) ? std::clamp(value, low, high) : fallback;
+		};
+		const std::array<float, 4> values{
+			sanitize(cfg.offset_x.value, -10.0f, 10.0f, 0.0f),
+			sanitize(cfg.offset_y.value, -10.0f, 10.0f, 0.0f),
+			sanitize(cfg.offset_z.value, -10.0f, 10.0f, 0.0f),
+			sanitize(cfg.fov.value, 54.0f, 90.0f, 68.0f)
+		};
+		constexpr std::array<std::uint32_t, 4> hashes{
+			"viewmodel_offset_x"_hash, "viewmodel_offset_y"_hash,
+			"viewmodel_offset_z"_hash, "viewmodel_fov"_hash
+		};
+		constexpr std::array<const char*, 4> names{
+			"viewmodel_offset_x", "viewmodel_offset_y", "viewmodel_offset_z", "viewmodel_fov"
+		};
+
+		// Preset zero selects custom offsets. Preserve the user's original preset.
+		if (cfg.enabled.value && !this->m_vm_preset_address)
+		{
+			this->m_vm_preset_address = reinterpret_cast<std::uintptr_t>(
+				owner->find("viewmodel_presetpos"_hash));
+		}
+		if (this->m_vm_preset_address && (cfg.enabled.value || this->m_vm_preset_captured))
+		{
+			auto* preset = reinterpret_cast<c_convar*>(this->m_vm_preset_address);
+			if (cfg.enabled.value && !this->m_vm_preset_captured)
 			{
-				if (!addresses::globals::cvar)
-					return;
-
-				auto cvar = addresses::globals::cvar->find(hash);
-				if (!cvar)
-					return;
-
-				cvar->m_value.fl = value;
-			};
-
-		if (cfg.offset_x.value != this->m_cached_vm_x)
-		{
-			set_float_cvar("viewmodel_offset_x"_hash, cfg.offset_x.value);
-			this->m_cached_vm_x = cfg.offset_x.value;
+				this->m_vm_original_preset = preset->m_value.i32;
+				this->m_vm_preset_captured = true;
+			}
+			const auto target = cfg.enabled.value ? 0 : this->m_vm_original_preset;
+			if (preset->m_value.i32 != target)
+			{
+				preset->m_value.i32 = target;
+				++preset->m_change_count;
+			}
+			if (!cfg.enabled.value)
+			{
+				this->m_vm_preset_captured = false;
+				this->m_vm_preset_address = 0;
+			}
 		}
 
-		if (cfg.offset_y.value != this->m_cached_vm_y)
+		for (std::size_t i = 0; i < this->m_vm_cvars.size(); ++i)
 		{
-			set_float_cvar("viewmodel_offset_y"_hash, cfg.offset_y.value);
-			this->m_cached_vm_y = cfg.offset_y.value;
+			auto& state = this->m_vm_cvars[i];
+			if (!cfg.enabled.value && !state.captured)
+			{
+				continue;
+			}
+			if (!state.address)
+			{
+				state.address = reinterpret_cast<std::uintptr_t>(owner->find(hashes[i]));
+			}
+			const auto bit = std::uint32_t{1} << i;
+			if (!state.address)
+			{
+				if (!(this->m_vm_missing_mask & bit))
+				{
+					logging::console::print("viewmodel: cvar unavailable: {} (will retry)", names[i]);
+					this->m_vm_missing_mask |= bit;
+				}
+				continue;
+			}
+			this->m_vm_missing_mask &= ~bit;
+			auto* cvar = reinterpret_cast<c_convar*>(state.address);
+			if (cfg.enabled.value && !state.captured)
+			{
+				state.original = cvar->m_value.fl;
+				state.captured = true;
+			}
+			const auto target = cfg.enabled.value ? values[i] : state.original;
+			// Compare with the live value, not the last requested slider position.
+			if (cvar->m_value.fl != target)
+			{
+				cvar->m_value.fl = target;
+				++cvar->m_change_count;
+			}
+			if (!cfg.enabled.value)
+			{
+				state = {};
+			}
 		}
-
-		if (cfg.offset_z.value != this->m_cached_vm_z)
-		{
-			set_float_cvar("viewmodel_offset_z"_hash, cfg.offset_z.value);
-			this->m_cached_vm_z = cfg.offset_z.value;
-		}
-
-		if (cfg.fov.value != this->m_cached_vm_fov)
-		{
-			set_float_cvar("viewmodel_fov"_hash, cfg.fov.value);
-			this->m_cached_vm_fov = cfg.fov.value;
-		}
+		if (!cfg.enabled.value)
+			this->m_vm_missing_mask = 0;
 	}
 
 } // namespace features::misc

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <filesystem>
+#include <core/settings.hpp>
+#include "cosmetic_attributes.hpp"
 #include <core/systems/systems.hpp>
 
 namespace features::changer {
@@ -224,7 +226,7 @@ namespace features::changer {
 		void on_frame_stage_notify( );
 
 	private:
-		void apply( std::uintptr_t weapon, std::uintptr_t iv, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const settings::changer::applied_skin* skin, std::uint32_t account_id );
+		bool apply( std::uintptr_t weapon, std::uintptr_t iv, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const settings::changer::applied_skin* skin, std::uint32_t account_id );
 		void rebuild_paint( std::uintptr_t weapon, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const econ_item_system::paint_kit* pk );
 		void update_view_model( std::uintptr_t pawn, const econ_item_system::paint_kit* pk );
 		[[nodiscard]] std::uintptr_t find_hud_model_weapon( std::uintptr_t pawn );
@@ -234,7 +236,11 @@ namespace features::changer {
 
 		std::uint32_t m_last_active_handle{};
 		std::uintptr_t m_tracked_pawn{};
-		std::unordered_map<std::uint32_t, int> m_applied_weapons{};
+		struct applied_weapon {
+            std::uintptr_t weapon{};
+            settings::changer::applied_skin skin{};
+        };
+        std::unordered_map<std::uint32_t, applied_weapon> m_applied_weapons{};
 		std::uintptr_t m_pending_hud_iv{};
 		std::chrono::steady_clock::time_point m_hud_clear_time{};
 	};
@@ -256,6 +262,10 @@ namespace features::changer {
 			int seed{};
 			float wear{};
 			int stattrak{};
+            std::uint64_t item_id{};
+            int quality{};
+            bool disallow_soc{};
+            cosmetic_attributes::snapshot attributes{};
 			bool captured{};
 		};
 

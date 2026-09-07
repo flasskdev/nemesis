@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <limits>
 
 #include <core/systems/systems.hpp>
@@ -333,6 +334,7 @@ namespace features::misc {
 		void on_round_start( );
 		void on_frame_stage_notify( );
 		void do_kill_feed_preservation( );
+		void do_viewmodel_adjust( );
 		void on_player_death( std::uintptr_t event );
 
 		[[nodiscard]] bool is_alpha_changed( ) const { return this->m_is_alpha_changed; }
@@ -345,17 +347,24 @@ namespace features::misc {
 		void do_player_alpha_changing( );
 		void do_reveal_radar( ) const;
 		void do_name_changing( );
-		void do_viewmodel_adjust( );
 		bool m_is_alpha_changed{};
 		bool m_name_changer_active{};
 		std::uintptr_t m_name_changer_controller{};
 		std::string m_original_name{};
 		std::string m_last_sent_name{};
 		float m_last_spawntime{};
-		float m_cached_vm_x{ std::numeric_limits<float>::quiet_NaN( ) };
-		float m_cached_vm_y{ std::numeric_limits<float>::quiet_NaN( ) };
-		float m_cached_vm_z{ std::numeric_limits<float>::quiet_NaN( ) };
-		float m_cached_vm_fov{ std::numeric_limits<float>::quiet_NaN( ) };
+		struct viewmodel_cvar_state
+		{
+			std::uintptr_t address{};
+			float original{};
+			bool captured{};
+		};
+		std::array<viewmodel_cvar_state, 4> m_vm_cvars{};
+		std::uintptr_t m_vm_owner{};
+		std::uintptr_t m_vm_preset_address{};
+		int m_vm_original_preset{};
+		bool m_vm_preset_captured{};
+		std::uint32_t m_vm_missing_mask{};
 	};
 
 	// this is so ghetto but fuck it for now it works

@@ -145,11 +145,17 @@ namespace features::changer {
 				this->capture_original( weapon, iv );
 			}
 
-			const auto target_token = detail::make_subclass_token( selected_knife_def->def_index );
+			if (!this->m_original.captured) continue;
+            const auto normalized_skin = cosmetic_attributes::normalize(*selected_skin);
+            selected_skin = &normalized_skin;
+            const auto target_token = detail::make_subclass_token( selected_knife_def->def_index );
 			const auto current_subclass = memory::read<std::uint32_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) );
 			const auto current_pk = memory::read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
 
-			if ( current_subclass == target_token && current_pk == selected_skin->paint_kit_id )
+			if ( this->m_overridden && current_subclass == target_token && current_pk == selected_skin->paint_kit_id
+                && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackSeed"_hash)) == selected_skin->seed
+                && memory::read<float>(weapon + SCHEMA("C_EconEntity", "m_flFallbackWear"_hash)) == selected_skin->wear
+                && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackStatTrak"_hash)) == (selected_skin->stattrak ? 0 : -1) )
 			{
 				break;
 			}
@@ -188,6 +194,10 @@ namespace features::changer {
 			return;
 		}
 
+		if (!cosmetic_attributes::capture(iv, this->m_original.attributes)) return;
+        this->m_original.item_id = memory::read<std::uint64_t>(iv + SCHEMA("C_EconItemView", "m_iItemID"_hash));
+        this->m_original.quality = memory::read<int>(iv + SCHEMA("C_EconItemView", "m_iEntityQuality"_hash));
+        this->m_original.disallow_soc = memory::read<bool>(iv + SCHEMA("C_EconItemView", "m_bDisallowSOC"_hash));
 		this->m_original.def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
 		this->m_original.id_high = memory::read<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDHigh"_hash ) );
 		this->m_original.id_low = memory::read<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDLow"_hash ) );
@@ -203,6 +213,13 @@ namespace features::changer {
 	void knives::apply( std::uintptr_t weapon, std::uintptr_t iv, const econ_item_system::item_def* def, const settings::changer::applied_skin* skin, std::uint32_t account_id, std::uintptr_t active_weapon, std::uintptr_t pawn )
 	{
 		this->m_pending_hud_iv = 0;
+        if (!cosmetic_attributes::available()) return;
+        const auto model_changed =
+            memory::read<std::uint16_t>(iv + SCHEMA("C_EconItemView", "m_iItemDefinitionIndex"_hash)) != static_cast<std::uint16_t>(def->def_index)
+            || memory::read<std::uint32_t>(weapon + SCHEMA("C_BaseEntity", "m_nSubclassID"_hash)) != detail::make_subclass_token(def->def_index);
+        memory::write<std::uint64_t>(iv + SCHEMA("C_EconItemView", "m_iItemID"_hash), 0xf000000000000010ull);
+        memory::write<bool>(iv + SCHEMA("C_EconItemView", "m_bDisallowSOC"_hash), true);
+        memory::write<int>(iv + SCHEMA("C_EconItemView", "m_iEntityQuality"_hash), skin->stattrak ? 9 : 3);
 
 		memory::write<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ), static_cast< std::uint16_t >( def->def_index ) );
 		memory::write<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDHigh"_hash ), 0xf0000000 );
@@ -217,7 +234,9 @@ namespace features::changer {
 
 		const auto pk = g_econ_item_system.find_paint_kit( skin->paint_kit_id );
 
-		this->update_model( weapon, iv, static_cast< std::uint16_t >( def->def_index ) );
+		if (model_changed)
+            this->update_model( weapon, iv, static_cast< std::uint16_t >( def->def_index ) );
+        if (!cosmetic_attributes::apply(iv, *skin)) return;
 		this->rebuild_paint( weapon, active_weapon, pawn, pk );
 		this->schedule_hud_clear( iv );
 
@@ -232,6 +251,10 @@ namespace features::changer {
 		}
 
 		this->m_pending_hud_iv = 0;
+        if (!cosmetic_attributes::restore(iv, this->m_original.attributes)) return;
+        memory::write<std::uint64_t>(iv + SCHEMA("C_EconItemView", "m_iItemID"_hash), this->m_original.item_id);
+        memory::write<bool>(iv + SCHEMA("C_EconItemView", "m_bDisallowSOC"_hash), this->m_original.disallow_soc);
+        memory::write<int>(iv + SCHEMA("C_EconItemView", "m_iEntityQuality"_hash), this->m_original.quality);
 
 		memory::write<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ), this->m_original.def_index );
 		memory::write<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDHigh"_hash ), this->m_original.id_high );

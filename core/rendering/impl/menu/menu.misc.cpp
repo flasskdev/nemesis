@@ -171,14 +171,10 @@ namespace rendering {
 
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Viewmodel Adjust", vm.enabled );
-			if ( xui::begin_popup( "##vm_popup", 220.0f ) )
-			{
-				xui::slider_float( "offset x", vm.offset_x, -10.0f, 10.0f, "%.1f" );
-				xui::slider_float( "offset y", vm.offset_y, -10.0f, 10.0f, "%.1f" );
-				xui::slider_float( "offset z", vm.offset_z, -10.0f, 10.0f, "%.1f" );
-				xui::slider_float( "fov", vm.fov, 54.0f, 90.0f, "%.0f" );
-				xui::end_popup( );
-			}
+			xui::slider_float( "Viewmodel X##vm_x", vm.offset_x.value, -10.0f, 10.0f, "%.1f" );
+			xui::slider_float( "Viewmodel Y##vm_y", vm.offset_y.value, -10.0f, 10.0f, "%.1f" );
+			xui::slider_float( "Viewmodel Z##vm_z", vm.offset_z.value, -10.0f, 10.0f, "%.1f" );
+			xui::slider_float( "Viewmodel FOV##vm_fov", vm.fov.value, 54.0f, 90.0f, "%.0f" );
 
 			xui::layout::spacing( 8.0f );
 			xui::text( "REMOVALS", tokens::col_accent );

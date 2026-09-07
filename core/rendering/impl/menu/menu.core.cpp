@@ -2180,6 +2180,8 @@ namespace rendering {
         if (xui::begin_child("##settings_system", col_w, this->m_body_h, true))
         {
             xui::section_header("WATERMARK & CONTROLS");
+            xui::toggle("Keybinds List", m.m_widgets.keybinds_list);
+            xui::layout::spacing(6.0f);
             xui::toggle("Watermark", m.m_watermark.enabled);
             xui::toggle("Steam Username", m.m_watermark.show_user);
             xui::toggle("FPS", m.m_watermark.show_fps);

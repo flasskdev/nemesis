@@ -241,7 +241,7 @@ namespace tokens {
 	constexpr auto tab_icon_size{ 35.0f };
 	constexpr auto subtab_bar_h{ 32.0f };
 	constexpr auto gap{ 28.0f };
-	constexpr auto window_rounding{ 18.0f };
+	constexpr auto window_rounding{ 26.0f };
 	constexpr auto card_rounding{ 8.0f };
 	constexpr auto btn_rounding{ 5.0f };
 

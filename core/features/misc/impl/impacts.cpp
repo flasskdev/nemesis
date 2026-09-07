@@ -7,6 +7,7 @@
 #include <utilities/logging/logging.hpp>
 #include <core/systems/systems.hpp>
 #include <core/rendering/rendering.hpp>
+#include <core/rendering/theme.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
@@ -293,7 +294,7 @@ namespace features::misc {
 			this->play_hit_effect( data.victim_pawn );
 		}
 
-		if ( cfg.hit_log.value )
+		if ( cfg.hit_log.value || cfg.console_log.value || cfg.chat_log.value )
 		{
 			this->add_hit_log( data );
 		}
@@ -1159,7 +1160,7 @@ namespace features::misc {
 
 				it->resolved = true;
 
-				if ( cfg.miss_log.value )
+				if ( cfg.miss_log.value || cfg.console_log.value || cfg.chat_log.value )
 				{
 					const char* reason;
 
@@ -1322,229 +1323,70 @@ namespace features::misc {
 	void impacts::render_logs( xdraw::draw_list& draw_list, float time )
 	{
 		std::unique_lock lock( this->m_mtx );
-
 		const auto& cfg = settings::g_misc.m_impacts;
-		const auto& s = xui::ctx( ).style;
-
-		constexpr auto fade_ratio{ 0.8f };
-		constexpr auto entry_spacing{ 3.0f };
-		constexpr auto base_x{ 15.0f };
-		constexpr auto base_y{ 15.0f };
-
-		constexpr auto h{ 24.0f };
-		constexpr auto r{ 8.0f };
-		constexpr auto inner_r{ 6.0f };
-		constexpr auto inner_pad{ 2.0f };
-		constexpr auto text_pad_x{ 8.0f };
-		constexpr auto text_nudge{ 0.5f };
-		constexpr auto icon_size{ 20.0f };
-		constexpr auto icon_inner_pad{ 4.0f };
-
-		static const auto miss_accent = xdraw::color{ 255, 100, 100, 255 };
-		static const auto miss_dim = xdraw::color{ 255, 100, 100, 82 };
-
-		static auto hit_icon_w = 0, hit_icon_h = 0;
-		static const auto hit_icon = xdraw::load_svg( R"(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 6C1.5 6.59095 1.6164 7.17611 1.84254 7.72208C2.06869 8.26804 2.40016 8.76412 2.81802 9.18198C3.23588 9.59984 3.73196 9.93131 4.27792 10.1575C4.82389 10.3836 5.40905 10.5 6 10.5C6.59095 10.5 7.17611 10.3836 7.72208 10.1575C8.26804 9.93131 8.76412 9.59984 9.18198 9.18198C9.59984 8.76412 9.93131 8.26804 10.1575 7.72208C10.3836 7.17611 10.5 6.59095 10.5 6C10.5 4.80653 10.0259 3.66193 9.18198 2.81802C8.33807 1.97411 7.19347 1.5 6 1.5C4.80653 1.5 3.66193 1.97411 2.81802 2.81802C1.97411 3.66193 1.5 4.80653 1.5 6Z" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 7H7.5C7.5 7.39782 7.34196 7.77936 7.06066 8.06066C6.77936 8.34196 6.39782 8.5 6 8.5C5.60218 8.5 5.22064 8.34196 4.93934 8.06066C4.65804 7.77936 4.5 7.39782 4.5 7Z" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 4L7.5 5.5" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 5.5L7.5 4" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/></svg>)", 1.0f, &hit_icon_w, &hit_icon_h );
-
-		static auto miss_icon_w = 0, miss_icon_h = 0;
-		static const auto miss_icon = xdraw::load_svg( R"(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 6C1.5 6.59095 1.6164 7.17611 1.84254 7.72208C2.06869 8.26804 2.40016 8.76412 2.81802 9.18198C3.23588 9.59984 3.73196 9.93131 4.27792 10.1575C4.82389 10.3836 5.40905 10.5 6 10.5C6.59095 10.5 7.17611 10.3836 7.72208 10.1575C8.26804 9.93131 8.76412 9.59984 9.18198 9.18198C9.59984 8.76412 9.93131 8.26804 10.1575 7.72208C10.3836 7.17611 10.5 6.59095 10.5 6C10.5 5.40905 10.3836 4.82389 10.1575 4.27792C9.93131 3.73196 9.59984 3.23588 9.18198 2.81802C8.76412 2.40016 8.26804 2.06869 7.72208 1.84254C7.17611 1.6164 6.59095 1.5 6 1.5C5.40905 1.5 4.82389 1.6164 4.27792 1.84254C3.73196 2.06869 3.23588 2.40016 2.81802 2.81802C2.40016 3.23588 2.06869 3.73196 1.84254 4.27792C1.6164 4.82389 1.5 5.40905 1.5 6Z" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.25 8.02525C7.08706 7.85896 6.89258 7.72684 6.67794 7.63665C6.4633 7.54646 6.23282 7.5 6 7.5C5.76718 7.5 5.5367 7.54646 5.32206 7.63665C5.10742 7.72684 4.91294 7.85896 4.75 8.02525" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 4.625C4.75 5.125 3.75 5.125 3.5 4.625" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 4.625C8.25 5.125 7.25 5.125 7 4.625" stroke="#111111" stroke-linecap="round" stroke-linejoin="round"/></svg>)", 1.0f, &miss_icon_w, &miss_icon_h );
-
-		const auto inner_h = h - inner_pad * 2.0f;
-		auto y_offset{ 0.0f };
+		const auto [screen_w, screen_h] = xdraw::viewport_size( );
+		const auto width = std::min( 420.0f, std::max( 0.0f, screen_w - 32.0f ) );
+		auto y = 16.0f;
 
 		for ( auto it = this->m_logs.begin( ); it != this->m_logs.end( ); )
 		{
+			const auto enabled = it->is_miss ? cfg.miss_log.value : cfg.hit_log.value;
 			const auto elapsed = time - it->time;
-			const auto duration = it->duration;
-			const auto fade_start = duration * fade_ratio;
-
-			if ( elapsed > duration && it->alpha.finished( ) )
+			const auto duration = std::isfinite( it->duration ) ? std::max( it->duration, 0.1f ) : 3.5f;
+			if ( !enabled || !std::isfinite( elapsed ) || elapsed < 0.0f || elapsed >= duration )
 			{
 				it = this->m_logs.erase( it );
 				continue;
 			}
 
-			if ( elapsed > fade_start && it->alpha.alpha( ) > 0.5f )
-			{
-				it->alpha.fade_out( 0.5f );
-			}
-
-			it->offset.update( );
 			it->alpha.update( );
+			const auto fade_window = std::min( 0.45f, duration * 0.2f );
+			const auto fade_out = std::clamp( ( duration - elapsed ) / fade_window, 0.0f, 1.0f );
+			const auto alpha = std::clamp( it->alpha.alpha( ) * fade_out, 0.0f, 1.0f );
+			const auto has_reason = !it->reason.empty( );
+			const auto height = has_reason ? 76.0f : 58.0f;
+			if ( width < 140.0f || y + height > screen_h ) { ++it; continue; }
 
-			if ( !it->snapped && it->offset.settled( ) )
+			const auto x = 16.0f - ( 1.0f - alpha ) * 12.0f;
+			const auto tint = [alpha]( xdraw::color color ) {
+				return color.alpha( static_cast<std::uint8_t>( color.a * alpha ) );
+			};
+			const auto kill = !it->is_miss && it->health == 0;
+			const auto accent = it->is_miss ? xdraw::color{235, 91, 105} : tokens::col_accent;
+			const auto badge = it->is_miss ? "MISS" : kill ? "KILL" : "HIT";
+			const auto badge_w = xdraw::measure_text( badge ).first + 14.0f;
+			const auto right_label = it->is_miss ? std::string{} : std::format( "-{} HP", it->damage );
+			const auto [rw, rh] = xdraw::measure_text( right_label );
+			const auto title_x = x + 14.0f + badge_w + 8.0f;
+			const auto title = rendering::theme::fit_text( it->name, x + width - 24.0f - rw - title_x );
+
+			draw_list.rect_filled( x, y + 3.0f, width, height, tint( {0, 0, 0, 60} ), xdraw::corner_radius{10.0f} );
+			draw_list.rect_filled_blurred( x, y, width, height, xdraw::corner_radius{10.0f}, tint( {255, 255, 255, 220} ) );
+			draw_list.rect_filled( x, y, width, height, tint( tokens::col_card.alpha( 242 ) ), xdraw::corner_radius{10.0f} );
+			draw_list.rect( x, y, width, height, tint( tokens::col_border ), xdraw::corner_radius{10.0f} );
+			draw_list.rect_filled( x + 5.0f, y + 12.0f, 2.0f, height - 24.0f, tint( accent ), xdraw::corner_radius{1.0f} );
+			draw_list.rect_filled( x + 14.0f, y + 9.0f, badge_w, 20.0f, tint( accent.alpha( 28 ) ), xdraw::corner_radius{4.0f} );
+			const auto badge_h = xdraw::measure_text( badge ).second;
+			draw_list.text( x + 21.0f, y + 9.0f + ( 20.0f - badge_h ) * 0.5f, badge, tint( accent ) );
+			const auto title_h = xdraw::measure_text( title ).second;
+			draw_list.text( title_x, y + 9.0f + ( 20.0f - title_h ) * 0.5f, title, tint( tokens::col_text ) );
+			draw_list.text( x + width - 14.0f - rw, y + 9.0f + ( 20.0f - rh ) * 0.5f, right_label, tint( accent ) );
+
+			std::string detail;
+			if ( it->is_miss ) detail = it->hitgroup.empty( ) ? "Shot did not connect" : it->hitgroup;
+			else
 			{
-				it->offset.snap( 0.0f );
-				it->snapped = true;
+				const auto group = it->weapon_type == cstypes::weapon_type::knife ? "knife" :
+					it->weapon_type == cstypes::weapon_type::taser ? "zeus" : it->hitgroup.c_str( );
+				detail = std::format( "{} / {} HP remaining", group, std::max( 0, it->health ) );
 			}
-
-			const auto alpha = it->alpha.alpha( );
-			const auto slide_x = it->snapped ? 0.0f : it->offset.value( );
-
-			if ( alpha > 0.01f )
-			{
-				const auto scale_alpha = [ & ]( xdraw::color c ) -> xdraw::color { return c.alpha( static_cast< std::uint8_t >( ( c.a / 255.0f ) * alpha * 255.0f ) ); };
-				const auto& icon_color = it->is_miss ? miss_accent : s.accent;
-				const auto& accent_base = it->is_miss ? miss_accent : s.accent;
-				const auto& dim_base = it->is_miss ? miss_dim : s.text_dim;
-				const auto accent_col = scale_alpha( accent_base );
-				const auto dim_col = scale_alpha( dim_base );
-
-				struct text_span
-				{
-					std::string text{};
-					bool accent{};
-					float w{};
-					float h{};
-				};
-
-				std::vector<text_span> spans{};
-
-				if ( it->is_miss )
-				{
-					if ( it->weapon_type == cstypes::weapon_type::knife || it->weapon_type == cstypes::weapon_type::taser )
-					{
-						const auto weapon_name = it->weapon_type == cstypes::weapon_type::knife ? "knife" : "zeus";
-						const auto [a_w, a_h] = xdraw::measure_text( "missed " );
-						const auto [b_w, b_h] = xdraw::measure_text( weapon_name );
-						const auto [c_w, c_h] = xdraw::measure_text( " on " );
-						const auto [d_w, d_h] = xdraw::measure_text( it->name );
-						const auto [e_w, e_h] = xdraw::measure_text( " due to " );
-						const auto [f_w, f_h] = xdraw::measure_text( "latency" );
-
-						spans.push_back( { "missed ", false, a_w, a_h } );
-						spans.push_back( { weapon_name, true, b_w, b_h } );
-						spans.push_back( { " on ", false, c_w, c_h } );
-						spans.push_back( { it->name, true, d_w, d_h } );
-						spans.push_back( { " due to ", false, e_w, e_h } );
-						spans.push_back( { "latency", true, f_w, f_h } );
-					}
-					else
-					{
-						const auto [a_w, a_h] = xdraw::measure_text( "missed " );
-						const auto [b_w, b_h] = xdraw::measure_text( "shot" );
-						const auto [c_w, c_h] = xdraw::measure_text( " due to " );
-						const auto [d_w, d_h] = xdraw::measure_text( it->reason );
-
-						spans.push_back( { "missed ", false, a_w, a_h } );
-						spans.push_back( { "shot", true, b_w, b_h } );
-						spans.push_back( { " due to ", false, c_w, c_h } );
-						spans.push_back( { it->reason, true, d_w, d_h } );
-
-						if ( !it->hitgroup.empty( ) )
-						{
-							const auto [e_w, e_h] = xdraw::measure_text( " " );
-							const auto [f_w, f_h] = xdraw::measure_text( it->hitgroup );
-
-							spans.push_back( { " ", false, e_w, e_h } );
-							spans.push_back( { it->hitgroup, false, f_w, f_h } );
-						}
-					}
-				}
-				else
-				{
-					if ( it->weapon_type == cstypes::weapon_type::knife )
-					{
-						const auto damage_text = std::to_string( it->damage );
-
-						const auto [a_w, a_h] = xdraw::measure_text( "knifed " );
-						const auto [b_w, b_h] = xdraw::measure_text( it->name );
-						const auto [c_w, c_h] = xdraw::measure_text( " for " );
-						const auto [d_w, d_h] = xdraw::measure_text( damage_text );
-
-						spans.push_back( { "knifed ", false, a_w, a_h } );
-						spans.push_back( { it->name, true, b_w, b_h } );
-						spans.push_back( { " for ", false, c_w, c_h } );
-						spans.push_back( { damage_text, true, d_w, d_h } );
-
-						const auto remaining_text = std::format( " ({} remaining)", it->health );
-						const auto [e_w, e_h] = xdraw::measure_text( remaining_text );
-						spans.push_back( { remaining_text, false, e_w, e_h } );
-					}
-					else if ( it->weapon_type == cstypes::weapon_type::taser )
-					{
-						const auto [a_w, a_h] = xdraw::measure_text( "zapped the fuck out of " );
-						const auto [b_w, b_h] = xdraw::measure_text( it->name );
-
-						spans.push_back( { "zapped the fuck out of ", false, a_w, a_h } );
-						spans.push_back( { it->name, true, b_w, b_h } );
-					}
-					else
-					{
-						const auto damage_text = std::to_string( it->damage );
-
-						const auto [a_w, a_h] = xdraw::measure_text( "hit " );
-						const auto [b_w, b_h] = xdraw::measure_text( it->name );
-						const auto [c_w, c_h] = xdraw::measure_text( " for " );
-						const auto [d_w, d_h] = xdraw::measure_text( damage_text );
-						const auto [e_w, e_h] = xdraw::measure_text( " in " );
-						const auto [f_w, f_h] = xdraw::measure_text( it->hitgroup );
-
-						spans.push_back( { "hit ", false, a_w, a_h } );
-						spans.push_back( { it->name, true, b_w, b_h } );
-						spans.push_back( { " for ", false, c_w, c_h } );
-						spans.push_back( { damage_text, true, d_w, d_h } );
-						spans.push_back( { " in ", false, e_w, e_h } );
-						spans.push_back( { it->hitgroup, true, f_w, f_h } );
-
-						if ( !it->reason.empty( ) )
-						{
-							const auto [g_w, g_h] = xdraw::measure_text( ", " );
-							const auto [h_w, h_h] = xdraw::measure_text( it->reason );
-
-							spans.push_back( { ", ", false, g_w, g_h } );
-							spans.push_back( { it->reason, false, h_w, h_h } );
-						}
-					}
-				}
-
-				auto text_total_w{ 0.0f };
-				auto text_h{ 0.0f };
-
-				for ( const auto& span : spans )
-				{
-					text_total_w += span.w;
-					text_h = std::max( text_h, span.h );
-				}
-
-				const auto text_pill_w = text_total_w + text_pad_x * 2.0f;
-				const auto total_w = inner_pad + icon_size + inner_pad + text_pill_w + inner_pad;
-
-				const auto x = base_x + slide_x;
-				const auto y = base_y + y_offset;
-
-				if ( elapsed <= fade_start )
-				{
-					draw_list.rect_filled_blurred( x, y, total_w, h, xdraw::corner_radius{ r } );
-				}
-
-				draw_list.rect_filled( x, y, total_w, h, scale_alpha( s.window_bg ), xdraw::corner_radius{ r } );
-				draw_list.rect_filled( x + inner_pad, y + inner_pad, icon_size, inner_h, scale_alpha( icon_color ), xdraw::corner_radius{ inner_r } );
-
-				const auto& icon = it->is_miss ? miss_icon : hit_icon;
-				if ( icon )
-				{
-					const auto icon_draw = icon_size - icon_inner_pad * 2.0f;
-					const auto ix = std::floor( x + inner_pad + icon_inner_pad );
-					const auto iy = std::floor( y + inner_pad + ( inner_h - icon_draw ) * 0.5f );
-					draw_list.image( ix, iy, icon_draw, icon_draw, icon.Get( ), scale_alpha( s.checkbox_mark_icon ) );
-				}
-
-				const auto tp_x = x + inner_pad + icon_size + inner_pad;
-				draw_list.rect_filled( tp_x, y + inner_pad, text_pill_w, inner_h, scale_alpha( s.child_bg ), xdraw::corner_radius{ inner_r } );
-
-				auto tx = tp_x + text_pad_x;
-				const auto ty = y + ( h - text_h ) * 0.5f + text_nudge;
-
-				for ( const auto& span : spans )
-				{
-					draw_list.text( tx, ty, span.text, span.accent ? accent_col : dim_col );
-					tx += span.w;
-				}
-
-				y_offset += h + entry_spacing;
-			}
-
+			draw_list.text( x + 14.0f, y + 33.0f, rendering::theme::fit_text( detail, width - 28.0f ), tint( tokens::col_text_dim ) );
+			if ( has_reason )
+				draw_list.text( x + 14.0f, y + 50.0f, rendering::theme::fit_text( it->reason, width - 28.0f ), tint( tokens::col_text_dim ) );
+			const auto remaining = std::clamp( 1.0f - elapsed / duration, 0.0f, 1.0f );
+			draw_list.rect_filled( x + 14.0f, y + height - 5.0f, width - 28.0f, 2.0f, tint( tokens::col_border ), xdraw::corner_radius{1.0f} );
+			draw_list.rect_filled( x + 14.0f, y + height - 5.0f, ( width - 28.0f ) * remaining, 2.0f, tint( accent ), xdraw::corner_radius{1.0f} );
+			y += height + 7.0f;
 			++it;
 		}
 	}

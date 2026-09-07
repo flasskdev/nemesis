@@ -104,6 +104,7 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& render_scope;
 	extern const ::protection::addresses::address_t& render_smoke;
 	extern const ::protection::addresses::address_t& render_view;
+    extern const ::protection::addresses::address_t& calculate_viewmodel;
 	extern const ::protection::addresses::address_t& resource_system_load;
 	extern const ::protection::addresses::address_t& resource_system_precache;
 	extern const ::protection::addresses::address_t& serialize_move_crc;

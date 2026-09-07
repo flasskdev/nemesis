@@ -555,7 +555,7 @@ namespace settings {
 				overlay( ) = default;
 
 				explicit overlay( const char* prefix, bool enabled_default = true )
-					: overlay{ std::string{ prefix }, enabled_default }
+					: overlay( std::string( prefix ), enabled_default )
 				{
 				}
 
@@ -573,7 +573,7 @@ namespace settings {
 				}
 			};
 
-			std::array<overlay, 2> m_overlay{ { overlay{ "esp enemy" }, overlay{ "esp team", false } } };
+			std::array<overlay, 2> m_overlay{ { overlay( "esp enemy" ), overlay( "esp team", false ) } };
 
 			struct chams
 			{
@@ -1329,6 +1329,8 @@ namespace settings {
 
 		struct widgets_cfg
 		{
+			xui::setting keybinds_list{ true, {}, "keybinds list", "widgets" };
+
 			enum class style : std::uint8_t { modern, classic, neo, glass };
 
 			config::enm<style> widget_style{ style::modern, "widgets", "style" };

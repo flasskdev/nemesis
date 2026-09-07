@@ -23,6 +23,7 @@ namespace hooks {
 		static void __fastcall add_entity( std::uintptr_t thisptr, std::uintptr_t entity, std::uint32_t handle );
 		static void __fastcall remove_entity( std::uintptr_t thisptr, std::uintptr_t entity, std::uint32_t handle );
 		static void __fastcall render_view( std::uintptr_t thisptr );
+        static void __fastcall calculate_viewmodel(std::uintptr_t thisptr, float* offsets, float* fov);
 		static void __fastcall draw_skybox_array( std::uintptr_t thisptr, std::uintptr_t a2, std::uintptr_t mesh_array, int mesh_count, int a5, std::uintptr_t a6, std::uintptr_t a7, std::uintptr_t a8 );
 		static std::uintptr_t __fastcall light_scene_object( std::uintptr_t thisptr, std::uintptr_t object, std::uintptr_t a3 );
 		static void __fastcall draw_scene_object_array( std::uintptr_t thisptr, std::uintptr_t a2, std::uintptr_t object_array );
@@ -69,6 +70,7 @@ namespace hooks {
 		inline static hooking::jmp m_add_entity{};
 		inline static hooking::jmp m_remove_entity{};
 		inline static hooking::jmp m_render_view{};
+        inline static hooking::jmp m_calculate_viewmodel{};
 		inline static hooking::jmp m_draw_skybox_array{};
 		inline static hooking::jmp m_light_scene_object{};
 		inline static hooking::jmp m_draw_scene_object_array{};

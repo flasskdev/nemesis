@@ -657,6 +657,8 @@ namespace hooks {
 
 	void __fastcall cheat::override_view( std::uintptr_t thisptr, std::uintptr_t view_setup )
 	{
+		// Apply cvars before the engine builds this frame's view.
+		features::misc::g_other.do_viewmodel_adjust( );
 		m_override_view.call<void>( thisptr, view_setup );
 
 		features::misc::g_camera.on_override_view( view_setup );

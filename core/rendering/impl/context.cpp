@@ -85,7 +85,26 @@ namespace rendering {
 		this->try_bind_ui_assets( );
 		features::misc::g_dlight.on_present( );
 
-		m_context->OMSetRenderTargets( 1, &this->m_rtv, nullptr );
+		if ( !this->m_rtv || this->m_viewport.Width <= 0.0f || this->m_viewport.Height <= 0.0f )
+			return;
+
+		struct viewport_guard
+		{
+			ID3D11DeviceContext* context;
+			UINT count{ D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE };
+			D3D11_VIEWPORT saved[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE]{};
+			explicit viewport_guard( ID3D11DeviceContext* value ) : context{ value }
+			{
+				context->RSGetViewports( &count, saved );
+			}
+			~viewport_guard( )
+			{
+				context->RSSetViewports( count, count ? saved : nullptr );
+			}
+		} restore_viewports{ this->m_context };
+
+		this->m_context->RSSetViewports( 1, &this->m_viewport );
+		this->m_context->OMSetRenderTargets( 1, &this->m_rtv, nullptr );
 
 		xdraw::begin_frame( true );
 		g_menu.update_ui_state( );
@@ -108,12 +127,13 @@ namespace rendering {
 				features::esp::other::g_overlay.on_render( dl );
 			}
 
+			g_menu.draw( );
+
+			// Draw after menu input and popups so toggles take effect in this frame.
 			if ( this->m_ui_assets_ready )
 			{
 				g_widgets.draw( );
 			}
-
-			g_menu.draw( );
 		}
 		xdraw::end_frame( );
 	}
@@ -142,14 +162,10 @@ namespace rendering {
 			D3D11_TEXTURE2D_DESC back_buffer_desc{};
 			back_buffer->GetDesc( &back_buffer_desc );
 
-			D3D11_VIEWPORT viewport{};
-			viewport.TopLeftX = 0.0f;
-			viewport.TopLeftY = 0.0f;
-			viewport.Width = static_cast< float >( back_buffer_desc.Width );
-			viewport.Height = static_cast< float >( back_buffer_desc.Height );
-			viewport.MinDepth = 0.0f;
-			viewport.MaxDepth = 1.0f;
-			this->m_context->RSSetViewports( 1, &viewport );
+			this->m_viewport = {};
+			this->m_viewport.Width = static_cast<float>( back_buffer_desc.Width );
+			this->m_viewport.Height = static_cast<float>( back_buffer_desc.Height );
+			this->m_viewport.MaxDepth = 1.0f;
 
 			back_buffer->Release( );
 		}
