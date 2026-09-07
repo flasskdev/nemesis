@@ -108,11 +108,6 @@ namespace rendering {
 				features::esp::other::g_overlay.on_render( dl );
 			}
 
-			if ( this->m_ui_assets_ready )
-			{
-				g_widgets.draw( );
-			}
-
 			g_menu.draw( );
 		}
 		xdraw::end_frame( );

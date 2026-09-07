@@ -3,6 +3,9 @@
 #include <core/settings.hpp>
 
 #include "../../rendering.hpp"
+#include "../../theme.hpp"
+#include <charconv>
+#include <limits>
 
 namespace rendering {
 
@@ -50,27 +53,7 @@ namespace rendering {
 
 		static inline const char* wear_tier( float w )
 		{
-			if ( w <= 0.07f )
-			{
-				return "FN";
-			}
-
-			if ( w <= 0.15f )
-			{
-				return "MW";
-			}
-
-			if ( w <= 0.38f )
-			{
-				return "FT";
-			}
-
-			if ( w <= 0.45f )
-			{
-				return "WW";
-			}
-
-			return "BS";
+			return skin_options::wear_short[skin_options::wear_tier( w )];
 		}
 
 		static inline std::string format_wear( float w )
@@ -200,7 +183,11 @@ namespace rendering {
 				const auto it = skin_map( ).find( this->m_def );
 				if ( it != skin_map( ).end( ) )
 				{
-					xui::slider_float( "wear", it->second.wear, 0.0f, 1.0f, "%.4f" );
+					const auto pk = features::changer::g_econ_item_system.find_paint_kit( it->second.paint_kit_id );
+					const auto [low, high] = pk ? skin_options::wear_limits( pk->wear_min, pk->wear_max ) : std::pair{0.0f, 1.0f};
+					it->second.wear = skin_options::clamp_wear( it->second.wear, low, high );
+					if ( low < high ) xui::slider_float( "wear", it->second.wear, low, high, "%.6f" );
+					else xui::text( std::format( "Fixed wear: {:.6f}", low ), style.text_dim );
 				}
 
 				c.inside_overlay = prev_inside;
@@ -412,7 +399,9 @@ namespace rendering {
 
 					if ( i == 1 )
 					{
-						it->second.stattrak = !it->second.stattrak;
+						const auto def = features::changer::g_econ_item_system.find_def( this->m_def );
+						if ( def && ( def->category == features::changer::econ_item_system::item_category::gun || def->category == features::changer::econ_item_system::item_category::knife ) )
+							it->second.stattrak = !it->second.stattrak;
 					}
 					else if ( i == 2 || i == 3 )
 					{
@@ -1002,6 +991,74 @@ namespace rendering {
 			}
 		}
 
+		static void integer_input( const char* label, int& value, int minimum, int maximum )
+		{
+			// xui text-input state must outlive a frame and be unique per item/field.
+			static std::unordered_map<std::uintptr_t, std::string> buffers;
+			const auto id = xui::make_id( label );
+			auto& buffer = buffers[id];
+			if ( xui::ctx( ).active_text_input != id ) buffer = std::to_string( value );
+			xui::text_input( label, buffer, 10, "integer" );
+			int parsed{};
+			const auto result = std::from_chars( buffer.data( ), buffer.data( ) + buffer.size( ), parsed );
+			const auto valid = result.ec == std::errc{} && result.ptr == buffer.data( ) + buffer.size( ) && parsed >= minimum && parsed <= maximum;
+			if ( valid ) value = parsed;
+			else xui::text( std::format( "Enter {} to {}. Previous value kept.", minimum, maximum ), {235, 91, 105} );
+		}
+
+		static void draw_skin_editor( const features::changer::econ_item_system::item_def* weapon )
+		{
+			if ( !weapon ) return;
+			auto& econ = features::changer::g_econ_item_system;
+			const auto it = skin_map( ).find( weapon->def_index );
+			if ( it == skin_map( ).end( ) )
+			{
+				xui::text( "Choose a finish below to edit its condition and pattern.", tokens::col_text_dim );
+				return;
+			}
+
+			auto& skin = it->second;
+			const auto pk = econ.find_paint_kit( skin.paint_kit_id );
+			const auto [low, high] = pk ? skin_options::wear_limits( pk->wear_min, pk->wear_max ) : std::pair{0.0f, 1.0f};
+			skin.wear = skin_options::clamp_wear( skin.wear, low, high );
+			const auto tier = skin_options::wear_tier( skin.wear );
+			xui::push_id( static_cast<std::uintptr_t>( weapon->def_index ) );
+			xui::section_header( "SKIN OPTIONS" );
+			xui::text( rendering::theme::fit_text( std::format( "{} | {}", weapon->localized_name, pk ? pk->localized_name : "Default" ), xui::layout::item_width( ) ), tokens::col_text );
+			xui::text( std::format( "Condition: {} / allowed {:.2f} to {:.2f}", skin_options::wear_names[tier], low, high ), tokens::col_text_dim );
+
+			const auto width = ( xui::layout::item_width( ) - xui::ctx( ).style.item_spacing_x * 4.0f ) / 5.0f;
+			for ( int index = 0; index < 5; ++index )
+			{
+				if ( index ) xui::layout::same_line( );
+				const auto preset = skin_options::wear_preset( index, low, high );
+				const auto label = std::format( "{}{}", skin_options::wear_short[index], index == tier ? " *" : "" );
+				xui::push_style_color( xui::style_col::text, preset ? tokens::col_text : tokens::col_text_dim.alpha( 95 ) );
+				if ( xui::button( label, width ) && preset ) skin.wear = *preset;
+				xui::pop_style_color( );
+			}
+			xui::layout::new_line( );
+			if ( low < high ) xui::slider_float( "Wear", skin.wear, low, high, "%.6f" );
+			else xui::text( std::format( "Fixed wear: {:.6f}", low ), tokens::col_text_dim );
+			xui::text( "Double-click the wear value for precise input.", tokens::col_text_dim );
+			integer_input( "Pattern seed (0-1000)", skin.seed, 0, 1000 );
+
+			const auto supports_stattrak = weapon->category == features::changer::econ_item_system::item_category::gun ||
+				weapon->category == features::changer::econ_item_system::item_category::knife;
+			if ( supports_stattrak )
+			{
+				if ( xui::button( skin.stattrak ? "StatTrak: ON" : "StatTrak: OFF", 155.0f ) ) skin.stattrak = !skin.stattrak;
+				if ( skin.stattrak ) integer_input( "StatTrak count", skin.stattrak_count, 0, std::numeric_limits<int>::max( ) );
+			}
+			else
+			{
+				skin.stattrak = false;
+				xui::text( "StatTrak is not supported for gloves.", tokens::col_text_dim );
+			}
+			xui::text( "Options are included when you save the current config.", tokens::col_text_dim );
+			xui::pop_id( );
+		}
+
 		static inline void draw_skin_tile( const xui::rect& card, const features::changer::econ_item_system::paint_kit* pk, const features::changer::econ_item_system::item_def* weapon, int current_kit_id, float fade_alpha )
 		{
 			auto& econ = features::changer::g_econ_item_system;
@@ -1108,6 +1165,9 @@ namespace rendering {
 				}
 				else
 				{
+					settings::changer::applied_skin selected{};
+					if ( const auto previous = skin_map( ).find( skins_ui.browsing_def ); previous != skin_map( ).end( ) )
+						selected = previous->second;
 					const auto browsing_def = econ.find_def( skins_ui.browsing_def );
 					if ( browsing_def )
 					{
@@ -1127,14 +1187,19 @@ namespace rendering {
 						}
 					}
 
-					auto& a = skin_map( )[ skins_ui.browsing_def ];
-					a.paint_kit_id = pk->id;
-					a.wear = 0.01f;
-					a.seed = 0;
-					a.stattrak = false;
+					selected.paint_kit_id = pk->id;
+					const auto [low, high] = skin_options::wear_limits( pk->wear_min, pk->wear_max );
+					selected.wear = skin_options::clamp_wear( selected.wear, low, high );
+					if ( browsing_def && browsing_def->category == features::changer::econ_item_system::item_category::glove ) selected.stattrak = false;
+					skin_map( )[ skins_ui.browsing_def ] = selected;
 				}
 
-				request_page( skins_page::grid );
+				if ( auto win = xui::layout::current_window( ) )
+				{
+					auto& scroll = xui::ctx( ).child_scroll_cache[win->group_id];
+					scroll.scroll = 0.0f;
+					scroll.scroll_target = 0.0f;
+				}
 			}
 		}
 
@@ -1307,7 +1372,7 @@ namespace rendering {
 			xui::layout::set_cursor( back_rect.right( ) + 6.0f - win->bounds.x, bar_y - win->bounds.y );
 			xui::text_input( "##skin_search", detail::skins_ui.search_buf, 64, "search..." );
 
-			const auto grid_top_y = bar_y + bar_h + 12.0f;
+			auto grid_top_y = bar_y + bar_h + 12.0f;
 			const auto base_x = win->bounds.x + s.window_pad_x + offset_x;
 
 			if ( detail::skins_ui.browsing_agent_team != 0 )
@@ -1376,6 +1441,21 @@ namespace rendering {
 			}
 
 			const auto weapon = econ.find_def( detail::skins_ui.browsing_def );
+			xui::layout::set_cursor( s.window_pad_x, grid_top_y - win->bounds.y );
+			// Scrolled-off controls must not react to clicks outside their child.
+			auto& editor_input = xui::ctx( ).input;
+			const auto saved_clicked = editor_input.mouse_clicked;
+			const auto saved_double_clicked = editor_input.mouse_double_clicked;
+			if ( !input.in_rect( win->bounds ) )
+			{
+				editor_input.mouse_clicked = false;
+				editor_input.mouse_double_clicked = false;
+			}
+			detail::draw_skin_editor( weapon );
+			editor_input.mouse_clicked = saved_clicked;
+			editor_input.mouse_double_clicked = saved_double_clicked;
+			xui::layout::new_line( );
+			grid_top_y = win->bounds.y + xui::layout::get_cursor( ).second + 12.0f;
 
 			std::unordered_set<int> valid_kits;
 			for ( const auto& skin : econ.skins( ) )
@@ -1422,9 +1502,8 @@ namespace rendering {
 			const auto rows = ( static_cast< int >( kits.size( ) ) + detail::k_columns - 1 ) / detail::k_columns;
 			const auto grid_h = rows * card_h + ( rows > 0 ? ( rows - 1 ) * detail::k_card_gap : 0.0f );
 
-			const auto reserved_h = ( bar_h + 12.0f ) + grid_h;
-			xui::layout::set_cursor( s.window_pad_x, s.window_pad_y );
-			xui::layout::item( inner_w, reserved_h );
+			xui::layout::set_cursor( s.window_pad_x, grid_top_y - win->bounds.y );
+			xui::layout::item( inner_w, grid_h );
 
 			const auto applied_it = detail::skin_map( ).find( detail::skins_ui.browsing_def );
 			const auto current_kit = ( applied_it != detail::skin_map( ).end( ) ) ? applied_it->second.paint_kit_id : -1;
@@ -1446,8 +1525,7 @@ namespace rendering {
 				detail::draw_skin_tile( card, kits[ i ], weapon, current_kit, fade_alpha );
 			}
 
-			const auto total_content_h = s.window_pad_y + bar_h + 12.0f + grid_h;
-			win->content_h = total_content_h - win->scroll_y;
+			win->content_h = grid_top_y - win->bounds.y + grid_h;
 
 			xui::end_child( );
 		}

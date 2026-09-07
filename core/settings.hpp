@@ -2,6 +2,8 @@
 
 #include <utilities/math/math.hpp>
 #include <external/config.hpp>
+#include <utilities/skin_options.hpp>
+#include <limits>
 
 namespace settings {
 
@@ -1026,6 +1028,7 @@ namespace settings {
 			float wear{ 0.01f };
 			int seed{};
 			bool stattrak{};
+			int stattrak_count{};
 
 			bool operator==( const applied_skin& ) const = default;
 		};
@@ -1033,6 +1036,17 @@ namespace settings {
 		struct skin_map_field : config::custom_field
 		{
 			std::unordered_map<std::int16_t, applied_skin> data{};
+
+			static int bounded_integer( const nlohmann::json& object, const char* key, int fallback, int maximum )
+			{
+				const auto it = object.find( key );
+				if ( it == object.end( ) ) return fallback;
+				if ( it->is_number_unsigned( ) )
+					return static_cast<int>( std::min( it->get<std::uint64_t>( ), static_cast<std::uint64_t>( maximum ) ) );
+				if ( it->is_number_integer( ) )
+					return static_cast<int>( std::clamp( it->get<std::int64_t>( ), std::int64_t{0}, static_cast<std::int64_t>( maximum ) ) );
+				return fallback;
+			}
 
 			nlohmann::json serialize( ) const override
 			{
@@ -1044,7 +1058,8 @@ namespace settings {
 						{"p", s.paint_kit_id},
 						{"w", s.wear},
 						{"s", s.seed},
-						{"t", s.stattrak}
+						{"t", s.stattrak},
+						{"c", s.stattrak_count}
 					};
 				}
 
@@ -1064,12 +1079,18 @@ namespace settings {
 				{
 					try
 					{
-						const auto def = static_cast< std::int16_t >( std::stoi( it.key( ) ) );
-						auto& s = data[ def ];
-						s.paint_kit_id = it.value( ).value( "p", 0 );
-						s.wear = it.value( ).value( "w", 0.01f );
-						s.seed = it.value( ).value( "s", 0 );
+						std::size_t parsed{};
+						const auto def = std::stoi( it.key( ), &parsed );
+						if ( parsed != it.key( ).size( ) || def <= 0 || def > std::numeric_limits<std::int16_t>::max( ) || !it.value( ).is_object( ) )
+							continue;
+
+						applied_skin s{};
+						s.paint_kit_id = bounded_integer( it.value( ), "p", 0, std::numeric_limits<int>::max( ) );
+						s.wear = skin_options::clamp_wear( it.value( ).value( "w", 0.01f ) );
+						s.seed = bounded_integer( it.value( ), "s", 0, 1000 );
 						s.stattrak = it.value( ).value( "t", false );
+						s.stattrak_count = bounded_integer( it.value( ), "c", 0, std::numeric_limits<int>::max( ) );
+						data.emplace( static_cast<std::int16_t>( def ), s );
 					}
 					catch ( ... ) {}
 				}
@@ -1314,6 +1335,14 @@ namespace settings {
 		xui::setting disable_game_logs{ true, {}, "disable game logs", "misc" };
 		config::val<int> menu_key{ VK_INSERT, "misc", "menu key" };
 		config::val<int> menu_palette{ 0, "interface", "color palette" };
+
+		struct keybinds_cfg
+		{
+			xui::setting enabled{ false, {}, "keybind list", "keybinds" };
+			// Normalized top-left coordinates, independent of resolution.
+			config::val<float> x{ 0.015f, "keybinds", "position x" };
+			config::val<float> y{ 0.42f, "keybinds", "position y" };
+		} m_keybinds{};
 
 		struct watermark_cfg
 		{

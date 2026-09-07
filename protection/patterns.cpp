@@ -3,6 +3,13 @@
 
 namespace patterns {
 
+    // Upstream reference: advancedfx/advancedfx, AfxHookSource2/ViewModel.cpp.
+    // Build-dependent: a missing signature must leave this optional hook disabled.
+    const ::protection::addresses::address_t& calculate_viewmodel = ADDRESS_IMPL(
+        ::protection::addresses::hash("client.dll:4055535641564157488BEC4883EC204D8BF84C8BF2488BF1"),
+        ::protection::addresses::address_type::pattern,
+        "client.dll:4055535641564157488BEC4883EC204D8BF84C8BF2488BF1");
+
 	const ::protection::addresses::address_t& add_entity = ADDRESS_IMPL(
 		::protection::addresses::hash("client.dll:90200000488D05*????????48890733D2+78~"),
 		::protection::addresses::address_type::pattern,
