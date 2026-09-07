@@ -128,12 +128,15 @@ namespace rendering {
 			}
 
 			g_menu.draw( );
+<<<<<<< HEAD
 
 			// Draw after menu input and popups so toggles take effect in this frame.
 			if ( this->m_ui_assets_ready )
 			{
 				g_widgets.draw( );
 			}
+=======
+>>>>>>> 0c3e237cc0455ca339beb9958f2d2a876c9b0a8a
 		}
 		xdraw::end_frame( );
 	}

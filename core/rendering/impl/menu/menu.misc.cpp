@@ -1,10 +1,33 @@
 #include <pch/pch.hpp>
+#include <charconv>
+#include <cmath>
+#include <limits>
+#include <system_error>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 
 #include "../../rendering.hpp"
 
 namespace rendering {
+    namespace {
+        void viewmodel_coordinate(std::string_view label, float& value, std::string& buffer, float& shown) {
+            if (value != shown) {
+                char text[48]{};
+                std::snprintf(text, sizeof(text), "%.9g", value);
+                buffer = text;
+                shown = value;
+            }
+            if (xui::text_input(label, buffer, 47, "0")) {
+                float parsed{};
+                const auto result = std::from_chars(buffer.data(), buffer.data() + buffer.size(), parsed);
+                if (result.ec == std::errc{} && result.ptr == buffer.data() + buffer.size() && std::isfinite(parsed)) {
+                    value = parsed;
+                    shown = parsed;
+                }
+            }
+        }
+    }
+
 
 	namespace detail {
 
@@ -171,10 +194,27 @@ namespace rendering {
 
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Viewmodel Adjust", vm.enabled );
+<<<<<<< HEAD
 			xui::slider_float( "Viewmodel X##vm_x", vm.offset_x.value, -10.0f, 10.0f, "%.1f" );
 			xui::slider_float( "Viewmodel Y##vm_y", vm.offset_y.value, -10.0f, 10.0f, "%.1f" );
 			xui::slider_float( "Viewmodel Z##vm_z", vm.offset_z.value, -10.0f, 10.0f, "%.1f" );
 			xui::slider_float( "Viewmodel FOV##vm_fov", vm.fov.value, 54.0f, 90.0f, "%.0f" );
+=======
+			if ( xui::begin_popup( "##vm_popup", 220.0f ) )
+			{
+				static std::array<std::string, 3> buffers{};
+                static std::array<float, 3> shown{
+                    std::numeric_limits<float>::quiet_NaN(),
+                    std::numeric_limits<float>::quiet_NaN(),
+                    std::numeric_limits<float>::quiet_NaN()
+                };
+                viewmodel_coordinate("offset x", vm.offset_x.value, buffers[0], shown[0]);
+                viewmodel_coordinate("offset y", vm.offset_y.value, buffers[1], shown[1]);
+                viewmodel_coordinate("offset z", vm.offset_z.value, buffers[2], shown[2]);
+				xui::slider_float( "fov", vm.fov, 54.0f, 90.0f, "%.0f" );
+				xui::end_popup( );
+			}
+>>>>>>> 0c3e237cc0455ca339beb9958f2d2a876c9b0a8a
 
 			xui::layout::spacing( 8.0f );
 			xui::text( "REMOVALS", tokens::col_accent );

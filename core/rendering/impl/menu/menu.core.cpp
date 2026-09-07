@@ -1290,12 +1290,18 @@ namespace rendering {
             const auto sb_h = wh - tokens::gap * 2.0f;
             const auto sidebar_edge = wx + sb_w + tokens::gap;
             dl.rect_filled(wx + 1.0f, wy + 1.0f, sidebar_edge - wx - 1.0f, wh - 2.0f,
-                xui::lerp(tokens::col_dark, tokens::col_card, 0.12f), xdraw::corner_radius::left(tokens::window_rounding));
+                xui::lerp(tokens::col_dark, tokens::col_card, 0.12f), xdraw::corner_radius::left(tokens::window_rounding - 1.0f));
             dl.line(sidebar_edge, wy + 1.0f, sidebar_edge, wy + wh - 1.0f, tokens::col_border);
             this->draw_side_bar(wh);
-            dl.rect_filled_gradient(wx + tokens::window_rounding, wy + 1.0f, ww - tokens::window_rounding * 2.0f, 2.0f,
-                tokens::col_accent.alpha(0), tokens::col_accent.alpha(220),
-                tokens::col_accent.alpha(220), tokens::col_accent.alpha(0));
+            const auto accent_x = wx + tokens::window_rounding + 1.0f;
+            const auto accent_w = std::max(0.0f, ww - (tokens::window_rounding + 1.0f) * 2.0f);
+            const auto half_w = accent_w * 0.5f;
+            const auto edge = tokens::col_accent.alpha(0);
+            const auto center = tokens::col_accent.alpha(static_cast<std::uint8_t>(150.0f * menu_reveal));
+            dl.rect_filled_gradient(accent_x, wy + 2.0f, half_w, 2.0f,
+                edge, center, center, edge);
+            dl.rect_filled_gradient(accent_x + half_w, wy + 2.0f, half_w, 2.0f,
+                center, edge, edge, center);
 
             const auto content_x = sb_x + sb_w + tokens::gap;
             const auto content_y = sb_y;

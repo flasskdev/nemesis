@@ -353,6 +353,7 @@ namespace features::misc {
 		std::string m_original_name{};
 		std::string m_last_sent_name{};
 		float m_last_spawntime{};
+<<<<<<< HEAD
 		struct viewmodel_cvar_state
 		{
 			std::uintptr_t address{};
@@ -365,6 +366,8 @@ namespace features::misc {
 		int m_vm_original_preset{};
 		bool m_vm_preset_captured{};
 		std::uint32_t m_vm_missing_mask{};
+=======
+>>>>>>> 0c3e237cc0455ca339beb9958f2d2a876c9b0a8a
 	};
 
 	// this is so ghetto but fuck it for now it works

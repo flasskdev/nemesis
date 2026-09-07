@@ -9,6 +9,7 @@
 #include "../rendering.hpp"
 #include "../theme.hpp"
 #include <utilities/security/security.hpp>
+#include <map>
 
 namespace rendering {
 
@@ -28,6 +29,7 @@ namespace rendering {
 			this->watermark( dl );
 		}
 
+<<<<<<< HEAD
 		if ( settings::g_misc.m_widgets.keybinds_list.value )
 		{
 			this->keybinds( dl );
@@ -35,6 +37,9 @@ namespace rendering {
 
 		xdraw::pop_font( );
 		dl.pop_clip( );
+=======
+		this->keybinds( xdraw::get( xdraw::layer::top ) );
+>>>>>>> 0c3e237cc0455ca339beb9958f2d2a876c9b0a8a
 	}
 
 	void widgets::watermark( xdraw::draw_list& draw_list )
@@ -209,22 +214,28 @@ namespace rendering {
 
 		static std::map<std::string, row_anim_t> row_states;
 		static animation::fade container_alpha;
-		static animation::spring smoothed_base_y;
+		static bool dragging{};
+		static float drag_offset_x{}, drag_offset_y{};
+		constexpr auto drag_id = xui::fnv1a( "keybind_panel_drag" );
+		auto& ui = xui::ctx( );
+		auto& input = ui.input;
+		auto& cfg = settings::g_misc.m_keybinds;
+		const auto menu_open = g_menu.is_open( );
+		if ( !cfg.enabled.value )
+		{
+			dragging = false;
+			if ( ui.active_window == drag_id ) ui.active_window = xui::null_id;
+			row_states.clear( );
+			container_alpha = {};
+			return;
+		}
 
 		const auto [screen_w, screen_h] = xdraw::viewport_size( );
-		const auto& s = xui::ctx( ).style;
-
-		constexpr auto margin{ 10.0f };
-		constexpr auto row_spacing{ 3.0f };
-		constexpr auto row_h{ 21.0f };
-		constexpr auto header_h{ 24.0f };
-		constexpr auto r{ 8.0f };
-		constexpr auto inner_r{ 6.0f };
-		constexpr auto inner_pad{ 2.0f };
-		constexpr auto text_pad_x{ 8.0f };
-		constexpr auto text_nudge{ 0.5f };
-		constexpr auto icon_size{ 20.0f };
-		constexpr auto icon_inner_pad{ 4.0f };
+		if ( screen_w <= 0 || screen_h <= 0 ) return;
+		constexpr auto header_h{ 34.0f };
+		constexpr auto row_h{ 28.0f };
+		constexpr auto pad{ 12.0f };
+		const auto panel_w = std::min( 320.0f, static_cast<float>( screen_w ) );
 
 		struct bind_entry
 		{
@@ -232,6 +243,7 @@ namespace rendering {
 			char value[ 32 ];
 			bool has_value_pill;
 			xui::bind_mode mode;
+			int key;
 		};
 
 		bind_entry entries[ 32 ]{};
@@ -289,6 +301,7 @@ namespace rendering {
 				auto& e = entries[ count++ ];
 				e.name = setting->name.c_str( );
 				e.mode = setting->bind.mode;
+				e.key = setting->bind.key;
 
 				if ( setting == &active_group->min_damage_override )
 				{
@@ -355,6 +368,7 @@ namespace rendering {
 				auto& e = entries[ count++ ];
 				e.name = setting->name.c_str( );
 				e.mode = setting->bind.mode;
+				e.key = setting->bind.key;
 				e.value[ 0 ] = '\0';
 				e.has_value_pill = false;
 				continue;
@@ -371,135 +385,138 @@ namespace rendering {
 			auto& e = entries[ count++ ];
 			e.name = setting->name.c_str( );
 			e.mode = setting->bind.mode;
+				e.key = setting->bind.key;
 			e.value[ 0 ] = '\0';
 			e.has_value_pill = false;
 		}
 
+<<<<<<< HEAD
 		// Keep the header visible as a preview while the menu is open.
 		if ( count > 0 || g_menu.is_open( ) )
 			container_alpha.fade_in( 0.2f );
 		else
 			container_alpha.fade_out( 0.2f );
 
+=======
+		if ( count > 0 || menu_open ) container_alpha.fade_in( 0.18f );
+		else container_alpha.fade_out( 0.18f );
+>>>>>>> 0c3e237cc0455ca339beb9958f2d2a876c9b0a8a
 		container_alpha.update( );
-		if ( !container_alpha.visible( ) )
-			return;
 
-		const auto master_alpha = container_alpha.alpha( );
-		const auto total_h = header_h + row_spacing + ( static_cast< float >( count ) * ( row_h + row_spacing ) );
-		const auto target_base_y = ( static_cast< float >( screen_h ) * 0.5f ) - ( total_h * 0.5f );
-
-		smoothed_base_y.set_target( target_base_y );
-		smoothed_base_y.update( );
-
-		const auto base_ry = smoothed_base_y.value( );
-		const auto x = margin;
-
-		static auto icon_w_px = 0, icon_h_px = 0;
-		static const auto kb_icon = xdraw::load_svg( R"(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.78571 4.07143C2.53142 4.07143 2.28285 3.99602 2.07141 3.85475C1.85998 3.71347 1.69518 3.51267 1.59787 3.27774C1.50056 3.0428 1.4751 2.78429 1.52471 2.53488C1.57431 2.28548 1.69677 2.05639 1.87658 1.87658C2.05639 1.69677 2.28548 1.57431 2.53488 1.52471C2.78429 1.4751 3.0428 1.50056 3.27774 1.59787C3.51267 1.69518 3.71347 1.85998 3.85475 2.07141C3.99602 2.28285 4.07143 2.53142 4.07143 2.78571V9.21429C4.07143 9.46858 3.99602 9.71716 3.85475 9.92859C3.71347 10.14 3.51267 10.3048 3.27774 10.4021C3.0428 10.4994 2.78429 10.5249 2.53488 10.4753C2.28548 10.4257 2.05639 10.3032 1.87658 10.1234C1.69677 9.94361 1.57431 9.71452 1.52471 9.46512C1.4751 9.21571 1.50056 8.9572 1.59787 8.72226C1.69518 8.48733 1.85998 8.28653 2.07141 8.14525C2.28285 8.00398 2.53142 7.92857 2.78571 7.92857H9.21429C9.46858 7.92857 9.71716 8.00398 9.92859 8.14525C10.14 8.28653 10.3048 8.48733 10.4021 8.72226C10.4994 8.9572 10.5249 9.21571 10.4753 9.46512C10.4257 9.71452 10.3032 9.94361 10.1234 10.1234C9.94361 10.3032 9.71452 10.4257 9.46512 10.4753C9.21571 10.5249 8.9572 10.4994 8.72226 10.4021C8.48733 10.3048 8.28653 10.14 8.14525 9.92859C8.00398 9.71716 7.92857 9.46858 7.92857 9.21429V2.78571C7.92857 2.53142 8.00398 2.28285 8.14525 2.07141C8.28653 1.85998 8.48733 1.69518 8.72226 1.59787C8.9572 1.50056 9.21571 1.4751 9.46512 1.52471C9.71452 1.57431 9.94361 1.69677 10.1234 1.87658C10.3032 2.05639 10.4257 2.28548 10.4753 2.53488C10.5249 2.78429 10.4994 3.0428 10.4021 3.27774C10.3048 3.51267 10.14 3.71347 9.92859 3.85475C9.71716 3.99602 9.46858 4.07143 9.21429 4.07143H2.78571Z" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/></svg>)", 1.0f, &icon_w_px, &icon_h_px );
-
-		const auto [header_tw, header_th] = xdraw::measure_text( "keybinds" );
-		const auto header_w = inner_pad + icon_size + inner_pad + header_tw + text_pad_x * 2.0f + inner_pad;
-		const auto header_inner_h = header_h - inner_pad * 2.0f;
-		const auto inner_h = row_h - inner_pad * 2.0f;
-		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
-
-		draw_list.rect_filled_blurred( x, base_ry, header_w, header_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, master_u8 } );
-		draw_list.rect_filled( x, base_ry, header_w, header_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * master_alpha ) ), xdraw::corner_radius{ r } );
-		draw_list.rect_filled( x + inner_pad, base_ry + inner_pad, icon_size, header_inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
-
-		if ( kb_icon )
+		if ( !menu_open || !input.mouse_down || input.mouse_released )
 		{
-			const auto icon_draw = icon_size - icon_inner_pad * 2.0f;
-			const auto ix = std::floor( x + inner_pad + icon_inner_pad );
-			const auto iy = std::floor( base_ry + inner_pad + ( header_inner_h - icon_draw ) * 0.5f + 1.0f );
-			draw_list.image( ix, iy, icon_draw, icon_draw, kb_icon.Get( ), s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * master_alpha ) ) );
+			dragging = false;
+			if ( ui.active_window == drag_id ) ui.active_window = xui::null_id;
+		}
+		if ( !container_alpha.visible( ) ) return;
+
+		const auto capacity = std::max( 0, static_cast<int>( ( screen_h - header_h - 8.0f ) / row_h ) );
+		const auto visible_count = std::min( count, capacity );
+		const auto body_rows = std::max( visible_count, menu_open ? 1 : 0 );
+		const auto total_h = std::min( header_h + body_rows * row_h + 8.0f, static_cast<float>( screen_h ) );
+		const auto max_x = std::max( 0.0f, screen_w - panel_w );
+		const auto max_y = std::max( 0.0f, screen_h - total_h );
+		const auto normalized = []( float value, float fallback ) {
+			return std::isfinite( value ) ? std::clamp( value, 0.0f, 1.0f ) : fallback;
+		};
+		auto x = std::clamp( normalized( cfg.x.value, 0.015f ) * screen_w, 0.0f, max_x );
+		auto y = std::clamp( normalized( cfg.y.value, 0.42f ) * screen_h, 0.0f, max_y );
+		const auto header = xui::rect{ x, y, panel_w, std::min( header_h, total_h ) };
+		const auto hovered = menu_open && input.in_rect( header ) && !ui.overlay_blocking( );
+
+		if ( hovered && input.mouse_clicked && ui.active_window == xui::null_id &&
+			ui.active_slider == xui::null_id && ui.active_resize == xui::null_id &&
+			ui.active_text_input == xui::null_id && ui.active_child_scroll == xui::null_id )
+		{
+			dragging = true;
+			drag_offset_x = input.mouse_x - x;
+			drag_offset_y = input.mouse_y - y;
+			ui.active_window = drag_id;
+		}
+		if ( dragging )
+		{
+			x = std::clamp( input.mouse_x - drag_offset_x, 0.0f, max_x );
+			y = std::clamp( input.mouse_y - drag_offset_y, 0.0f, max_y );
+			cfg.x.value = x / screen_w;
+			cfg.y.value = y / screen_h;
+			// Do not let the same press activate or drag the menu underneath.
+			input.mouse_clicked = false;
+			input.mouse_double_clicked = false;
 		}
 
-		const auto htx = x + inner_pad + icon_size + inner_pad;
-		const auto htw = header_tw + text_pad_x * 2.0f;
-		draw_list.rect_filled( htx, base_ry + inner_pad, htw, header_inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
-		draw_list.text( htx + text_pad_x, base_ry + ( header_h - header_th ) * 0.5f + text_nudge, "keybinds", s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ) );
-
-		for ( auto& [name, state] : row_states )
-			state.active_this_frame = false;
-
-		float current_offset_y = header_h + row_spacing;
-		for ( auto i = 0; i < count; ++i )
+		const auto alpha = container_alpha.alpha( );
+		const auto tint = [alpha]( xdraw::color c ) {
+			return c.alpha( static_cast<std::uint8_t>( c.a * alpha ) );
+		};
+		draw_list.rect_filled( x, y + 3.0f, panel_w, total_h, tint( {0, 0, 0, 65} ), xdraw::corner_radius{10.0f} );
+		draw_list.rect_filled_blurred( x, y, panel_w, total_h, xdraw::corner_radius{10.0f}, tint( {255, 255, 255, 220} ) );
+		draw_list.rect_filled( x, y, panel_w, total_h, tint( tokens::col_card.alpha( 242 ) ), xdraw::corner_radius{10.0f} );
+		draw_list.rect( x, y, panel_w, total_h, tint( dragging ? tokens::col_accent : tokens::col_border ), xdraw::corner_radius{10.0f} );
+		draw_list.push_clip( x, y, panel_w, total_h );
+		draw_list.line( x + pad, y + header_h, x + panel_w - pad, y + header_h, tint( tokens::col_border ) );
+		draw_list.circle_filled( x + pad + 3.0f, y + header_h * 0.5f, 3.0f, tint( tokens::col_accent ) );
+		const auto title = std::format( "KEYBINDS  {}", count );
+		const auto title_h = xdraw::measure_text( title ).second;
+		draw_list.text( x + pad + 14.0f, y + ( header_h - title_h ) * 0.5f, title, tint( tokens::col_text ) );
+		if ( menu_open )
 		{
-			const auto& e = entries[ i ];
-			auto& anim = row_states[ e.name ];
+			for ( int row = 0; row < 2; ++row )
+				for ( int col = 0; col < 3; ++col )
+					draw_list.circle_filled( x + panel_w - 25.0f + col * 4.0f, y + 14.0f + row * 5.0f,
+						1.0f, tint( hovered ? tokens::col_accent : tokens::col_text_dim ) );
+		}
 
-			if ( !anim.active_this_frame && anim.alpha.alpha( ) <= 0.01f )
-				anim.offset_y.snap( current_offset_y );
-
+		for ( auto& [name, state] : row_states ) state.active_this_frame = false;
+		for ( int i = 0; i < visible_count; ++i )
+		{
+			const auto& e = entries[i];
+			const auto row_key = std::format( "{}:{}:{}", e.name, e.key, static_cast<int>( e.mode ) );
+			auto& anim = row_states[row_key];
+			const auto target_y = header_h + 4.0f + i * row_h;
+			if ( anim.alpha.alpha( ) <= 0.01f ) anim.offset_y.snap( target_y );
 			anim.active_this_frame = true;
-			anim.alpha.fade_in( 0.2f );
-			anim.offset_y.set_target( current_offset_y );
+			anim.alpha.fade_in( 0.15f );
+			anim.offset_y.set_target( target_y );
 			anim.alpha.update( );
 			anim.offset_y.update( );
-
-			const auto row_alpha = anim.alpha.alpha( ) * master_alpha;
-			const auto draw_y = base_ry + anim.offset_y.value( );
-			const auto [nw, nh] = xdraw::measure_text( e.name );
-			const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
-
+			const auto row_alpha = alpha * anim.alpha.alpha( );
+			const auto row_tint = [row_alpha]( xdraw::color c ) {
+				return c.alpha( static_cast<std::uint8_t>( c.a * row_alpha ) );
+			};
+			const auto ry = y + anim.offset_y.value( );
+			const auto mode = e.mode == xui::bind_mode::toggle ? "TOGGLE" : e.mode == xui::bind_mode::hold_off ? "OFF" : "HOLD";
+			const auto badge = std::format( "{} / {}", xui::vk_name( e.key ), mode );
+			const auto [bw, bh] = xdraw::measure_text( badge );
+			const auto badge_w = bw + 12.0f;
+			const auto badge_x = x + panel_w - pad - badge_w;
+			draw_list.rect_filled( badge_x, ry + 4.0f, badge_w, row_h - 8.0f, row_tint( tokens::col_elevated ), xdraw::corner_radius{4.0f} );
+			draw_list.text( badge_x + 6.0f, ry + ( row_h - bh ) * 0.5f, badge, row_tint( tokens::col_text_dim ) );
+			auto name_right = badge_x - 8.0f;
 			if ( e.has_value_pill )
 			{
 				const auto [vw, vh] = xdraw::measure_text( e.value );
-				const auto name_pill_w = nw + text_pad_x * 2.0f;
-				const auto value_pill_w = vw + text_pad_x * 2.0f;
-				const auto row_w = inner_pad + name_pill_w + inner_pad + value_pill_w + inner_pad;
-
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-				draw_list.rect_filled( x + inner_pad, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( x + inner_pad + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
-
-				const auto vpx = x + inner_pad + name_pill_w + inner_pad;
-				draw_list.rect_filled( vpx, draw_y + inner_pad, value_pill_w, inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( vpx + text_pad_x, draw_y + ( row_h - vh ) * 0.5f + text_nudge, e.value, s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * row_alpha ) ) );
+				const auto vx = name_right - vw - 12.0f;
+				draw_list.rect_filled( vx, ry + 4.0f, vw + 12.0f, row_h - 8.0f, row_tint( tokens::col_accent.alpha( 28 ) ), xdraw::corner_radius{4.0f} );
+				draw_list.text( vx + 6.0f, ry + ( row_h - vh ) * 0.5f, e.value, row_tint( tokens::col_accent ) );
+				name_right = vx - 8.0f;
 			}
-			else
-			{
-				const auto name_pill_w = nw + text_pad_x * 2.0f;
-				const auto row_w = inner_pad + name_pill_w + inner_pad;
-				const auto text_col = ( e.mode == xui::bind_mode::toggle ) ? s.text_dim : s.accent;
-
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-				draw_list.rect_filled( x + inner_pad, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( x + inner_pad + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, text_col.alpha( static_cast< std::uint8_t >( text_col.a * row_alpha ) ) );
-			}
-
-			current_offset_y += row_h + row_spacing;
+			const auto name = theme::fit_text( e.name, name_right - x - pad );
+			const auto nh = xdraw::measure_text( name ).second;
+			draw_list.text( x + pad, ry + ( row_h - nh ) * 0.5f, name, row_tint( tokens::col_text ) );
 		}
-
 		for ( auto it = row_states.begin( ); it != row_states.end( ); )
 		{
-			if ( !it->second.active_this_frame )
-			{
-				it->second.alpha.fade_out( 0.15f );
-				it->second.alpha.update( );
-				it->second.offset_y.update( );
-
-				if ( it->second.alpha.alpha( ) <= 0.001f )
-				{
-					it = row_states.erase( it );
-					continue;
-				}
-
-				const auto row_alpha = it->second.alpha.alpha( ) * master_alpha;
-				const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
-				const auto draw_y = base_ry + it->second.offset_y.value( );
-				const auto [nw, nh] = xdraw::measure_text( it->first.c_str( ) );
-				const auto row_w = inner_pad + ( nw + text_pad_x * 2.0f ) + inner_pad;
-
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-			}
-			++it;
+			if ( !it->second.active_this_frame ) it = row_states.erase( it );
+			else ++it;
 		}
+		if ( count == 0 && menu_open )
+		{
+			const auto label = "No active binds. Drag the header to move.";
+			const auto text = theme::fit_text( label, panel_w - pad * 2.0f );
+			const auto th = xdraw::measure_text( text ).second;
+			draw_list.text( x + pad, y + header_h + 4.0f + ( row_h - th ) * 0.5f, text, tint( tokens::col_text_dim ) );
+		}
+		draw_list.pop_clip( );
 	}
 
 } // namespace rendering
