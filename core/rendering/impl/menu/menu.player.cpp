@@ -49,12 +49,12 @@ namespace rendering {
 
 	} // namespace detail
 
-	void menu::draw_player(float group_w) const
+	void menu::draw_player(float group_w, int subtab) const
 	{
 		auto& esp = settings::g_esp;
 		auto& p = esp.m_player;
 		const auto col_w = (this->m_body_w - tokens::gap) * 0.5f;
-		const auto subtab = this->m_subtab;
+		subtab = std::clamp(subtab, 0, 2);
 		const auto has_overlay = (subtab <= 1);
 		auto& glow = (subtab == 0) ? p.m_glow.enemy : p.m_glow.team;
 		auto& glow_ragdoll = (subtab == 0) ? p.m_glow.enemy_ragdoll : p.m_glow.team_ragdoll;
@@ -62,7 +62,7 @@ namespace rendering {
 		if (has_overlay)
 		{
 			auto& ov = p.m_overlay[subtab];
-			if (xui::begin_child("##player_esp", col_w))
+			if (xui::begin_child("##player_esp", col_w, this->m_body_h, true))
 			{
 				xui::checkbox("enable", ov.enabled);
 				xui::checkbox("box", ov.m_box.enabled);
@@ -166,7 +166,7 @@ namespace rendering {
 					xui::end_popup();
 				}
 				xui::end_child();
-				if (xui::begin_child("##player_glow", col_w)) {
+				if (xui::begin_child("##player_glow", col_w, this->m_body_h, true)) {
 					xui::checkbox("glow", glow.enabled);
 					if (xui::begin_popup("##glow_popup", 220.0f)) {
 						xui::color_picker("color##glow", glow.color);
@@ -183,7 +183,7 @@ namespace rendering {
 		}
 		else
 		{
-			if (xui::begin_child("##local_chams_glow", col_w))
+			if (xui::begin_child("##local_chams_glow", col_w, this->m_body_h, true))
 			{
 				detail::draw_chams_config("chams", "local_main", p.m_chams.local);
 				xui::layout::separator();
@@ -219,7 +219,7 @@ namespace rendering {
 			auto& chams_ragdoll = (subtab == 0) ? p.m_chams.enemy_ragdoll : p.m_chams.team_ragdoll;
 			auto& glow = (subtab == 0) ? p.m_glow.enemy : p.m_glow.team;
 			auto& glow_ragdoll = (subtab == 0) ? p.m_glow.enemy_ragdoll : p.m_glow.team_ragdoll;
-			if (xui::begin_child("##player_chams", col_w))
+			if (xui::begin_child("##player_chams", col_w, this->m_body_h, true))
 			{
 				// Main toggle for Player Chams
 				xui::checkbox("player chams", chams.enabled);
@@ -277,7 +277,7 @@ namespace rendering {
 		}
 		else
 		{
-			if (xui::begin_child("##viewmodel", col_w))
+			if (xui::begin_child("##viewmodel", col_w, this->m_body_h, true))
 			{
 				detail::draw_chams_config("weapon chams", "vm_weapon", esp.m_viewmodel.weapon);
 				xui::layout::separator();

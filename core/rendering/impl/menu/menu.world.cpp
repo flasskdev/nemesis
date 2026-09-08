@@ -6,7 +6,7 @@
 
 namespace rendering {
 
-	void menu::draw_world( float group_w ) const
+	void menu::draw_world( float group_w, int subtab ) const
 	{
 		auto& w = settings::g_world;
 
@@ -18,7 +18,7 @@ namespace rendering {
 		const auto col_w = ( content_w - tokens::gap ) * 0.5f;
 		const auto right_x = content_x + col_w + tokens::gap;
 
-		const auto subtab = this->m_subtab;
+		subtab = std::clamp( subtab, 0, 2 );
 
 		xui::layout::set_cursor( content_x - wx, body_y - wy );
 
@@ -48,7 +48,7 @@ namespace rendering {
 
 			xui::layout::set_cursor( content_x - wx, body_y - wy );
 
-			if ( xui::begin_child( "##esp_items", col_w ) )
+			if ( xui::begin_child( "##esp_items", col_w, this->m_body_h, true ) )
 			{
 				static int item_group{};
 				xui::combo( "group##item_sel", item_group, settings::esp::item::k_group_names, settings::esp::item::k_group_count );
@@ -103,7 +103,7 @@ namespace rendering {
 
 			xui::layout::set_cursor( right_x - wx, body_y - wy );
 
-			if ( xui::begin_child( "##esp_projectiles", col_w ) )
+			if ( xui::begin_child( "##esp_projectiles", col_w, this->m_body_h, true ) )
 			{
 				static auto proj_group{ 0 };
 				xui::combo( "group##proj_sel", proj_group, settings::esp::projectile::k_group_names, settings::esp::projectile::k_group_count );
@@ -170,11 +170,7 @@ namespace rendering {
 					}
 				}
 
-				xui::end_child( );
-			}
-
-			if ( xui::begin_child( "##esp_other", col_w ) )
-			{
+				xui::layout::separator( );
 				xui::checkbox( "bomb timer", other.bomb_timer );
 				xui::checkbox( "spectator list", other.spectator_list );
 
@@ -186,7 +182,7 @@ namespace rendering {
 		{
 			auto& scene = w.m_scene;
 
-			if ( xui::begin_child( "##world_scene_left", col_w ) )
+			if ( xui::begin_child( "##world_scene_left", col_w, this->m_body_h, true ) )
 			{
 				xui::checkbox( "skybox material", scene.skybox.custom_skybox );
 				if ( xui::begin_popup( "##skybox_popup", 220.0f ) )
@@ -254,7 +250,7 @@ namespace rendering {
 
 			xui::layout::set_cursor( right_x - wx, body_y - wy );
 
-			if ( xui::begin_child( "##world_scene_right", col_w ) )
+			if ( xui::begin_child( "##world_scene_right", col_w, this->m_body_h, true ) )
 			{
 				xui::checkbox( "depth of field", scene.dof );
 				if ( xui::begin_popup( "##dof_popup", 220.0f ) )
@@ -274,7 +270,7 @@ namespace rendering {
 		{
 			auto& weather = w.m_weather;
 
-			if ( xui::begin_child( "##world_weather", col_w ) )
+			if ( xui::begin_child( "##world_weather", col_w, this->m_body_h, true ) )
 			{
 				xui::checkbox( "weather", weather.enabled );
 				if ( xui::begin_popup( "##weather_popup", 220.0f ) )

@@ -68,8 +68,8 @@ namespace rendering {
         void draw_legitbot(float group_w) const;
         void draw_movement(float group_w) const;
         void draw_visuals(float group_w) const;
-        void draw_player(float group_w) const;
-        void draw_world(float group_w) const;
+        void draw_player(float group_w, int subtab) const;
+        void draw_world(float group_w, int subtab) const;
         void draw_skins(float group_w) const;
         void draw_misc(float group_w) const;
         void draw_settings(float group_w) const;
@@ -149,7 +149,7 @@ namespace rendering {
             entry intro_splash{};
         } m_textures{};
 
-        static constexpr auto k_max_subtabs{ 6 };
+        static constexpr auto k_max_subtabs{ 7 };
         struct subtab_info
         {
             const char* names[k_max_subtabs]{};
@@ -161,7 +161,7 @@ namespace rendering {
             { { "general" }, 1 },
             { { "general" }, 1 },
             { { "general" }, 1 },
-            { { "general" }, 1 },
+            { { "main", "enemy", "team", "local", "items", "world", "weather" }, 7 },
             { { "guns", "knives", "gloves", "agents" }, 4 },
             { { "general" }, 1 },
             { { "general" }, 1 },

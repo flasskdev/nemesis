@@ -1653,16 +1653,16 @@ namespace rendering {
         dl.text(content_x, title_y, page_title, tokens::col_text);
         xdraw::pop_font();
 
-        if (this->m_tab == 4) // Skins subtabs (Guns, Knives, Gloves, Agents)
+        if (k_subtab_defs[tab_idx].count > 1)
         {
-            constexpr std::array<const char*, 4> skin_subtabs{ "Guns", "Knives", "Gloves", "Agents" };
+            const auto& subtabs = k_subtab_defs[tab_idx];
             float curr_x = content_x + title_w + 24.0f;
             const auto pill_y = bar_y + (tokens::subtab_bar_h - 26.0f) * 0.5f;
             xdraw::push_font(rendering::g_fonts.inter_medium[rendering::fonts::size::petite]);
-            for (int s = 0; s < 4; ++s)
+            for (int s = 0; s < subtabs.count; ++s)
             {
-                const auto [tw, th] = xdraw::measure_text(skin_subtabs[s]);
-                const auto pw = tw + 20.0f;
+                const auto [tw, th] = xdraw::measure_text(subtabs.names[s]);
+                const auto pw = tw + (subtabs.count > 4 ? 12.0f : 20.0f);
                 const auto ph = 26.0f;
                 const xui::rect pill_rect{ curr_x, pill_y, pw, ph };
                 const bool is_active = (this->m_subtab == s);
@@ -1677,7 +1677,7 @@ namespace rendering {
                 {
                     dl.rect_filled(curr_x, pill_y, pw, ph, tokens::col_accent.alpha(35), xdraw::corner_radius{ 13.0f });
                     dl.rect(curr_x, pill_y, pw, ph, tokens::col_accent, xdraw::corner_radius{ 13.0f }, 1.0f);
-                    dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, skin_subtabs[s], tokens::col_accent);
+                    dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, subtabs.names[s], tokens::col_accent);
                 }
                 else
                 {
@@ -1685,10 +1685,10 @@ namespace rendering {
                     {
                         dl.rect_filled(curr_x, pill_y, pw, ph, tokens::col_elevated.alpha(120), xdraw::corner_radius{ 13.0f });
                     }
-                    dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, skin_subtabs[s], is_hovered ? tokens::col_text : tokens::col_text_dim);
+                    dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, subtabs.names[s], is_hovered ? tokens::col_text : tokens::col_text_dim);
                 }
 
-                curr_x += pw + 8.0f;
+                curr_x += pw + (subtabs.count > 4 ? 4.0f : 8.0f);
             }
             xdraw::pop_font();
         }
@@ -1884,6 +1884,16 @@ namespace rendering {
 
     void menu::draw_visuals(float col_w) const
     {
+        if (this->m_subtab >= 1 && this->m_subtab <= 3)
+        {
+            this->draw_player(col_w, this->m_subtab - 1);
+            return;
+        }
+        if (this->m_subtab >= 4 && this->m_subtab <= 6)
+        {
+            this->draw_world(col_w, this->m_subtab - 4);
+            return;
+        }
         auto& esp = settings::g_esp;
         auto& p = esp.m_player;
 
