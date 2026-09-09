@@ -49,6 +49,7 @@ namespace hooks {
 		static float* __fastcall get_interpolated_shoot_position( std::uintptr_t thisptr, float* out, int* tick_frac );
 		static std::uintptr_t __fastcall level_initialization( std::uintptr_t a1, const char* new_map );
 		static std::uintptr_t __fastcall level_shutdown( std::uintptr_t a1 );
+		static void do_level_shutdown( );
 		static void __fastcall read_frame_input( std::uintptr_t a1, std::uint32_t a2 );
 		static void __fastcall process_input_event( std::uintptr_t thisptr, int slot, float frametime );
 		static std::uintptr_t __fastcall render_decals( std::uintptr_t render_context, std::uintptr_t** render_view, bool pass_flag_a, bool pass_flag_b );

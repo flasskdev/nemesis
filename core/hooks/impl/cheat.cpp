@@ -244,9 +244,24 @@ namespace hooks {
 
 	void __fastcall cheat::frame_stage_notify( std::uintptr_t thisptr, int stage )
 	{
-		if ( systems::g_entities.is_empty( ) )
+		const auto local_player_controller = memory::safe_read<std::uintptr_t>( addresses::globals::local_player_controller ).value_or( 0 );
+		static bool was_connected{ false };
+
+		if ( !local_player_controller )
 		{
-			systems::g_entities.force_update( );
+			if ( was_connected )
+			{
+				was_connected = false;
+				do_level_shutdown( );
+			}
+		}
+		else
+		{
+			was_connected = true;
+			if ( systems::g_entities.is_empty( ) )
+			{
+				systems::g_entities.force_update( );
+			}
 		}
 
 		systems::g_local.update( );
@@ -556,20 +571,24 @@ namespace hooks {
 	{
 		if ( glow_property )
 		{
-			const auto owner_entity = memory::read<std::uintptr_t>( glow_property + 0x18 );
+			const auto owner_entity = memory::safe_read<std::uintptr_t>( glow_property + 0x18 ).value_or( 0 );
 			if ( owner_entity )
 			{
-				const auto owner_hash = fnv1a::runtime_hash( systems::g_entities.get_schema_name( owner_entity ) );
-				if ( owner_hash )
+				const auto schema_name = systems::g_entities.get_schema_name( owner_entity );
+				if ( schema_name )
 				{
-					if ( features::esp::player::g_glow.on_is_glowing( owner_entity, owner_hash ) )
+					const auto owner_hash = fnv1a::runtime_hash( schema_name );
+					if ( owner_hash )
 					{
-						return true;
-					}
+						if ( features::esp::player::g_glow.on_is_glowing( owner_entity, owner_hash ) )
+						{
+							return true;
+						}
 
-					if ( features::esp::item::g_glow.on_is_glowing( owner_entity, owner_hash ) )
-					{
-						return true;
+						if ( features::esp::item::g_glow.on_is_glowing( owner_entity, owner_hash ) )
+						{
+							return true;
+						}
 					}
 				}
 			}
@@ -582,20 +601,24 @@ namespace hooks {
 	{
 		if ( glow_property )
 		{
-			const auto owner_entity = memory::read<std::uintptr_t>( glow_property + 0x18 );
+			const auto owner_entity = memory::safe_read<std::uintptr_t>( glow_property + 0x18 ).value_or( 0 );
 			if ( owner_entity )
 			{
-				const auto owner_hash = fnv1a::runtime_hash( systems::g_entities.get_schema_name( owner_entity ) );
-				if ( owner_hash )
+				const auto schema_name = systems::g_entities.get_schema_name( owner_entity );
+				if ( schema_name )
 				{
-					if ( features::esp::player::g_glow.on_get_glow_color( owner_entity, owner_hash, color ) )
+					const auto owner_hash = fnv1a::runtime_hash( schema_name );
+					if ( owner_hash )
 					{
-						return;
-					}
+						if ( features::esp::player::g_glow.on_get_glow_color( owner_entity, owner_hash, color ) )
+						{
+							return;
+						}
 
-					if ( features::esp::item::g_glow.on_get_glow_color( owner_entity, owner_hash, color ) )
-					{
-						return;
+						if ( features::esp::item::g_glow.on_get_glow_color( owner_entity, owner_hash, color ) )
+						{
+							return;
+						}
 					}
 				}
 			}
@@ -620,19 +643,22 @@ namespace hooks {
 				return;
 			}
 
-			const auto owner_handle = memory::read<std::uint32_t>( scene_object + 0xc0 );
+			const auto owner_handle = memory::safe_read<std::uint32_t>( scene_object + 0xc0 ).value_or( 0 );
 			if ( owner_handle )
 			{
 				const auto owner_entity = systems::g_entities.lookup( owner_handle );
 				if ( owner_entity )
 				{
-					const auto owner_hash = fnv1a::runtime_hash( systems::g_entities.get_schema_name( owner_entity ) );
-					if ( owner_hash )
+					const auto schema_name = systems::g_entities.get_schema_name( owner_entity );
+					if ( schema_name )
 					{
-						if ( features::esp::player::g_chams.on_generate_primitives( owner_entity, owner_hash, scene_object, primitive_buffer, m_generate_primitives.original<void( __fastcall* )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t )>( ), thisptr, scene_view ) )
+						const auto owner_hash = fnv1a::runtime_hash( schema_name );
+						if ( owner_hash )
 						{
-							return;
-						}
+							if ( features::esp::player::g_chams.on_generate_primitives( owner_entity, owner_hash, scene_object, primitive_buffer, m_generate_primitives.original<void( __fastcall* )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t )>( ), thisptr, scene_view ) )
+							{
+								return;
+							}
 
 						if ( features::esp::item::g_chams.on_generate_primitives( owner_entity, owner_hash, scene_object, primitive_buffer, m_generate_primitives.original<void( __fastcall* )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t )>( ), thisptr, scene_view ) )
 						{
@@ -652,6 +678,7 @@ namespace hooks {
 				}
 			}
 		}
+	}
 
 		m_generate_primitives.call<void>( thisptr, scene_object, scene_view, primitive_buffer );
 	}
@@ -954,9 +981,9 @@ namespace hooks {
 		return m_level_initialization.call<std::uintptr_t>( a1, new_map );
 	}
 
-	std::uintptr_t __fastcall cheat::level_shutdown( std::uintptr_t a1 )
+	void cheat::do_level_shutdown( )
 	{
-		rendering::g_widgets.s_map_name.clear();
+		rendering::g_widgets.s_map_name.clear( );
 		settings::g_world.update_active( "" );
 
 		// Release feature-owned scene objects before Source 2 tears their parents down.
@@ -985,8 +1012,15 @@ namespace hooks {
 		// clear all local player data on level shutdown
 		systems::g_local.reset( );
 
-		detail::g_vm_anim.initialized = false;
+		systems::g_model_preview.reset( );
+		features::combat::g_shared.lc( ).clear( );
 
+		detail::g_vm_anim.initialized = false;
+	}
+
+	std::uintptr_t __fastcall cheat::level_shutdown( std::uintptr_t a1 )
+	{
+		do_level_shutdown( );
 		return m_level_shutdown.call<std::uintptr_t>( a1 );
 	}
 
@@ -1260,11 +1294,11 @@ namespace hooks {
 			}
 		}
 
-		const auto argc = *reinterpret_cast<const std::int32_t*>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x438 );
+		const auto argc = memory::safe_read<std::int32_t>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x438 ).value_or( 0 );
 		const char* cmd_name = "";
 		if ( argc > 0 )
 		{
-			const auto str_ptr = *reinterpret_cast<const char* const*>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x10 );
+			const auto str_ptr = memory::safe_read<const char*>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x10 ).value_or( nullptr );
 			if ( str_ptr )
 			{
 				cmd_name = str_ptr;

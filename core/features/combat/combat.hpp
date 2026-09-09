@@ -64,6 +64,12 @@ namespace features::combat {
 
 			[[nodiscard]] std::optional<record> extrapolate( std::uintptr_t pawn );
 
+			void clear( )
+			{
+				std::unique_lock records_lock( this->m_records_mtx );
+				this->m_records.clear( );
+			}
+
 		private:
 			void predict_movement( extrapolation_data& data, std::uintptr_t skip_entity ) const;
 
