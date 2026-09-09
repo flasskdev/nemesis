@@ -4,6 +4,7 @@
 #include <core/settings.hpp>
 
 #include "../misc.hpp"
+#include <core/features/features.hpp>
 
 namespace features::misc {
 
@@ -48,7 +49,7 @@ namespace features::misc {
 		}
 
 		const auto local = systems::g_local.get( );
-		if ( !local.is_alive || systems::g_local.is_in_cinematic( ) || local.team < 2 )
+		if ( !local.is_alive || systems::g_local.is_in_cinematic( ) || local.team < 2 || features::misc::g_camera.is_freecam_active( ) )
 		{
 			return;
 		}

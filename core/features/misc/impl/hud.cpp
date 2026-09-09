@@ -216,7 +216,7 @@ namespace features::misc {
 	void hud::do_hat( xdraw::draw_list& draw_list, std::uintptr_t local_pawn ) const
 	{
 		const auto& cfg = settings::g_misc.m_hud.m_hat;
-		if ( !cfg.enabled || !systems::g_frame_data.valid( ) || !settings::g_misc.m_camera.thirdperson.value )
+		if ( !cfg.enabled || !systems::g_frame_data.valid( ) || ( !settings::g_misc.m_camera.thirdperson.value && !features::misc::g_camera.is_freecam_active( ) ) )
 		{
 			return;
 		}

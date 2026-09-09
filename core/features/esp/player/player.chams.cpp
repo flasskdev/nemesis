@@ -64,7 +64,7 @@ namespace features::esp::player {
 				return false;
 			}
 
-			if ( !settings::g_misc.m_camera.thirdperson.value || !is_local_attachment( systems::g_local.get( ).view_pawn( ) ) )
+			if ( ( !settings::g_misc.m_camera.thirdperson.value && !features::misc::g_camera.is_freecam_active( ) ) || !is_local_attachment( systems::g_local.get( ).view_pawn( ) ) )
 			{
 				return false;
 			}

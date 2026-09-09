@@ -44,11 +44,11 @@ namespace rendering {
 		{
 			xui::section_header("AIMBOT MAIN");
 
-			xui::toggle( "Enable Ragebot", rb.enabled, "Activate automated targeting engine" );
+			xui::toggle( "Enable Ragebot", rb.enabled );
 			xui::layout::spacing( 3.0f );
             xui::combo("Weapon Group", detail::weapon_group_idx, detail::weapon_group_items, 6);
             auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
-            xui::toggle("Silent Aim", wg.silent, "Aim without moving the screen view");
+            xui::toggle("Silent Aim", wg.silent);
 			xui::layout::spacing( 3.0f );
 			xui::slider_float( "Field of View", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
 
@@ -74,8 +74,8 @@ namespace rendering {
             auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
 			xui::section_header("ACCURACY ENGINE");
 
-            xui::toggle("Auto Stop", wg.autostop, "Decelerate before taking a shot");
-            xui::toggle("Auto Scope", autos.scope, "Scope automatically with sniper rifles");
+            xui::toggle("Auto Stop", wg.autostop);
+            xui::toggle("Auto Scope", autos.scope);
             xui::layout::spacing(8.0f);
             xui::layout::separator();
             xui::layout::spacing(8.0f);

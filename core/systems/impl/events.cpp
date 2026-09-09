@@ -29,6 +29,16 @@ namespace systems {
 			return false;
 		}
 
+		if ( !register_listener( xs( "vote_cast" ), [ ]( void* event ) { features::misc::g_vote_logs.on_vote_cast( reinterpret_cast< std::uintptr_t >( event ) ); } ) )
+		{
+			return false;
+		}
+
+		if ( !register_listener( xs( "vote_failed" ), [ ]( void* event ) { features::misc::g_vote_logs.on_vote_failed_event( reinterpret_cast< std::uintptr_t >( event ) ); } ) )
+		{
+			return false;
+		}
+
 		return true;
 	}
 

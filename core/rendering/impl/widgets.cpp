@@ -9,6 +9,7 @@
 #include "../rendering.hpp"
 #include "../theme.hpp"
 #include <utilities/security/security.hpp>
+#include <utilities/steam/steam.hpp>
 
 namespace rendering {
 
@@ -31,6 +32,21 @@ namespace rendering {
 		if ( settings::g_misc.m_widgets.keybinds_list.value )
 		{
 			this->keybinds( dl );
+		}
+		else
+		{
+			this->m_keybinds_hovered = false;
+			this->m_keybinds_dragging = false;
+		}
+
+		if ( settings::g_misc.m_widgets.spectator_list.value )
+		{
+			this->spectators( dl );
+		}
+		else
+		{
+			this->m_spectators_hovered = false;
+			this->m_spectators_dragging = false;
 		}
 
 		xdraw::pop_font( );
@@ -158,40 +174,72 @@ namespace rendering {
             widths.back() += gap + item.width;
             rows.back().push_back(std::move(item));
         }
+        const auto master_opacity = std::clamp( wm.opacity.value, 0.0f, 100.0f ) / 100.0f;
+        const auto tint = [master_opacity]( xdraw::color c ) -> xdraw::color {
+            return c.alpha( static_cast<std::uint8_t>( c.a * master_opacity ) );
+        };
+
+        // Position enum: 0=top-left, 1=top-center, 2=top-right, 3=bottom-left, 4=bottom-center, 5=bottom-right
+        const auto pos = std::clamp( wm.position.value, 0, 5 );
+        const bool is_bottom = pos >= 3;
+        const bool is_left   = pos == 0 || pos == 3;
+        const bool is_center = pos == 1 || pos == 4;
+
         for (std::size_t row = 0; row < rows.size(); ++row)
         {
-            const auto width = widths[row];
-            const auto x = std::max(4.0f, static_cast<float>(screen_w) - width - 12.0f);
-            const auto y = 12.0f + row * (height + 5.0f);
-            draw_list.rect_filled(x - 2.0f, y + 3.0f, width + 4.0f, height + 2.0f,
-                xdraw::color{0,0,0,30}, xdraw::corner_radius{9.0f});
-            draw_list.rect_filled(x, y, width, height, tokens::col_card, xdraw::corner_radius{7.0f});
-            draw_list.rect(x, y, width, height, tokens::col_border, xdraw::corner_radius{7.0f});
-            draw_list.rect_filled_gradient(x + 10.0f, y, width - 20.0f, 1.5f,
-                tokens::col_accent.alpha(0), tokens::col_accent.alpha(180),
-                tokens::col_accent.alpha(180), tokens::col_accent.alpha(0));
+            const auto w = widths[row];
+
+            // X anchor
+            float x;
+            if (is_left)
+                x = 12.0f;
+            else if (is_center)
+                x = (static_cast<float>(screen_w) - w) * 0.5f;
+            else // right
+                x = std::max(4.0f, static_cast<float>(screen_w) - w - 12.0f);
+
+            // Y anchor
+            float y;
+            if (is_bottom)
+                y = static_cast<float>(screen_h) - 12.0f - static_cast<float>(rows.size() - row) * (height + 5.0f) + 5.0f;
+            else
+                y = 12.0f + row * (height + 5.0f);
+
+            draw_list.rect_filled(x - 2.0f, y + 3.0f, w + 4.0f, height + 2.0f,
+                tint({0,0,0,30}), xdraw::corner_radius{9.0f});
+            draw_list.rect_filled(x, y, w, height, tint(tokens::col_card), xdraw::corner_radius{7.0f});
+            draw_list.rect(x, y, w, height, tint(tokens::col_border), xdraw::corner_radius{7.0f});
+            const auto accent_x = x + 10.0f;
+            const auto accent_w = std::max(0.0f, w - 20.0f);
+            const auto half_w = accent_w * 0.5f;
+            const auto edge = tint(tokens::col_accent.alpha(0));
+            const auto center = tint(tokens::col_accent.alpha(180));
+            draw_list.rect_filled_gradient(accent_x, y, half_w, 1.5f,
+                edge, center, center, edge);
+            draw_list.rect_filled_gradient(accent_x + half_w, y, half_w, 1.5f,
+                center, edge, edge, center);
             auto cx = x + pad;
             if (row == 0)
             {
-                draw_list.rect_filled(cx, y + 6.0f, 22.0f, 22.0f, tokens::col_elevated, xdraw::corner_radius{5.0f});
-                draw_list.rect(cx, y + 6.0f, 22.0f, 22.0f, tokens::col_accent.alpha(110), xdraw::corner_radius{5.0f});
+                draw_list.rect_filled(cx, y + 6.0f, 22.0f, 22.0f, tint(tokens::col_elevated), xdraw::corner_radius{5.0f});
+                draw_list.rect(cx, y + 6.0f, 22.0f, 22.0f, tint(tokens::col_accent.alpha(110)), xdraw::corner_radius{5.0f});
                 xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
                 const auto [mw, mh] = xdraw::measure_text("M");
-                draw_list.text(cx + (22.0f - mw) * 0.5f, y + (height - mh) * 0.5f, "M", tokens::col_accent);
+                draw_list.text(cx + (22.0f - mw) * 0.5f, y + (height - mh) * 0.5f, "M", tint(tokens::col_accent));
                 xdraw::pop_font();
                 const auto th = xdraw::measure_text("mintaly").second;
-                draw_list.text(cx + 29.0f, y + (height - th) * 0.5f, "mintaly", tokens::col_text);
+                draw_list.text(cx + 29.0f, y + (height - th) * 0.5f, "mintaly", tint(tokens::col_text));
                 cx += brand_width;
             }
             for (const auto& item : rows[row])
             {
-                draw_list.line(cx + gap * 0.5f, y + 10.0f, cx + gap * 0.5f, y + height - 10.0f, tokens::col_border);
+                draw_list.line(cx + gap * 0.5f, y + 10.0f, cx + gap * 0.5f, y + height - 10.0f, tint(tokens::col_border));
                 cx += gap;
                 const auto [vw, vh] = xdraw::measure_text(item.value);
                 const auto uh = xdraw::measure_text(item.unit).second;
-                draw_list.text(cx + 11.0f, y + (height - vh) * 0.5f, item.value, tokens::col_text);
+                draw_list.text(cx + 11.0f, y + (height - vh) * 0.5f, item.value, tint(tokens::col_text));
                 if (!item.unit.empty())
-                    draw_list.text(cx + 11.0f + vw, y + (height - uh) * 0.5f, item.unit, tokens::col_text_dim);
+                    draw_list.text(cx + 11.0f + vw, y + (height - uh) * 0.5f, item.unit, tint(tokens::col_text_dim));
                 cx += item.width;
             }
         }
@@ -383,20 +431,16 @@ namespace rendering {
 
 		container_alpha.update( );
 		if ( !container_alpha.visible( ) )
+		{
+			this->m_keybinds_hovered = false;
+			this->m_keybinds_dragging = false;
 			return;
+		}
 
 		const auto master_alpha = container_alpha.alpha( );
-		const auto total_h = header_h + row_spacing + ( static_cast< float >( count ) * ( row_h + row_spacing ) );
-		const auto target_base_y = ( static_cast< float >( screen_h ) * 0.5f ) - ( total_h * 0.5f );
-
-		smoothed_base_y.set_target( target_base_y );
-		smoothed_base_y.update( );
-
-		const auto base_ry = smoothed_base_y.value( );
-		const auto x = margin;
-
-		static auto icon_w_px = 0, icon_h_px = 0;
-		static const auto kb_icon = xdraw::load_svg( R"(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.78571 4.07143C2.53142 4.07143 2.28285 3.99602 2.07141 3.85475C1.85998 3.71347 1.69518 3.51267 1.59787 3.27774C1.50056 3.0428 1.4751 2.78429 1.52471 2.53488C1.57431 2.28548 1.69677 2.05639 1.87658 1.87658C2.05639 1.69677 2.28548 1.57431 2.53488 1.52471C2.78429 1.4751 3.0428 1.50056 3.27774 1.59787C3.51267 1.69518 3.71347 1.85998 3.85475 2.07141C3.99602 2.28285 4.07143 2.53142 4.07143 2.78571V9.21429C4.07143 9.46858 3.99602 9.71716 3.85475 9.92859C3.71347 10.14 3.51267 10.3048 3.27774 10.4021C3.0428 10.4994 2.78429 10.5249 2.53488 10.4753C2.28548 10.4257 2.05639 10.3032 1.87658 10.1234C1.69677 9.94361 1.57431 9.71452 1.52471 9.46512C1.4751 9.21571 1.50056 8.9572 1.59787 8.72226C1.69518 8.48733 1.85998 8.28653 2.07141 8.14525C2.28285 8.00398 2.53142 7.92857 2.78571 7.92857H9.21429C9.46858 7.92857 9.71716 8.00398 9.92859 8.14525C10.14 8.28653 10.3048 8.48733 10.4021 8.72226C10.4994 8.9572 10.5249 9.21571 10.4753 9.46512C10.4257 9.71452 10.3032 9.94361 10.1234 10.1234C9.94361 10.3032 9.71452 10.4257 9.46512 10.4753C9.21571 10.5249 8.9572 10.4994 8.72226 10.4021C8.48733 10.3048 8.28653 10.14 8.14525 9.92859C8.00398 9.71716 7.92857 9.46858 7.92857 9.21429V2.78571C7.92857 2.53142 8.00398 2.28285 8.14525 2.07141C8.28653 1.85998 8.48733 1.69518 8.72226 1.59787C8.9572 1.50056 9.21571 1.4751 9.46512 1.52471C9.71452 1.57431 9.94361 1.69677 10.1234 1.87658C10.3032 2.05639 10.4257 2.28548 10.4753 2.53488C10.5249 2.78429 10.4994 3.0428 10.4021 3.27774C10.3048 3.51267 10.14 3.71347 9.92859 3.85475C9.71716 3.99602 9.46858 4.07143 9.21429 4.07143H2.78571Z" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/></svg>)", 1.0f, &icon_w_px, &icon_h_px );
+		const auto total_h = ( count > 0 )
+			? ( header_h + row_spacing + ( static_cast< float >( count ) * ( row_h + row_spacing ) ) )
+			: header_h;
 
 		const auto [header_tw, header_th] = xdraw::measure_text( "keybinds" );
 		const auto header_w = inner_pad + icon_size + inner_pad + header_tw + text_pad_x * 2.0f + inner_pad;
@@ -404,8 +448,109 @@ namespace rendering {
 		const auto inner_h = row_h - inner_pad * 2.0f;
 		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
 
+		float max_w = header_w;
+		for ( auto i = 0; i < count; ++i )
+		{
+			const auto& e = entries[ i ];
+			const auto [nw, nh] = xdraw::measure_text( e.name );
+			float row_w = inner_pad + ( nw + text_pad_x * 2.0f ) + inner_pad;
+			if ( e.has_value_pill )
+			{
+				const auto [vw, vh] = xdraw::measure_text( e.value );
+				row_w += ( vw + text_pad_x * 2.0f ) + inner_pad;
+			}
+			if ( row_w > max_w )
+			{
+				max_w = row_w;
+			}
+		}
+
+		auto& widgets_cfg = settings::g_misc.m_widgets;
+		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - header_w );
+		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - header_h );
+
+		float current_x = widgets_cfg.keybinds_x.value;
+		float current_y = widgets_cfg.keybinds_y.value;
+		const bool has_custom_pos = ( current_x >= 0.0f && current_y >= 0.0f );
+
+		const auto target_base_y = ( static_cast< float >( screen_h ) * 0.5f ) - ( total_h * 0.5f );
+		if ( !has_custom_pos )
+		{
+			smoothed_base_y.set_target( target_base_y );
+			smoothed_base_y.update( );
+			current_x = margin;
+			current_y = smoothed_base_y.value( );
+		}
+		else
+		{
+			smoothed_base_y.snap( current_y );
+			current_x = std::clamp( current_x, 0.0f, max_screen_x );
+			current_y = std::clamp( current_y, 0.0f, max_screen_y );
+		}
+
+		// Drag handling when menu is open
+		static bool s_last_mouse_down{ false };
+		static bool s_is_dragging{ false };
+		static float s_drag_offset_x{ 0.0f };
+		static float s_drag_offset_y{ 0.0f };
+
+		const auto& input = xui::ctx( ).input;
+		const bool lbutton_phys = ( GetAsyncKeyState( VK_LBUTTON ) & 0x8000 ) != 0;
+		const bool mouse_down = input.mouse_down && lbutton_phys;
+		const bool mouse_clicked = mouse_down && !s_last_mouse_down;
+		const bool menu_open = g_menu.is_open( );
+
+		const xui::rect widget_rect{ current_x, current_y, max_w, total_h };
+		const bool hovered = menu_open && widget_rect.contains( input.mouse_x, input.mouse_y );
+
+		this->m_keybinds_hovered = hovered;
+
+		if ( !menu_open || !mouse_down )
+		{
+			s_is_dragging = false;
+		}
+
+		const bool can_start_drag = menu_open
+			&& !this->m_spectators_dragging
+			&& !xui::ctx( ).overlay_blocking( )
+			&& xui::ctx( ).active_window == xui::null_id
+			&& xui::ctx( ).active_slider == xui::null_id
+			&& xui::ctx( ).active_resize == xui::null_id
+			&& xui::ctx( ).active_text_input == xui::null_id
+			&& xui::ctx( ).active_child_scroll == xui::null_id;
+
+		if ( can_start_drag && hovered && mouse_clicked )
+		{
+			s_is_dragging = true;
+			s_drag_offset_x = input.mouse_x - current_x;
+			s_drag_offset_y = input.mouse_y - current_y;
+		}
+
+		if ( s_is_dragging )
+		{
+			current_x = std::clamp( input.mouse_x - s_drag_offset_x, 0.0f, max_screen_x );
+			current_y = std::clamp( input.mouse_y - s_drag_offset_y, 0.0f, max_screen_y );
+
+			widgets_cfg.keybinds_x = current_x;
+			widgets_cfg.keybinds_y = current_y;
+		}
+
+		this->m_keybinds_dragging = s_is_dragging;
+		s_last_mouse_down = mouse_down;
+
+		const auto x = current_x;
+		const auto base_ry = current_y;
+
+		static auto icon_w_px = 0, icon_h_px = 0;
+		static const auto kb_icon = xdraw::load_svg( R"(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.78571 4.07143C2.53142 4.07143 2.28285 3.99602 2.07141 3.85475C1.85998 3.71347 1.69518 3.51267 1.59787 3.27774C1.50056 3.0428 1.4751 2.78429 1.52471 2.53488C1.57431 2.28548 1.69677 2.05639 1.87658 1.87658C2.05639 1.69677 2.28548 1.57431 2.53488 1.52471C2.78429 1.4751 3.0428 1.50056 3.27774 1.59787C3.51267 1.69518 3.71347 1.85998 3.85475 2.07141C3.99602 2.28285 4.07143 2.53142 4.07143 2.78571V9.21429C4.07143 9.46858 3.99602 9.71716 3.85475 9.92859C3.71347 10.14 3.51267 10.3048 3.27774 10.4021C3.0428 10.4994 2.78429 10.5249 2.53488 10.4753C2.28548 10.4257 2.05639 10.3032 1.87658 10.1234C1.69677 9.94361 1.57431 9.71452 1.52471 9.46512C1.4751 9.21571 1.50056 8.9572 1.59787 8.72226C1.69518 8.48733 1.85998 8.28653 2.07141 8.14525C2.28285 8.00398 2.53142 7.92857 2.78571 7.92857H9.21429C9.46858 7.92857 9.71716 8.00398 9.92859 8.14525C10.14 8.28653 10.3048 8.48733 10.4021 8.72226C10.4994 8.9572 10.5249 9.21571 10.4753 9.46512C10.4257 9.71452 10.3032 9.94361 10.1234 10.1234C9.94361 10.3032 9.71452 10.4257 9.46512 10.4753C9.21571 10.5249 8.9572 10.4994 8.72226 10.4021C8.48733 10.3048 8.28653 10.14 8.14525 9.92859C8.00398 9.71716 7.92857 9.46858 7.92857 9.21429V2.78571C7.92857 2.53142 8.00398 2.28285 8.14525 2.07141C8.28653 1.85998 8.48733 1.69518 8.72226 1.59787C8.9572 1.50056 9.21571 1.4751 9.46512 1.52471C9.71452 1.57431 9.94361 1.69677 10.1234 1.87658C10.3032 2.05639 10.4257 2.28548 10.4753 2.53488C10.5249 2.78429 10.4994 3.0428 10.4021 3.27774C10.3048 3.51267 10.14 3.71347 9.92859 3.85475C9.71716 3.99602 9.46858 4.07143 9.21429 4.07143H2.78571Z" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/></svg>)", 1.0f, &icon_w_px, &icon_h_px );
+
 		draw_list.rect_filled_blurred( x, base_ry, header_w, header_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, master_u8 } );
 		draw_list.rect_filled( x, base_ry, header_w, header_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * master_alpha ) ), xdraw::corner_radius{ r } );
+		if ( menu_open && ( hovered || s_is_dragging ) )
+		{
+			const auto border_alpha = static_cast< std::uint8_t >( ( s_is_dragging ? 170.0f : 100.0f ) * master_alpha );
+			draw_list.rect( x, base_ry, header_w, header_h, s.accent.alpha( border_alpha ), xdraw::corner_radius{ r }, 1.0f );
+		}
 		draw_list.rect_filled( x + inner_pad, base_ry + inner_pad, icon_size, header_inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
 
 		if ( kb_icon )
@@ -497,6 +642,384 @@ namespace rendering {
 
 				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
 				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
+			}
+			++it;
+		}
+	}
+
+	void widgets::spectators( xdraw::draw_list& draw_list )
+	{
+		struct avatar_cache
+		{
+			struct entry
+			{
+				Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> texture{};
+				bool attempted{};
+			};
+
+			std::unordered_map<std::uintptr_t, entry> m_entries{};
+
+			[[nodiscard]] ID3D11ShaderResourceView* get( std::uintptr_t steam_id )
+			{
+				auto it = this->m_entries.find( steam_id );
+				if ( it != this->m_entries.end( ) )
+				{
+					return it->second.texture.Get( );
+				}
+
+				auto& e = this->m_entries[ steam_id ];
+				e.attempted = true;
+
+				const auto image_handle = steam::friends::get_medium_friend_avatar( steam_id );
+				if ( image_handle <= 0 )
+				{
+					return nullptr;
+				}
+
+				std::uint32_t w{}, h{};
+				if ( !steam::utils::get_image_size( image_handle, &w, &h ) || !w || !h )
+				{
+					return nullptr;
+				}
+
+				std::vector<std::uint8_t> rgba( w * h * 4 );
+				if ( !steam::utils::get_image_rgba( image_handle, rgba.data( ), static_cast< int >( rgba.size( ) ) ) )
+				{
+					return nullptr;
+				}
+
+				e.texture = xdraw::create_srv_from_rgba( rgba.data( ), static_cast< int >( w ), static_cast< int >( h ) );
+				return e.texture.Get( );
+			}
+
+			void clear( )
+			{
+				this->m_entries.clear( );
+			}
+		};
+
+		static avatar_cache avatars{};
+
+		struct row_anim_t
+		{
+			animation::fade alpha;
+			animation::spring offset_y;
+			bool active_this_frame{ false };
+		};
+
+		static std::map<std::string, row_anim_t> row_states;
+		static animation::fade container_alpha;
+		static animation::spring smoothed_base_y;
+
+		const auto [screen_w, screen_h] = xdraw::viewport_size( );
+		const auto& s = xui::ctx( ).style;
+
+		constexpr auto margin{ 10.0f };
+		constexpr auto row_spacing{ 3.0f };
+		constexpr auto row_h{ 24.0f };
+		constexpr auto header_h{ 24.0f };
+		constexpr auto r{ 8.0f };
+		constexpr auto inner_r{ 6.0f };
+		constexpr auto inner_pad{ 2.0f };
+		constexpr auto text_pad_x{ 8.0f };
+		constexpr auto text_nudge{ 0.5f };
+		constexpr auto icon_size{ 20.0f };
+		constexpr auto icon_inner_pad{ 4.0f };
+		constexpr auto avatar_pill_size{ 20.0f };
+
+		struct spectator_entry
+		{
+			char name[ 128 ];
+			std::uintptr_t steam_id;
+		};
+
+		spectator_entry entries[ 32 ]{};
+		auto count{ 0 };
+
+		const auto local = systems::g_local.get( );
+		const auto game_rules = memory::read<std::uintptr_t>( addresses::globals::game_rules );
+		const bool game_in_progress = game_rules && memory::read<int>( game_rules + SCHEMA( "C_CSGameRules", "m_gamePhase"_hash ) ) < 4;
+
+		if ( local.is_valid( ) && systems::g_entities.exists( local.view_controller( ) ) && game_in_progress )
+		{
+			const auto local_controller = local.controller;
+			const auto view_controller = local.view_controller( );
+			const auto view_pawn = local.view_pawn( );
+			if ( view_pawn )
+			{
+				for ( const auto& player : systems::g_entities.get_by_type( systems::entities::type::player ) )
+				{
+					if ( player.ptr == view_controller || player.ptr == local_controller || count >= 32 )
+					{
+						continue;
+					}
+
+					if ( memory::read<bool>( player.ptr + SCHEMA( "CCSPlayerController", "m_bPawnIsAlive"_hash ) ) )
+					{
+						continue;
+					}
+
+					const auto obs_pawn_handle = memory::read<std::uint32_t>( player.ptr + SCHEMA( "CCSPlayerController", "m_hObserverPawn"_hash ) );
+					if ( !obs_pawn_handle || obs_pawn_handle == 0xffffffff )
+					{
+						continue;
+					}
+
+					const auto obs_pawn = systems::g_entities.lookup( obs_pawn_handle );
+					if ( !obs_pawn )
+					{
+						continue;
+					}
+
+					const auto observer_services = memory::safe_read<std::uintptr_t>( obs_pawn + SCHEMA( "C_BasePlayerPawn", "m_pObserverServices"_hash ) ).value_or( 0 );
+					if ( !observer_services || ( observer_services >> 48 ) != 0 )
+					{
+						continue;
+					}
+
+					const auto observer_target_handle = memory::safe_read<std::uint32_t>( observer_services + SCHEMA( "CPlayer_ObserverServices", "m_hObserverTarget"_hash ) ).value_or( 0 );
+					if ( !observer_target_handle )
+					{
+						continue;
+					}
+
+					const auto observer_target = systems::g_entities.lookup( observer_target_handle );
+					if ( observer_target != view_pawn )
+					{
+						continue;
+					}
+
+					const auto name_ptr = memory::read<std::uintptr_t>( player.ptr + SCHEMA( "CCSPlayerController", "m_sSanitizedPlayerName"_hash ) );
+					if ( !name_ptr )
+					{
+						continue;
+					}
+
+					auto name = memory::read_string( name_ptr, 127 );
+					std::ranges::transform( name, name.begin( ), [ ]( unsigned char c ) { return std::tolower( c ); } );
+
+					auto& e = entries[ count++ ];
+					strncpy_s( e.name, name.c_str( ), sizeof( e.name ) - 1 );
+					e.name[ sizeof( e.name ) - 1 ] = '\0';
+					e.steam_id = memory::read<std::uintptr_t>( player.ptr + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+				}
+			}
+		}
+
+		if ( count > 0 || g_menu.is_open( ) )
+			container_alpha.fade_in( 0.2f );
+		else
+			container_alpha.fade_out( 0.2f );
+
+		container_alpha.update( );
+		if ( !container_alpha.visible( ) )
+		{
+			this->m_spectators_hovered = false;
+			this->m_spectators_dragging = false;
+			return;
+		}
+
+		const auto master_alpha = container_alpha.alpha( );
+		const auto total_h = ( count > 0 )
+			? ( header_h + row_spacing + ( static_cast< float >( count ) * ( row_h + row_spacing ) ) )
+			: header_h;
+
+		const auto [header_tw, header_th] = xdraw::measure_text( "spectators" );
+		const auto header_w = inner_pad + icon_size + inner_pad + header_tw + text_pad_x * 2.0f + inner_pad;
+		const auto header_inner_h = header_h - inner_pad * 2.0f;
+		const auto inner_h = row_h - inner_pad * 2.0f;
+		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
+
+		float max_w = header_w;
+		for ( auto i = 0; i < count; ++i )
+		{
+			const auto& e = entries[ i ];
+			const auto [nw, nh] = xdraw::measure_text( e.name );
+			const auto avatar_tex = avatars.get( e.steam_id );
+			const auto has_avatar = avatar_tex != nullptr;
+			const auto name_pill_w = nw + text_pad_x * 2.0f;
+			const auto row_w = inner_pad + name_pill_w + ( has_avatar ? inner_pad + avatar_pill_size : 0.0f ) + inner_pad;
+			if ( row_w > max_w )
+				max_w = row_w;
+		}
+
+		auto& widgets_cfg = settings::g_misc.m_widgets;
+		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - header_w );
+		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - header_h );
+
+		float current_x = widgets_cfg.spectator_x.value;
+		float current_y = widgets_cfg.spectator_y.value;
+		const bool has_custom_pos = ( current_x >= 0.0f && current_y >= 0.0f );
+
+		const auto target_base_y = ( static_cast< float >( screen_h ) * 0.5f ) - ( total_h * 0.5f );
+		if ( !has_custom_pos )
+		{
+			smoothed_base_y.set_target( target_base_y );
+			smoothed_base_y.update( );
+			current_x = std::max( 0.0f, static_cast< float >( screen_w ) - header_w - margin );
+			current_y = smoothed_base_y.value( );
+		}
+		else
+		{
+			smoothed_base_y.snap( current_y );
+			current_x = std::clamp( current_x, 0.0f, max_screen_x );
+			current_y = std::clamp( current_y, 0.0f, max_screen_y );
+		}
+
+		// Drag handling when menu is open
+		static bool s_last_mouse_down{ false };
+		static bool s_is_dragging{ false };
+		static float s_drag_offset_x{ 0.0f };
+		static float s_drag_offset_y{ 0.0f };
+
+		const auto& input = xui::ctx( ).input;
+		const bool lbutton_phys = ( GetAsyncKeyState( VK_LBUTTON ) & 0x8000 ) != 0;
+		const bool mouse_down = input.mouse_down && lbutton_phys;
+		const bool mouse_clicked = mouse_down && !s_last_mouse_down;
+		const bool menu_open = g_menu.is_open( );
+
+		const xui::rect widget_rect{ current_x, current_y, max_w, total_h };
+		const bool hovered = menu_open && widget_rect.contains( input.mouse_x, input.mouse_y );
+
+		this->m_spectators_hovered = hovered;
+
+		if ( !menu_open || !mouse_down )
+		{
+			s_is_dragging = false;
+		}
+
+		const bool can_start_drag = menu_open
+			&& !this->m_keybinds_dragging
+			&& !xui::ctx( ).overlay_blocking( )
+			&& xui::ctx( ).active_window == xui::null_id
+			&& xui::ctx( ).active_slider == xui::null_id
+			&& xui::ctx( ).active_resize == xui::null_id
+			&& xui::ctx( ).active_text_input == xui::null_id
+			&& xui::ctx( ).active_child_scroll == xui::null_id;
+
+		if ( can_start_drag && hovered && mouse_clicked )
+		{
+			s_is_dragging = true;
+			s_drag_offset_x = input.mouse_x - current_x;
+			s_drag_offset_y = input.mouse_y - current_y;
+		}
+
+		if ( s_is_dragging )
+		{
+			current_x = std::clamp( input.mouse_x - s_drag_offset_x, 0.0f, max_screen_x );
+			current_y = std::clamp( input.mouse_y - s_drag_offset_y, 0.0f, max_screen_y );
+
+			widgets_cfg.spectator_x = current_x;
+			widgets_cfg.spectator_y = current_y;
+		}
+
+		this->m_spectators_dragging = s_is_dragging;
+		s_last_mouse_down = mouse_down;
+
+		const auto x = current_x;
+		const auto base_ry = current_y;
+
+		static auto icon_w_px = 0, icon_h_px = 0;
+		static const auto eye_icon = xdraw::load_svg( R"svg(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#clip0_155_223)"><path d="M5 6C5 6.26522 5.10536 6.51957 5.29289 6.70711C5.48043 6.89464 5.73478 7 6 7C6.26522 7 6.51957 6.89464 6.70711 6.70711C6.89464 6.51957 7 6.26522 7 6C7 5.73478 6.89464 5.48043 6.70711 5.29289C6.51957 5.10536 6.26522 5 6 5C5.73478 5 5.48043 5.10536 5.29289 5.29289C5.10536 5.48043 5 5.73478 5 6Z" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.515 8.739C7.02924 8.91426 6.51641 9.00261 6 9C4.2 9 2.7 8 1.5 6C2.7 4 4.2 3 6 3C7.8 3 9.3 4 10.5 6C10.4578 6.07035 10.4148 6.14019 10.371 6.2095" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 8V9.5" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 11V11.005" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/></g><defs><clipPath id="clip0_155_223"><rect width="12" height="12" fill="white"/></clipPath></defs></svg>)svg", 1.0f, &icon_w_px, &icon_h_px );
+
+		draw_list.rect_filled_blurred( x, base_ry, header_w, header_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, master_u8 } );
+		draw_list.rect_filled( x, base_ry, header_w, header_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * master_alpha ) ), xdraw::corner_radius{ r } );
+		if ( menu_open && ( hovered || s_is_dragging ) )
+		{
+			const auto border_alpha = static_cast< std::uint8_t >( ( s_is_dragging ? 170.0f : 100.0f ) * master_alpha );
+			draw_list.rect( x, base_ry, header_w, header_h, s.accent.alpha( border_alpha ), xdraw::corner_radius{ r }, 1.0f );
+		}
+		draw_list.rect_filled( x + inner_pad, base_ry + inner_pad, icon_size, header_inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
+
+		if ( eye_icon )
+		{
+			const auto icon_draw = icon_size - icon_inner_pad * 2.0f;
+			const auto ix = std::floor( x + inner_pad + icon_inner_pad );
+			const auto iy = std::floor( base_ry + inner_pad + ( header_inner_h - icon_draw ) * 0.5f + 1.0f );
+			draw_list.image( ix, iy, icon_draw, icon_draw, eye_icon.Get( ), s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * master_alpha ) ) );
+		}
+
+		const auto htx = x + inner_pad + icon_size + inner_pad;
+		const auto htw = header_tw + text_pad_x * 2.0f;
+		draw_list.rect_filled( htx, base_ry + inner_pad, htw, header_inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
+		draw_list.text( htx + text_pad_x, base_ry + ( header_h - header_th ) * 0.5f + text_nudge, "spectators", s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ) );
+
+		for ( auto& [name, state] : row_states )
+			state.active_this_frame = false;
+
+		float current_offset_y = header_h + row_spacing;
+		for ( auto i = 0; i < count; ++i )
+		{
+			const auto& e = entries[ i ];
+			auto& anim = row_states[ e.name ];
+
+			if ( !anim.active_this_frame && anim.alpha.alpha( ) <= 0.01f )
+				anim.offset_y.snap( current_offset_y );
+
+			anim.active_this_frame = true;
+			anim.alpha.fade_in( 0.2f );
+			anim.offset_y.set_target( current_offset_y );
+			anim.alpha.update( );
+			anim.offset_y.update( );
+
+			const auto row_alpha = anim.alpha.alpha( ) * master_alpha;
+			const auto draw_y = base_ry + anim.offset_y.value( );
+			const auto [nw, nh] = xdraw::measure_text( e.name );
+			const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
+
+			const auto avatar_tex = avatars.get( e.steam_id );
+			const auto has_avatar = avatar_tex != nullptr;
+
+			const auto name_pill_w = nw + text_pad_x * 2.0f;
+			const auto row_w = inner_pad + name_pill_w + ( has_avatar ? inner_pad + avatar_pill_size : 0.0f ) + inner_pad;
+
+			draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
+			draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
+
+			auto cx = x + inner_pad;
+			draw_list.rect_filled( cx, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
+			draw_list.text( cx + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
+			cx += name_pill_w;
+
+			if ( has_avatar )
+			{
+				cx += inner_pad;
+				const auto avatar_draw = inner_h;
+				const auto ay = draw_y + inner_pad;
+				draw_list.image( cx, ay, avatar_draw, avatar_draw, avatar_tex, xdraw::corner_radius{ inner_r }, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * row_alpha ) } );
+			}
+
+			current_offset_y += row_h + row_spacing;
+		}
+
+		for ( auto it = row_states.begin( ); it != row_states.end( ); )
+		{
+			if ( !it->second.active_this_frame )
+			{
+				it->second.alpha.fade_out( 0.2f );
+				it->second.alpha.update( );
+				it->second.offset_y.update( );
+
+				if ( it->second.alpha.alpha( ) <= 0.01f )
+				{
+					it = row_states.erase( it );
+					continue;
+				}
+
+				const auto row_alpha = it->second.alpha.alpha( ) * master_alpha;
+				const auto draw_y = base_ry + it->second.offset_y.value( );
+				const auto [nw, nh] = xdraw::measure_text( it->first.c_str( ) );
+				const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
+
+				const auto name_pill_w = nw + text_pad_x * 2.0f;
+				const auto row_w = inner_pad + name_pill_w + inner_pad;
+
+				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
+				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
+
+				auto cx = x + inner_pad;
+				draw_list.rect_filled( cx, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
+				draw_list.text( cx + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, it->first.c_str( ), s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
 			}
 			++it;
 		}

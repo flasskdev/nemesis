@@ -261,12 +261,22 @@ namespace features::misc {
 	{
 	public:
 		void on_override_view( std::uintptr_t view_setup );
+		void on_create_move( systems::input::usercmd* cmd );
 		void update_fov_sensitivity( std::uintptr_t player_pawn ) const;
+		void reset( );
+
+		[[nodiscard]] bool is_freecam_active( ) const noexcept { return this->m_was_freecam_active; }
 
 	private:
-		void do_thirdperson( std::uintptr_t view_setup, std::uintptr_t local_pawn ) const;
-		void do_fov_change( std::uintptr_t view_setup, std::uintptr_t local_pawn ) const;
+		bool do_freecam( std::uintptr_t view_setup );
+		void do_thirdperson( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const;
+		void do_fov_change( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const;
 		void do_aspect_ratio_change( std::uintptr_t view_setup );
+
+		math::vector3 m_freecam_pos{};
+		math::vector3 m_saved_viewangles{};
+		std::chrono::steady_clock::time_point m_last_override_time{};
+		bool m_was_freecam_active{ false };
 
 		mutable float m_cached_fov_sensitivity{ -1.0f };
 		mutable bool m_cached_scoped{};
@@ -334,8 +344,8 @@ namespace features::misc {
 		void on_round_start( );
 		void on_frame_stage_notify( );
 		void do_kill_feed_preservation( );
-		void do_viewmodel_adjust( );
 		void on_player_death( std::uintptr_t event );
+		void vote_kick_self( );
 
 		[[nodiscard]] bool is_alpha_changed( ) const { return this->m_is_alpha_changed; }
 
@@ -353,18 +363,6 @@ namespace features::misc {
 		std::string m_original_name{};
 		std::string m_last_sent_name{};
 		float m_last_spawntime{};
-		struct viewmodel_cvar_state
-		{
-			std::uintptr_t address{};
-			float original{};
-			bool captured{};
-		};
-		std::array<viewmodel_cvar_state, 4> m_vm_cvars{};
-		std::uintptr_t m_vm_owner{};
-		std::uintptr_t m_vm_preset_address{};
-		int m_vm_original_preset{};
-		bool m_vm_preset_captured{};
-		std::uint32_t m_vm_missing_mask{};
 	};
 
 	// this is so ghetto but fuck it for now it works
@@ -485,6 +483,51 @@ namespace features::misc {
 		// whenever it is opened and is resolved from JavaScript at update time.
 		c_ui_engine* m_ui_engine {};
 		c_ui_panel* m_script_panel {};
+	};
+
+	namespace detail {
+		void chat_print_raw( const char* formatted_msg );
+	}
+
+	class vote_logs {
+	public:
+		void on_vote_start( std::uintptr_t msg );
+		void on_vote_pass( std::uintptr_t msg );
+		void on_vote_failed( std::uintptr_t msg );
+		void on_vote_cast( std::uintptr_t event );
+		void on_vote_failed_event( std::uintptr_t event );
+		void reset( );
+
+	private:
+		void on_vote_finish( bool passed );
+
+		std::mutex m_mtx{};
+		bool m_vote_in_progress{ false };
+		int m_yes_votes{ 0 };
+		int m_no_votes{ 0 };
+		std::unordered_set<std::uintptr_t> m_voted_players{};
+		std::unordered_set<std::string> m_voted_names{};
+	};
+
+	class auto_accept {
+	public:
+		void run();
+		void reset();
+
+	private:
+		void accept_match();
+
+		using fn_is_match_waiting = bool(__fastcall*)();
+		using fn_get_ready_time = int(__fastcall*)(void*);
+
+		fn_is_match_waiting m_fn_is_match_waiting{ nullptr };
+		fn_get_ready_time m_fn_get_ready_time{ nullptr };
+		bool m_initialized{ false };
+
+		bool m_match_detected{ false };
+		bool m_accepted{ false };
+		std::chrono::steady_clock::time_point m_found_time{};
+		std::chrono::steady_clock::time_point m_last_check{};
 	};
 
 } // namespace features::misc

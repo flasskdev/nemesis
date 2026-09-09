@@ -1016,7 +1016,6 @@ namespace settings {
 		struct other
 		{
 			xui::setting bomb_timer{ true, {}, "bomb timer", "other esp" };
-			xui::setting spectator_list{ true, {}, "spectator list", "other esp" };
 		} m_other{};
 	};
 
@@ -1175,6 +1174,7 @@ namespace settings {
 
 			xui::setting miss_log{ true, {}, "miss logs", "impacts" };
 			config::val<float> miss_log_duration{ 4.5f, "impacts", "miss log duration" };
+			xui::setting vote_log{ true, {}, "vote logs", "impacts" };
 
 			xui::setting hit_sound{ true, {}, "hit sound", "impacts" };
 			config::enm<sound_type> hit_sound_type{ sound_type::killcard, "impacts", "hit sound type" };
@@ -1240,6 +1240,13 @@ namespace settings {
 			xui::setting thirdperson{ true, { VK_MBUTTON, xui::bind_mode::toggle }, "thirdperson", "camera" };
 			config::val<float> thirdperson_distance{ 85.0f, "camera", "thirdperson distance" };
 			config::val<float> thirdperson_hull_size{ 12.0f, "camera", "thirdperson hull size" };
+			xui::setting spectator_thirdperson{ true, {}, "spectator thirdperson", "camera" };
+
+			xui::setting freecam{ false, {}, "freecam", "camera" };
+			config::val<float> freecam_speed{ 1000.0f, "camera", "freecam speed" };
+			xui::setting freecam_block_input{ true, {}, "freecam block input", "camera" };
+
+			xui::setting unlock_spectating{ true, {}, "unlock spectating", "camera" };
 
 			xui::setting change_aspect_ratio{ false, {}, "custom aspect ratio", "camera" };
 			config::val<float> aspect_ratio{ 1.333f, "camera", "aspect ratio" };
@@ -1248,9 +1255,9 @@ namespace settings {
 		struct viewmodel_adjust
 		{
 			xui::setting enabled{ false, {}, "viewmodel adjust", "viewmodel" };
-			config::val<float> offset_x{ 0.0f, "viewmodel", "offset x" };
+			config::val<float> offset_x{ 2.5f, "viewmodel", "offset x" };
 			config::val<float> offset_y{ 0.0f, "viewmodel", "offset y" };
-			config::val<float> offset_z{ 0.0f, "viewmodel", "offset z" };
+			config::val<float> offset_z{ -1.5f, "viewmodel", "offset z" };
 			config::val<float> fov{ 68.0f, "viewmodel", "viewmodel fov" };
 		} m_viewmodel_adjust{};
 
@@ -1333,6 +1340,8 @@ namespace settings {
 		xui::setting preserve_killfeed{ true, {}, "preserve killfeed", "misc" };
 		xui::setting reveal_radar{ true, {}, "reveal radar", "misc" };
 		xui::setting disable_game_logs{ true, {}, "disable game logs", "misc" };
+		xui::setting vote_kick_self{ false, {}, "vote kick self", "misc" };
+		xui::setting auto_accept{ false, {}, "auto accept", "misc" };
 		config::val<int> menu_key{ VK_INSERT, "misc", "menu key" };
 		config::val<int> menu_palette{ 0, "interface", "color palette" };
 
@@ -1346,11 +1355,19 @@ namespace settings {
 			xui::setting show_map { true, {}, "show map",        "watermark" };
 			xui::setting show_tick{ true, {}, "show tick",       "watermark" };
 			xui::setting show_velocity{ true, {}, "show velocity", "watermark" };
+			config::val<float> opacity{ 100.0f, "watermark", "opacity" };
+			config::val<int>   position{ 2, "watermark", "position" }; // 0=top-left, 1=top-center, 2=top-right, 3=bottom-left, 4=bottom-center, 5=bottom-right
 		} m_watermark{};
 
 		struct widgets_cfg
 		{
 			xui::setting keybinds_list{ true, {}, "keybinds list", "widgets" };
+			config::val<float> keybinds_x{ -1.0f, "widgets", "keybinds x" };
+			config::val<float> keybinds_y{ -1.0f, "widgets", "keybinds y" };
+
+			xui::setting spectator_list{ true, {}, "spectator list", "widgets" };
+			config::val<float> spectator_x{ -1.0f, "widgets", "spectator x" };
+			config::val<float> spectator_y{ -1.0f, "widgets", "spectator y" };
 
 			enum class style : std::uint8_t { modern, classic, neo, glass };
 

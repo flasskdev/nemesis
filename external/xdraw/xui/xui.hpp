@@ -544,7 +544,12 @@ namespace xui {
 
 	void text( std::string_view label, xdraw::color col );
 
+	void set_hovered_tooltip( std::string_view label, std::string_view explicit_desc = {} );
+	void tooltip( std::string_view desc );
+	std::string_view get_function_description( std::string_view label );
+
 	bool button( std::string_view label, float w = 0.0f, float h = 26.0f );
+	bool button( std::string_view label, setting& s, std::string_view button_text = "kick" );
 	bool checkbox( std::string_view label, setting& s );
 	bool toggle( std::string_view label, setting& s, std::string_view description = {} );
 	void section_header( std::string_view label );

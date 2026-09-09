@@ -1619,6 +1619,522 @@ namespace xui {
 		c.id_stack.clear( );
 	}
 
+	namespace tooltips {
+
+		inline std::vector<std::string> wrap_text( std::string_view text, float max_width )
+		{
+			std::vector<std::string> lines;
+			std::string current_line;
+			std::size_t start = 0;
+			while ( start < text.size( ) )
+			{
+				while ( start < text.size( ) && text[ start ] == ' ' )
+					start++;
+				if ( start >= text.size( ) )
+					break;
+				std::size_t end = text.find( ' ', start );
+				if ( end == std::string_view::npos )
+					end = text.size( );
+
+				std::string_view word = text.substr( start, end - start );
+				start = end;
+
+				std::string test_line = current_line.empty( ) ? std::string( word ) : current_line + " " + std::string( word );
+				if ( !current_line.empty( ) && xdraw::measure_text( test_line ).first > max_width )
+				{
+					lines.push_back( std::move( current_line ) );
+					current_line = std::string( word );
+				}
+				else
+				{
+					current_line = std::move( test_line );
+				}
+			}
+			if ( !current_line.empty( ) )
+				lines.push_back( std::move( current_line ) );
+			return lines;
+		}
+
+		struct state {
+			std::uintptr_t current_hovered_id{ 0 };
+			std::string current_title{};
+			std::string current_desc{};
+			float current_mouse_x{ 0.0f };
+			float current_mouse_y{ 0.0f };
+
+			std::uintptr_t active_id{ 0 };
+			std::string active_title{};
+			std::string active_desc{};
+			float hover_timer{ 0.0f };
+			float alpha{ 0.0f };
+			float target_alpha{ 0.0f };
+			float pos_x{ 0.0f };
+			float pos_y{ 0.0f };
+		};
+
+		inline state g_tooltip{};
+
+		inline std::string normalize_label( std::string_view label )
+		{
+			auto [display, full] = parse_label( label );
+			std::string result;
+			result.reserve( display.size( ) );
+			for ( char ch : display )
+			{
+				result.push_back( static_cast<char>( std::tolower( static_cast<unsigned char>( ch ) ) ) );
+			}
+			while ( !result.empty( ) && ( result.front( ) == ' ' || result.front( ) == '\t' ) )
+				result.erase( result.begin( ) );
+			while ( !result.empty( ) && ( result.back( ) == ' ' || result.back( ) == '\t' ) )
+				result.pop_back( );
+			return result;
+		}
+
+		inline std::string get_fallback_description( std::string_view label )
+		{
+			const auto norm = normalize_label( label );
+			if ( norm.find( "color" ) != std::string::npos || norm.find( "цвет" ) != std::string::npos )
+				return "Настройка цвета и прозрачности элемента";
+			if ( norm.find( "fov" ) != std::string::npos )
+				return "Регулировка угла обзора (FOV)";
+			if ( norm.find( "speed" ) != std::string::npos || norm.find( "скорость" ) != std::string::npos )
+				return "Настройка скорости анимации или перемещения";
+			if ( norm.find( "thickness" ) != std::string::npos || norm.find( "толщина" ) != std::string::npos )
+				return "Регулировка толщины линий отрисовки";
+			if ( norm.find( "alpha" ) != std::string::npos || norm.find( "opacity" ) != std::string::npos || norm.find( "прозрачность" ) != std::string::npos )
+				return "Регулировка уровня прозрачности отображения";
+			if ( norm.find( "radius" ) != std::string::npos || norm.find( "радиус" ) != std::string::npos )
+				return "Радиус области действия эффекта";
+			if ( norm.find( "distance" ) != std::string::npos || norm.find( "дистанция" ) != std::string::npos )
+				return "Максимальная дистанция видимости или действия";
+			if ( norm.find( "material" ) != std::string::npos || norm.find( "материал" ) != std::string::npos )
+				return "Выбор текстурного материала и шейдера";
+			if ( norm.find( "style" ) != std::string::npos || norm.find( "стиль" ) != std::string::npos || norm.find( "mode" ) != std::string::npos || norm.find( "режим" ) != std::string::npos )
+				return "Выбор режима или визуального стиля";
+			if ( norm.find( "volume" ) != std::string::npos || norm.find( "громкость" ) != std::string::npos )
+				return "Уровень громкости звукового сопровождения";
+			if ( norm.find( "duration" ) != std::string::npos || norm.find( "время" ) != std::string::npos )
+				return "Длительность отображения элемента на экране";
+			if ( norm.find( "scale" ) != std::string::npos || norm.find( "масштаб" ) != std::string::npos || norm.find( "size" ) != std::string::npos || norm.find( "размер" ) != std::string::npos )
+				return "Масштабирование и размер элемента";
+			if ( norm.find( "save" ) != std::string::npos || norm.find( "сохранить" ) != std::string::npos )
+				return "Сохранение текущей конфигурации";
+			if ( norm.find( "load" ) != std::string::npos || norm.find( "загрузить" ) != std::string::npos )
+				return "Загрузка выбранной конфигурации";
+			if ( norm.find( "reset" ) != std::string::npos || norm.find( "сброс" ) != std::string::npos )
+				return "Сброс параметров к значениям по умолчанию";
+			if ( norm.find( "import" ) != std::string::npos || norm.find( "импорт" ) != std::string::npos )
+				return "Импорт настроек из буфера обмена";
+			if ( norm.find( "export" ) != std::string::npos || norm.find( "экспорт" ) != std::string::npos )
+				return "Экспорт текущих настроек в буфер обмена";
+
+			return "Настройка параметра: " + std::string( label );
+		}
+
+	} // namespace tooltips
+
+	std::string_view get_function_description( std::string_view label )
+	{
+		static const std::unordered_map<std::string, std::string_view> k_descriptions = {
+			// Ragebot
+			{ "enable ragebot", "Активация автоматического наведения и уничтожения целей" },
+			{ "weapon group", "Выбор категории оружия для индивидуальной настройки параметров" },
+			{ "silent aim", "Наведение на цель без видимого движения прицела на вашем экране" },
+			{ "field of view", "Максимальный угол обзора для захвата противников аимботом" },
+			{ "no spread", "Полная компенсация разброса пуль при стрельбе" },
+			{ "extrapolation", "Экстраполяция движения цели для упреждения пинга и тикрейта" },
+			{ "force bodyaim", "Принудительная стрельба в тело вместо головы" },
+			{ "pointscale", "Масштабирование точек сканирования внутри хитбокса цели" },
+			{ "hitboxes", "Выбор допустимых частей тела для наведения аимбота" },
+			{ "auto stop", "Автоматическая остановка перед выстрелом для максимальной точности" },
+			{ "auto scope", "Автоматическое открытие прицела снайперских винтовок перед выстрелом" },
+			{ "hit chance", "Минимальная вероятность попадания для совершения выстрела" },
+			{ "hitchance", "Минимальная вероятность попадания для совершения выстрела" },
+			{ "minimum damage", "Минимальный наносимый урон для совершения выстрела" },
+			{ "min damage", "Минимальный наносимый урон для совершения выстрела" },
+			{ "hitchance override", "Принудительное изменение требуемого шанса попадания по бинду" },
+			{ "mindamage override", "Принудительное изменение минимального урона по бинду" },
+			{ "anti aim", "Изменяет углы модели игрока, затрудняя попадание противникам" },
+			{ "auto yaw adjust", "Динамическая подстройка угла рыскания (Yaw) против врагов" },
+			{ "hide onshot", "Скрытие углов модели в момент произведения выстрела" },
+			{ "avoid backstab", "Предотвращение ударов ножом в спину от противников" },
+			{ "direction indicator", "Индикатор направления текущего угла Anti-Aim" },
+			{ "pitch", "Наклон головы модели игрока (вниз, вверх или без изменений)" },
+			{ "quick peek assist", "Позволяет быстро пикнуть из-за укрытия и мгновенно вернуться назад" },
+			{ "auto revolver", "Автоматический предвзвод курка револьвера R8 перед выстрелом" },
+			{ "zeusbot", "Автоматический разряд шокером Zeus x27 при нахождении цели в радиусе" },
+			{ "knifebot", "Автоматический удар ножом при приближении к противнику" },
+
+			// Legitbot
+			{ "enable legitbot", "Активация скрытного легитного аимбота для незаметной игры" },
+			{ "aimbot", "Плавная доводка прицела до ближайшей уязвимой точки противника" },
+			{ "target fov", "Радиус зоны захвата цели вокруг перекрестия прицела" },
+			{ "smoothness", "Степень сглаживания движений прицела для естественного вида стрельбы" },
+			{ "draw fov", "Отображение круга радиуса работы легит-аимбота на экране" },
+			{ "recoil control (rcs)", "Автоматический контроль отдачи при непрерывной стрельбе" },
+			{ "triggerbot", "Автоматический выстрел в момент наведения перекрестия на противника" },
+			{ "reaction delay", "Искусственная задержка перед выстрелом для имитации реакции человека" },
+			{ "seed prediction", "Предсказание разброса первого выстрела по сиду оружия" },
+			{ "standalone rcs", "Контроль отдачи оружия независимо от работы аимбота" },
+			{ "autowall", "Разрешить стрельбу через простреливаемые стены и укрытия" },
+
+			// Player ESP & Visuals
+			{ "enable", "Включение визуалов для выбранной категории игроков" },
+			{ "enable esp", "Включение визуалов и ESP для игроков" },
+			{ "box", "Отображение 2D рамки вокруг силуэта игрока" },
+			{ "box esp", "Отображение 2D рамки вокруг силуэта игрока" },
+			{ "skeleton", "Отрисовка костей и положения скелета противника через стены" },
+			{ "health bar", "Полоса уровня здоровья игрока с цветовой индикацией" },
+			{ "armor", "Отображение наличия брони и прочности бронежилета" },
+			{ "armor bar", "Полоса наличия и прочности бронежилета" },
+			{ "name", "Отображение игрового никнейма над моделью игрока" },
+			{ "name esp", "Отображение игрового никнейма над моделью игрока" },
+			{ "weapon", "Название или иконка текущего оружия в руках игрока" },
+			{ "weapon text", "Текстовое название текущего оружия в руках игрока" },
+			{ "ammo", "Индикатор количества оставшихся патронов в магазине" },
+			{ "ammo bar", "Индикатор количества оставшихся патронов в магазине" },
+			{ "distance", "Точное расстояние до игрока в метрах" },
+			{ "snaplines", "Линии-указатели от центра или низа экрана к игрокам" },
+			{ "offscreen", "Стрелки-указатели на врагов, находящихся вне поля зрения" },
+			{ "oof arrows", "Стрелки-указатели на врагов, находящихся вне поля зрения" },
+			{ "glow", "Контурное или объемное свечение вокруг силуэта модели игрока" },
+			{ "player glow", "Контурное свечение вокруг силуэта модели игрока" },
+			{ "item glow", "Свечение вокруг лежащего на земле оружия" },
+			{ "ragdoll glow", "Контурное свечение вокруг трупов игроков" },
+			{ "chams", "Замена стандартных текстур моделей на цветные материалы (Chams)" },
+			{ "player chams", "Замена текстур моделей игроков на цветные материалы Chams" },
+			{ "visible chams", "Материал и оттенок Chams для видимых игроков" },
+			{ "flags", "Текстовые метки состояния: броня, шлем, слепота, дефуз С4" },
+			{ "info flags", "Текстовые метки состояния: броня, шлем, слепота, дефуз С4" },
+			{ "fill", "Полупрозрачная заливка внутренней области 2D бокса" },
+			{ "outline", "Темная обводка элементов для четкой видимости на любом фоне" },
+			{ "corner length", "Длина угловых засечек при угловом стиле бокса" },
+			{ "thickness", "Толщина линий отрисовки элементов ESP" },
+			{ "gradient", "Плавный градиентный переход цвета полоски" },
+			{ "show value", "Отображение точного числового значения HP или брони" },
+
+			// World ESP & Atmosphere
+			{ "item esp", "Подсветка лежащего на земле оружия и предметов" },
+			{ "dropped items esp", "Подсветка лежащего на земле оружия и предметов" },
+			{ "projectile esp", "Траектория полета гранат и таймеры до взрыва" },
+			{ "bomb esp", "Статус С4: таймер до подрыва, место закладки и процесс дефуза" },
+			{ "bomb timer", "Таймер обратного отсчета до взрыва бомбы С4" },
+			{ "defusing", "Отображение процесса и таймера обезвреживания бомбы" },
+			{ "defuser", "Отображение наличия набора сапера и игрока, дефузящего С4" },
+			{ "nightmode", "Снижение уровня окружающего освещения для ночного режима" },
+			{ "skybox", "Выбор текстуры неба и атмосферы карты" },
+			{ "custom skybox", "Пользовательская текстура неба и атмосферы карты" },
+			{ "sky color", "Пользовательский оттенок неба" },
+			{ "sun color", "Пользовательский оттенок солнечного освещения" },
+			{ "cloud color", "Пользовательский оттенок облаков на карте" },
+			{ "world color", "Пользовательский оттенок освещения поверхностей карты" },
+			{ "world lighting", "Пользовательская тонировка освещения карты" },
+			{ "props color", "Пользовательская тонировка статических объектов и пропсов" },
+			{ "wall color", "Пользовательский цвет стен и геометрии карты" },
+			{ "wall material", "Выбор текстурного материала для стен карты" },
+			{ "ragdoll chams", "Применение материалов Chams к трупам игроков" },
+			{ "bullet tracers", "Отображение светящихся линий траектории полета пуль" },
+			{ "bullet impacts", "Маркеры попаданий пуль в геометрию мира и игроков" },
+			{ "projectile trajectory", "Предсказание траектории и точки падения гранаты из ваших рук" },
+			{ "grenade prediction", "Линия предсказания траектории броска гранаты с таймером" },
+			{ "straight throw", "Линия предсказания прямого броска гранаты" },
+			{ "held damage", "Расчет и отображение урона от зажатой гранаты" },
+			{ "thrown damage", "Расчет урона от брошенных гранат в радиусе" },
+			{ "can penetrate", "Отображение точек прострела сквозь препятствия" },
+			{ "dynamic light", "Динамический источник света вокруг игрока" },
+			{ "bloom effect", "Мягкое свечение вокруг ярких источников света" },
+			{ "bloom", "Мягкое свечение вокруг ярких источников света" },
+			{ "chromatic aberration", "Эффект хроматической аберрации по краям экрана" },
+			{ "flash alpha", "Максимальная степень ослепления от световой гранаты" },
+			{ "fog", "Атмосферный туман на дальних дистанциях" },
+			{ "depth of field", "Эффект кинематографичной глубины резкости" },
+			{ "wetness", "Глянцевый эффект мокрых поверхностей" },
+			{ "weather", "Выбор погодных эффектов карты" },
+			{ "wind", "Направление и сила ветра для частиц" },
+
+			// Misc & Movement
+			{ "unlock spectating", "Свободное переключение на камеру любого игрока при наблюдении" },
+			{ "spectator thirdperson", "Активация режима от третьего лица при наблюдении за игроком" },
+			{ "thirdperson", "Режим камеры от третьего лица с регулировкой дистанции" },
+			{ "freecam", "Свободный полет камерой по карте с управлением клавишами" },
+			{ "freecam speed", "Скорость перемещения свободной камеры" },
+			{ "freecam block input", "Блокировка движения и выстрелов персонажа во время полета" },
+			{ "hit logs", "Отображение карточек попаданий и нанесенного урона" },
+			{ "miss logs", "Логирование причин промахов: разброс, рассинхрон или окклюзия" },
+			{ "console logs", "Дублирование информации о попаданиях и уроне в консоль" },
+			{ "chat logs", "Вывод логов попаданий и промахов прямо в чат (видно только вам)" },
+			{ "hit sound", "Звуковой сигнал при успешном попадании во врага" },
+			{ "death sound", "Особый звуковой эффект при ликвидации противника" },
+			{ "hit marker", "Визуальное перекрестие попадания на прицеле" },
+			{ "damage marker", "Всплывающие цифры нанесенного урона над целью" },
+			{ "hit effect", "Визуальный эффект искр или вспышки в точке попадания" },
+			{ "death effect", "Спецэффект при смертельном выстреле" },
+			{ "disable game logs", "Блокировка стандартных игровых сообщений об уроне в чате" },
+			{ "preserve killfeed", "Длительное сохранение строк убийств на экране" },
+			{ "reveal radar", "Отображение местоположения всех противников на радаре" },
+			{ "vote kick self", "Предложить голосование за исключение самого себя из матча" },
+			{ "vote kick now", "Запустить голосование за исключение себя прямо сейчас" },
+			{ "penetration crosshair", "Индикатор возможности прострела препятствия перед вами" },
+			{ "nickname override", "Подмена вашего видимого никнейма в игре" },
+			{ "clantag", "Установка кастомного или анимированного клан-тега" },
+			{ "scoreboard weapons", "Отображение текущего оружия всех игроков в таблице очков" },
+			{ "auto buy", "Автоматическая покупка выбранного комплекта оружия в начале раунда" },
+			{ "custom fov", "Пользовательский угол обзора камеры игрока" },
+			{ "viewmodel adjust", "Настройка расположения и смещения рук с оружием на экране" },
+			{ "custom aspect ratio", "Принудительное изменение пропорций экрана (соотношения сторон)" },
+			{ "remove crosshair", "Скрытие стандартного внутриигрового прицела" },
+			{ "remove scope", "Удаление затемнения и рамок прицела снайперских винтовок" },
+			{ "remove smoke", "Удаление или прозрачность дымовых завес от гранат" },
+			{ "remove visual recoil", "Полное отключение тряски экрана и отдачи при стрельбе" },
+			{ "remove skybox fog", "Отключение атмосферного тумана на небе и дальних дистанциях" },
+			{ "remove overhead", "Скрытие меток и значков над головами игроков" },
+			{ "remove legs", "Скрытие ног локального игрока при взгляде вниз" },
+			{ "remove 3d skybox", "Отключение 3D скайбокса для оптимизации и максимального FPS" },
+			{ "remove decals", "Очистка карты от следов пуль, крови и взрывов" },
+			{ "crosshair overlay", "Кастомный статический прицел поверх экрана" },
+			{ "scope overlay", "Кастомные перекрестия прицела для снайперских винтовок" },
+			{ "auto jump", "Автоматическая распрыжка (Bunnyhop) при удерживании пробела" },
+			{ "bunnyhop", "Автоматическая распрыжка (Bunnyhop) при удерживании пробела" },
+			{ "bunny hop", "Автоматическая распрыжка (Bunnyhop) при удерживании пробела" },
+			{ "auto strafe", "Автоматические стрейфы в воздухе для быстрого набора скорости" },
+			{ "air strafe", "Автоматические стрейфы в воздухе для быстрого набора скорости" },
+			{ "fast stop", "Мгновенное гашение скорости для максимальной точности стрельбы" },
+			{ "edge stop", "Автоматическая остановка перед падением с уступа" },
+			{ "edge jump", "Автоматический прыжок перед падением с края поверхности" },
+			{ "jump bug", "Выполнение бага прыжка без потери скорости и звука падения" },
+			{ "edge bug", "Скольжение по кромке препятствий для предотвращения урона" },
+			{ "pixel surf", "Фиксация и скольжение по пиксельным неровностям стен" },
+			{ "long jump", "Оптимизированный прыжок в длину для максимальной дистанции" },
+			{ "fast ladder", "Ускоренное перемещение вверх и вниз по лестницам" },
+			{ "slow walk", "Снижение скорости ходьбы для максимальной точности стрельбы" },
+			{ "slow walk speed", "Настройка ограничения скорости тихого шага" },
+			{ "air duck", "Автоматическое приседание в полете для труднодоступных мест" },
+			{ "watermark", "Отображение фирменного оверлея чита со статусом и показателями" },
+			{ "steam username", "Отображение вашего имени профиля Steam в вотермарке" },
+			{ "fps", "Счетчик текущей частоты кадров (FPS) в реальном времени" },
+			{ "ping", "Сетевая задержка (пинг) до игрового сервера" },
+			{ "clock", "Отображение текущего системного времени" },
+			{ "map", "Название загруженной карты" },
+			{ "tick rate", "Показатель тикрейта текущего сервера" },
+			{ "velocity", "Спидометр текущей скорости перемещения игрока" },
+			{ "velocity chart", "График динамики скорости перемещения игрока" },
+			{ "velocity counter", "Цифровой счетчик текущей скорости игрока" },
+			{ "keybinds list", "Окно списка активных горячих клавиш (перетаскивается мышью)" },
+			{ "spectator list", "Список игроков, наблюдающих за вами в данный момент" },
+			{ "rank revealer", "Отображение званий и уровней всех участников матча в табе" },
+			{ "auto accept", "Автоматическое подтверждение найденного соревновательного матча" },
+			{ "menu key", "Горячая клавиша для открытия и закрытия меню чита" },
+			{ "dpi scale", "Масштабирование элементов интерфейса под DPI экрана" },
+			{ "accent color", "Основной акцентный цвет интерфейса чита" },
+			{ "color palette", "Выбор цветовой палитры интерфейса" },
+			{ "unload", "Полная и безопасная выгрузка чита из памяти игры" },
+
+			// Skins / Inventory
+			{ "wear", "Степень износа скина (float от 0.00 до 1.00)" },
+			{ "pattern seed", "Номер паттерна скина, определяющий расположение рисунка" },
+			{ "pattern seed (0-1000)", "Номер паттерна скина, определяющий расположение рисунка" },
+			{ "stattrak", "Включение счетчика StatTrak на оружии" },
+			{ "stattrak count", "Количество зарегистрированных фрагов на счетчике StatTrak" },
+			{ "skin changer", "Установка любых скинов, ножей и перчаток в игре" }
+		};
+
+		const auto norm = tooltips::normalize_label( label );
+		const auto it = k_descriptions.find( norm );
+		if ( it != k_descriptions.end( ) )
+		{
+			return it->second;
+		}
+
+		for ( const auto& [k, v] : k_descriptions )
+		{
+			if ( k.size( ) >= 3 && ( norm.find( k ) != std::string::npos || k.find( norm ) != std::string::npos ) )
+			{
+				return v;
+			}
+		}
+
+		return {};
+	}
+
+	void set_hovered_tooltip( std::string_view label, std::string_view explicit_desc )
+	{
+		auto& c = get_ctx( );
+		if ( c.overlay_blocking( ) )
+		{
+			return;
+		}
+
+		const auto [display, full] = parse_label( label );
+		if ( display.empty( ) )
+		{
+			return;
+		}
+
+		std::string desc_str;
+		if ( !explicit_desc.empty( ) )
+		{
+			desc_str = std::string( explicit_desc );
+		}
+		else
+		{
+			auto d = get_function_description( display );
+			if ( !d.empty( ) )
+			{
+				desc_str = std::string( d );
+			}
+			else
+			{
+				desc_str = tooltips::get_fallback_description( display );
+			}
+		}
+
+		const auto id = fnv1a( display );
+		auto& t = tooltips::g_tooltip;
+		t.current_hovered_id = id;
+		t.current_title = std::string( display );
+		t.current_desc = std::move( desc_str );
+		t.current_mouse_x = c.input.mouse_x;
+		t.current_mouse_y = c.input.mouse_y;
+	}
+
+	void tooltip( std::string_view desc )
+	{
+		// Optional explicit tooltip call
+	}
+
+	static void render_active_tooltip( const style& st, const input_state& input )
+	{
+		const float dt = std::clamp( xdraw::delta_time( ), 0.001f, 0.1f );
+		auto& t = tooltips::g_tooltip;
+
+		const bool is_hovered = ( t.current_hovered_id != 0 );
+
+		if ( is_hovered )
+		{
+			if ( t.active_id != t.current_hovered_id )
+			{
+				t.active_id = t.current_hovered_id;
+				t.active_title = std::move( t.current_title );
+				t.active_desc = std::move( t.current_desc );
+				if ( t.alpha < 0.2f )
+				{
+					t.hover_timer = 0.0f;
+				}
+				else
+				{
+					t.hover_timer = 0.06f;
+				}
+			}
+
+			t.hover_timer += dt;
+			if ( t.hover_timer >= 0.08f )
+			{
+				t.target_alpha = 1.0f;
+			}
+		}
+		else
+		{
+			t.hover_timer = 0.0f;
+			t.target_alpha = 0.0f;
+		}
+
+		// Clear current hovered id for next frame
+		t.current_hovered_id = 0;
+
+		const float speed = ( t.target_alpha > t.alpha ) ? 14.0f : 16.0f;
+		t.alpha += ( t.target_alpha - t.alpha ) * std::min( speed * dt, 1.0f );
+
+		if ( t.alpha < 0.005f )
+		{
+			t.alpha = 0.0f;
+			if ( !is_hovered )
+			{
+				t.active_id = 0;
+			}
+			return;
+		}
+
+		const float ease_alpha = ease::out_cubic( t.alpha );
+
+		const float target_mx = ( t.current_mouse_x > 0.0f ) ? t.current_mouse_x : input.mouse_x;
+		const float target_my = ( t.current_mouse_y > 0.0f ) ? t.current_mouse_y : input.mouse_y;
+
+		if ( t.alpha < 0.05f )
+		{
+			t.pos_x = target_mx + 14.0f;
+			t.pos_y = target_my + 16.0f;
+		}
+		else
+		{
+			t.pos_x += ( ( target_mx + 14.0f ) - t.pos_x ) * std::min( 22.0f * dt, 1.0f );
+			t.pos_y += ( ( target_my + 16.0f ) - t.pos_y ) * std::min( 22.0f * dt, 1.0f );
+		}
+
+		const auto lines = tooltips::wrap_text( t.active_desc, 230.0f );
+		const auto [tw, th] = xdraw::measure_text( t.active_title );
+		float max_line_w = tw;
+		for ( const auto& line : lines )
+		{
+			max_line_w = std::max( max_line_w, xdraw::measure_text( line ).first );
+		}
+
+		constexpr float pad_x = 12.0f;
+		const float tip_w = std::clamp( max_line_w + pad_x * 2.0f + 6.0f, 160.0f, 280.0f );
+		constexpr float line_h = 15.0f;
+		const float tip_h = 9.0f + th + ( lines.empty( ) ? 0.0f : ( 6.0f + static_cast<float>( lines.size( ) ) * line_h ) ) + 9.0f;
+
+		auto [vw, vh] = xdraw::viewport_size( );
+		if ( vw <= 0 || vh <= 0 )
+		{
+			vw = 1920;
+			vh = 1080;
+		}
+
+		float draw_x = t.pos_x;
+		float draw_y = t.pos_y + ( 1.0f - ease_alpha ) * 4.0f;
+
+		if ( draw_x + tip_w > static_cast<float>( vw ) - 12.0f )
+		{
+			draw_x = target_mx - tip_w - 10.0f;
+		}
+		if ( draw_y + tip_h > static_cast<float>( vh ) - 12.0f )
+		{
+			draw_y = target_my - tip_h - 10.0f;
+		}
+		draw_x = std::clamp( draw_x, 10.0f, static_cast<float>( vw ) - tip_w - 10.0f );
+		draw_y = std::clamp( draw_y, 10.0f, static_cast<float>( vh ) - tip_h - 10.0f );
+
+		auto& dl = xdraw::get( xdraw::layer::top );
+
+		// Outer soft drop shadow
+		dl.rect_filled( draw_x - 3.0f, draw_y - 2.0f, tip_w + 6.0f, tip_h + 6.0f, xdraw::color{ 0, 0, 0, static_cast<std::uint8_t>( 95.0f * ease_alpha ) }, xdraw::corner_radius{ 7.0f } );
+		// Backdrop blur
+		dl.rect_filled_blurred( draw_x, draw_y, tip_w, tip_h, xdraw::corner_radius{ 6.0f }, xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>( 200.0f * ease_alpha ) } );
+		// Dark OLED base
+		dl.rect_filled( draw_x, draw_y, tip_w, tip_h, xdraw::color{ 16, 16, 20, static_cast<std::uint8_t>( 242.0f * ease_alpha ) }, xdraw::corner_radius{ 6.0f } );
+		// Border with accent tint
+		dl.rect( draw_x, draw_y, tip_w, tip_h, lerp( st.child_border, st.accent, 0.35f ).alpha( static_cast<std::uint8_t>( 170.0f * ease_alpha ) ), xdraw::corner_radius{ 6.0f } );
+
+		// Vertical accent indicator strip on left
+		dl.rect_filled( draw_x + 1.0f, draw_y + 4.0f, 4.0f, tip_h - 8.0f, st.accent.alpha( static_cast<std::uint8_t>( 35.0f * ease_alpha ) ), xdraw::corner_radius{ 2.0f } );
+		dl.rect_filled( draw_x + 2.0f, draw_y + 5.0f, 2.0f, tip_h - 10.0f, st.accent.alpha( static_cast<std::uint8_t>( 235.0f * ease_alpha ) ), xdraw::corner_radius{ 1.0f } );
+
+		// Title
+		dl.text( draw_x + pad_x, draw_y + 8.0f, t.active_title, st.text.alpha( static_cast<std::uint8_t>( 255.0f * ease_alpha ) ) );
+
+		if ( !lines.empty( ) )
+		{
+			dl.line( draw_x + pad_x, draw_y + 8.0f + th + 3.0f, draw_x + tip_w - pad_x, draw_y + 8.0f + th + 3.0f, st.child_border.alpha( static_cast<std::uint8_t>( 120.0f * ease_alpha ) ) );
+
+			float curr_y = draw_y + 8.0f + th + 8.0f;
+			for ( const auto& line : lines )
+			{
+				dl.text( draw_x + pad_x, curr_y, line, st.text_dim.alpha( static_cast<std::uint8_t>( 225.0f * ease_alpha ) ) );
+				curr_y += line_h;
+			}
+		}
+	}
+
 	void end( )
 	{
 		auto& c = get_ctx( );
@@ -1630,6 +2146,8 @@ namespace xui {
 
 		overlays::render( c.style, c.input );
 		overlays::sweep( );
+
+		render_active_tooltip( c.style, c.input );
 
 		if ( c.input.mouse_released )
 		{
@@ -2023,11 +2541,19 @@ namespace xui {
 		const auto& s = c.style;
 		const auto& input = c.input;
 
-		const auto abs = layout::item( w, h );
+		const auto [avail_w, avail_h] = layout::avail( );
+		const auto final_w = ( w > 0.0f ) ? w : avail_w;
+		const auto final_h = ( h > 0.0f ) ? h : 28.0f;
+		const auto abs = layout::item( final_w, final_h );
 		const auto can_interact = !c.overlay_blocking( );
 		const auto hovered = can_interact && input.in_rect( abs );
 		const auto held = hovered && input.mouse_down;
 		const auto pressed = hovered && input.mouse_clicked;
+
+		if ( hovered )
+		{
+			set_hovered_tooltip( display );
+		}
 
 		const auto hover_anim = anim::lerp( id, hovered ? 1.0f : 0.0f, 12.0f );
 		const auto active_anim = anim::lerp( id + 1, held ? 1.0f : 0.0f, 15.0f );
@@ -2421,6 +2947,10 @@ namespace xui {
 		}
 
 		const auto hovered = can_interact && input.in_rect( extended ) && !badge_listening;
+		if ( hovered )
+		{
+			set_hovered_tooltip( display );
+		}
 		if ( hovered && input.mouse_clicked )
 		{
 			s.value = !s.value;
@@ -2616,7 +3146,7 @@ namespace xui {
         }
 
         const auto [avail_w, avail_h] = layout::avail();
-        const auto row_h = description.empty() ? 30.0f : 39.0f;
+        constexpr auto row_h = 30.0f;
         constexpr float toggle_w = 36.0f, toggle_h = 18.0f, thumb_r = 6.0f;
         const auto abs = layout::item(avail_w, row_h);
 
@@ -2643,7 +3173,7 @@ namespace xui {
         std::string badge_text{};
 
         const auto [label_w, label_h] = xdraw::measure_text(display);
-        const auto label_y = description.empty() ? abs.y + (row_h - label_h) * 0.5f : abs.y + 3.0f;
+        const auto label_y = abs.y + (row_h - label_h) * 0.5f;
 
         if (has_badge)
         {
@@ -2672,6 +3202,11 @@ namespace xui {
 
         const auto can_interact = (!c.overlay_blocking() || ctx_is_open) && input.in_rect(win->bounds);
         const auto hovered = can_interact && input.in_rect(abs) && !badge_listening && !badge_hovered && !dot_hovered;
+
+        if (hovered)
+        {
+            set_hovered_tooltip(display, description);
+        }
 
         bool changed = false;
 
@@ -2709,8 +3244,6 @@ namespace xui {
 
         const auto reserved_right = toggle_w + dot_area_w + 14.0f;
         dl.text(abs.x, label_y, truncate(display, abs.w - reserved_right), st.text);
-        if (!description.empty())
-            dl.text(abs.x, abs.y + 20.0f, truncate(description, abs.w - reserved_right), st.text_dim);
 
         // Draw keybind badge if active/listening
         if (has_badge && badge_rect.w > 0.0f)
@@ -2758,6 +3291,199 @@ namespace xui {
         dl.circle_filled(cx, cy, thumb_r, lerp(st.text_dim, st.accent, t));
         return changed;
     }
+
+	bool button( std::string_view label, setting& s, std::string_view button_text )
+	{
+		auto win = layout::current_window( );
+		if ( !win )
+		{
+			return false;
+		}
+
+		binds::register_setting( &s );
+		auto& c = get_ctx( );
+		const auto id = make_id( label );
+		const auto [display, full] = parse_label( label );
+		if ( s.name.empty( ) ) s.name = std::string( display );
+		const auto& st = c.style;
+		const auto& input = c.input;
+
+		auto& reg = binds::get_bind_registry( );
+		const auto badge_id = id + 300;
+		const auto badge_listening = ( reg.listening_setting == badge_id );
+
+		if ( badge_listening )
+		{
+			for ( const auto vk : input.key_presses( ) )
+			{
+				if ( vk == VK_ESCAPE )
+				{
+					s.bind.key = 0;
+					s.bind.active = false;
+				}
+				else
+				{
+					s.bind.key = vk;
+				}
+				reg.listening_setting = 0;
+				break;
+			}
+
+			if ( badge_listening && input.rmb_clicked )
+			{
+				s.bind.key = VK_RBUTTON;
+				reg.listening_setting = 0;
+			}
+		}
+
+		const auto [avail_w, avail_h] = layout::avail( );
+		constexpr auto row_h = 30.0f;
+		const auto abs = layout::item( avail_w, row_h );
+
+		const auto btn_text = button_text.empty( ) ? "kick" : button_text;
+		const auto [btw, bth] = xdraw::measure_text( btn_text );
+		const float btn_w = std::clamp( btw + 18.0f, 38.0f, 64.0f );
+		const float btn_h = 20.0f;
+
+		const auto px = abs.right( ) - btn_w;
+		const auto py = abs.y + ( row_h - btn_h ) * 0.5f;
+		const auto btn_rect = rect{ px, py, btn_w, btn_h };
+
+		win->last_item_is_toggle = false;
+		win->last_toggle_x = px;
+
+		const auto ctx_id = id + 200;
+		const auto ctx_is_open = overlays::is_open( ctx_id );
+		if ( ctx_is_open )
+		{
+			overlays::touch( ctx_id );
+		}
+
+		const bool has_badge = ( s.bind.key != 0 || badge_listening );
+		rect badge_rect{};
+		bool badge_hovered = false;
+		std::string badge_text{};
+
+		const auto [label_w, label_h] = xdraw::measure_text( display );
+		const auto label_y = abs.y + ( row_h - label_h ) * 0.5f;
+
+		if ( has_badge )
+		{
+			badge_text = badge_listening ? "..." : vk_name( s.bind.key );
+			const auto [kw, kh] = xdraw::measure_text( badge_text );
+			constexpr float badge_pad_x = 5.0f;
+			constexpr float badge_pad_y = 1.0f;
+			const float badge_w = kw + badge_pad_x * 2.0f;
+			const float badge_h = kh + badge_pad_y * 2.0f;
+			float badge_x = abs.x + label_w + 8.0f;
+			const float max_badge_x = px - 8.0f - badge_w;
+			if ( badge_x > max_badge_x ) badge_x = max_badge_x;
+			const float badge_y = label_y + ( label_h - badge_h ) * 0.5f;
+			badge_rect = rect{ badge_x, badge_y, badge_w, badge_h };
+			badge_hovered = !c.overlay_blocking( ) && input.in_rect( win->bounds ) && input.in_rect( badge_rect );
+
+			if ( badge_hovered && input.mouse_clicked && !badge_listening && !c.overlay_blocking( ) )
+			{
+				reg.listening_setting = badge_id;
+			}
+			else if ( badge_listening && input.mouse_clicked && !badge_hovered )
+			{
+				reg.listening_setting = 0;
+			}
+		}
+
+		const auto can_interact = ( !c.overlay_blocking( ) || ctx_is_open ) && input.in_rect( win->bounds );
+		const auto btn_hovered = can_interact && input.in_rect( btn_rect );
+		const auto row_hovered = can_interact && input.in_rect( abs ) && !badge_listening && !badge_hovered;
+		const auto hovered = btn_hovered || row_hovered;
+		const auto held = ( btn_hovered || row_hovered ) && input.mouse_down;
+		const auto clicked = ( btn_hovered || row_hovered ) && input.mouse_clicked;
+
+		if ( hovered )
+		{
+			set_hovered_tooltip( display );
+		}
+
+		// Right-click handling: open keybind context overlay
+		if ( hovered && input.rmb_clicked && ( !c.overlay_blocking( ) || ctx_is_open ) )
+		{
+			if ( ctx_is_open )
+			{
+				overlays::close( ctx_id );
+			}
+			else if ( !c.overlay_blocking( ) )
+			{
+				const auto mouse_anchor = rect{ input.mouse_x, input.mouse_y, 0.0f, 0.0f };
+				overlays::add( std::make_unique<checkbox_bind_overlay>( ctx_id, mouse_anchor, &s ) );
+			}
+		}
+
+		const auto hover_anim = anim::lerp( id + 1, hovered ? 1.0f : 0.0f, 12.0f );
+		const auto btn_hover_anim = anim::lerp( id + 2, btn_hovered ? 1.0f : 0.0f, 14.0f );
+		const auto active_anim = anim::lerp( id + 3, held ? 1.0f : 0.0f, 16.0f );
+		const auto click_flash = anim::lerp( id + 4, clicked ? 1.0f : 0.0f, 8.0f );
+
+		auto& dl = draw::current( );
+
+		// Draw row label text on left
+		const auto reserved_right = btn_w + 10.0f + ( has_badge ? ( badge_rect.w + 10.0f ) : 0.0f );
+		const auto label_col = lerp( st.text, lighten( st.text, 1.15f ), hover_anim );
+		dl.text( abs.x, label_y, truncate( display, abs.w - reserved_right ), label_col );
+
+		// Draw keybind badge if active/listening
+		if ( has_badge && badge_rect.w > 0.0f )
+		{
+			const auto badge_hover_anim = anim::lerp( id + 51, ( badge_hovered || badge_listening ) ? 1.0f : 0.0f, 12.0f );
+			auto badge_bg = st.keybind_bg;
+			badge_bg.a = static_cast< std::uint8_t >( std::max( badge_bg.a, static_cast< std::uint8_t >( 40 ) ) );
+			badge_bg = lighten( badge_bg, 1.0f + badge_hover_anim * 0.3f );
+
+			auto badge_border = lerp( st.keybind_border, st.accent, badge_hover_anim * 0.8f );
+			badge_border.a = static_cast< std::uint8_t >( std::max( badge_border.a, static_cast< std::uint8_t >( 30 ) ) );
+			if ( badge_listening )
+			{
+				badge_border = lerp( badge_border, st.keybind_waiting, 0.6f );
+			}
+
+			const auto badge_r = st.keybind_rounding;
+			dl.rect_filled( badge_rect.x, badge_rect.y, badge_rect.w, badge_rect.h, badge_bg, xdraw::corner_radius{ badge_r } );
+			dl.rect( badge_rect.x, badge_rect.y, badge_rect.w, badge_rect.h, badge_border, xdraw::corner_radius{ badge_r } );
+
+			auto key_col = lerp( st.text_dim, st.text, badge_hover_anim );
+			if ( badge_listening ) key_col = st.keybind_waiting;
+			dl.text( badge_rect.x + 5.0f, badge_rect.y + 1.0f, badge_text, key_col );
+		}
+
+		// Draw small button on right instead of toggle
+		auto btn_bg = lerp( st.button_bg, st.button_hovered, std::max( btn_hover_anim, hover_anim * 0.6f ) );
+		btn_bg = lerp( btn_bg, st.button_active, std::max( active_anim * 0.8f, click_flash ) );
+
+		auto btn_border = lerp( st.button_border, st.accent.alpha( 170 ), std::max( btn_hover_anim, hover_anim * 0.5f ) );
+		btn_border = lerp( btn_border, st.accent, std::max( active_anim, click_flash ) );
+
+		const auto btn_r = xdraw::corner_radius{ st.button_rounding > 0.0f ? st.button_rounding : 4.0f };
+		dl.rect_filled( px, py, btn_w, btn_h, btn_bg, btn_r );
+		dl.rect( px, py, btn_w, btn_h, btn_border, btn_r, 1.0f );
+
+		const auto tx = px + ( btn_w - btw ) * 0.5f;
+		const auto ty = py + ( btn_h - bth ) * 0.5f;
+		const auto btn_text_col = lerp( st.text_dim, st.text, std::max( btn_hover_anim, hover_anim ) );
+		dl.text( tx, ty, btn_text, btn_text_col );
+
+		bool triggered = clicked;
+		if ( s.value )
+		{
+			s.value = false;
+			triggered = true;
+		}
+		if ( s.bind.active )
+		{
+			s.bind.active = false;
+			triggered = true;
+		}
+
+		return triggered;
+	}
 
 
 	namespace {
@@ -2948,6 +3674,11 @@ namespace xui {
 				const auto hovered = can_interact && input.in_rect( slider_hit_rect );
 				const auto value_hovered = can_interact && input.in_rect( value_text_rect );
 
+				if ( hovered || value_hovered || ( can_interact && input.in_rect( abs ) ) )
+				{
+					set_hovered_tooltip( display );
+				}
+
 				if ( value_hovered && input.mouse_double_clicked && c.active_slider == null_id )
 				{
 					c.active_slider_edit = id;
@@ -3084,7 +3815,12 @@ namespace xui {
 		const auto button_rect = rect{ abs.x, abs.y, button_width, button_height };
 
 		const auto can_interact = !c.overlay_blocking( );
-		const auto hovered = can_interact && input.in_rect( button_rect );
+		const auto hovered = can_interact && ( input.in_rect( button_rect ) || input.in_rect( abs ) );
+
+		if ( hovered )
+		{
+			set_hovered_tooltip( display );
+		}
 
 		if ( hovered && input.mouse_clicked )
 		{
@@ -3588,7 +4324,12 @@ namespace xui {
 			}
 		}
 
-		const auto hovered = input.in_rect( button_rect );
+		const auto hovered = input.in_rect( button_rect ) || input.in_rect( abs );
+
+		if ( hovered && !c.overlay_blocking( ) )
+		{
+			set_hovered_tooltip( display );
+		}
 
 		if ( hovered && input.mouse_clicked && !c.overlay_blocking( ) )
 		{
@@ -3973,7 +4714,12 @@ namespace xui {
 			}
 		}
 
-		const auto hovered = input.in_rect( button_rect );
+		const auto hovered = input.in_rect( button_rect ) || input.in_rect( abs );
+
+		if ( hovered && !c.overlay_blocking( ) )
+		{
+			set_hovered_tooltip( display );
+		}
 
 		if ( hovered && input.mouse_clicked && !c.overlay_blocking( ) )
 		{
@@ -4582,6 +5328,7 @@ namespace xui {
 		}
 
 		const auto ctx_id = id + 100;
+		const auto ctx_is_open = overlays::is_open( ctx_id );
 
 		if ( auto ctx_popup = dynamic_cast< color_context_overlay* >( overlays::find( ctx_id ) ) )
 		{
@@ -4620,7 +5367,12 @@ namespace xui {
 		const auto swatch_rect = rect{ abs.x + x_offset, swatch_y, sw, sh };
 
 		const auto can_interact = !c.overlay_blocking( ) || is_open;
-		const auto hovered = can_interact && input.in_rect( swatch_rect );
+		const auto hovered = can_interact && ( input.in_rect( swatch_rect ) || ( has_label && input.in_rect( abs ) ) );
+
+		if ( hovered && !is_open && !ctx_is_open )
+		{
+			set_hovered_tooltip( display );
+		}
 
 		if ( is_open )
 		{
@@ -4632,7 +5384,6 @@ namespace xui {
 			}
 		}
 
-		const auto ctx_is_open = overlays::is_open( ctx_id );
 		if ( ctx_is_open )
 		{
 			overlays::touch( ctx_id );

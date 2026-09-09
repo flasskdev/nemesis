@@ -163,7 +163,7 @@ namespace rendering {
             { { "general" }, 1 },
             { { "main", "enemy", "team", "local", "items", "world", "weather" }, 7 },
             { { "guns", "knives", "gloves", "agents" }, 4 },
-            { { "general" }, 1 },
+            { { "main", "view", "hud", "effects" }, 4 },
             { { "general" }, 1 },
             { { "general" }, 1 }
         };
@@ -175,9 +175,20 @@ namespace rendering {
         void draw();
         static inline std::string s_map_name{};
 
+        [[nodiscard]] bool is_keybinds_hovered() const noexcept { return this->m_keybinds_hovered; }
+        [[nodiscard]] bool is_keybinds_dragging() const noexcept { return this->m_keybinds_dragging; }
+        [[nodiscard]] bool is_spectators_hovered() const noexcept { return this->m_spectators_hovered; }
+        [[nodiscard]] bool is_spectators_dragging() const noexcept { return this->m_spectators_dragging; }
+
     private:
         void watermark(xdraw::draw_list& draw_list);
         void keybinds(xdraw::draw_list& draw_list);
+        void spectators(xdraw::draw_list& draw_list);
+
+        bool m_keybinds_hovered{ false };
+        bool m_keybinds_dragging{ false };
+        bool m_spectators_hovered{ false };
+        bool m_spectators_dragging{ false };
     };
 
     class fonts

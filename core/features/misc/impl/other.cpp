@@ -38,6 +38,7 @@ namespace features::misc {
 
 	void other::on_round_start()
 	{
+		features::misc::g_vote_logs.reset();
 		this->do_autobuy();
 	}
 
@@ -54,10 +55,15 @@ namespace features::misc {
 
 	void other::on_frame_stage_notify()
 	{
+		if ( settings::g_misc.vote_kick_self.value )
+		{
+			settings::g_misc.vote_kick_self.value = false;
+			this->vote_kick_self( );
+		}
+
 		this->do_player_alpha_changing();
 		this->do_reveal_radar();
 		this->do_name_changing();
-		this->do_viewmodel_adjust();
 	}
 
 	void other::do_reveal_radar() const
@@ -328,112 +334,31 @@ namespace features::misc {
 		}
 	}
 
-	void other::do_viewmodel_adjust()
+	void other::vote_kick_self()
 	{
-		const auto& cfg = settings::g_misc.m_viewmodel_adjust;
-		auto* owner = addresses::globals::cvar;
-		if (!owner)
+		const auto local = systems::g_local.get();
+		if ( !local.controller )
 		{
-			return; // Do not cache an unsuccessful lookup; retry on the next update.
+			return;
 		}
 
-		const auto owner_address = reinterpret_cast<std::uintptr_t>(owner);
-		if (this->m_vm_owner != owner_address)
+		int local_slot = -1;
+		for ( int i = 1; i <= 64; ++i )
 		{
-			this->m_vm_cvars = {};
-			this->m_vm_preset_address = 0;
-			this->m_vm_preset_captured = false;
-			this->m_vm_missing_mask = 0;
-			this->m_vm_owner = owner_address;
-		}
-
-		const auto sanitize = [](float value, float low, float high, float fallback)
-		{
-			return std::isfinite(value) ? std::clamp(value, low, high) : fallback;
-		};
-		const std::array<float, 4> values{
-			sanitize(cfg.offset_x.value, -10.0f, 10.0f, 0.0f),
-			sanitize(cfg.offset_y.value, -10.0f, 10.0f, 0.0f),
-			sanitize(cfg.offset_z.value, -10.0f, 10.0f, 0.0f),
-			sanitize(cfg.fov.value, 54.0f, 90.0f, 68.0f)
-		};
-		constexpr std::array<std::uint32_t, 4> hashes{
-			"viewmodel_offset_x"_hash, "viewmodel_offset_y"_hash,
-			"viewmodel_offset_z"_hash, "viewmodel_fov"_hash
-		};
-		constexpr std::array<const char*, 4> names{
-			"viewmodel_offset_x", "viewmodel_offset_y", "viewmodel_offset_z", "viewmodel_fov"
-		};
-
-		// Preset zero selects custom offsets. Preserve the user's original preset.
-		if (cfg.enabled.value && !this->m_vm_preset_address)
-		{
-			this->m_vm_preset_address = reinterpret_cast<std::uintptr_t>(
-				owner->find("viewmodel_presetpos"_hash));
-		}
-		if (this->m_vm_preset_address && (cfg.enabled.value || this->m_vm_preset_captured))
-		{
-			auto* preset = reinterpret_cast<c_convar*>(this->m_vm_preset_address);
-			if (cfg.enabled.value && !this->m_vm_preset_captured)
+			if ( systems::g_entities.get_by_index( i ) == local.controller )
 			{
-				this->m_vm_original_preset = preset->m_value.i32;
-				this->m_vm_preset_captured = true;
-			}
-			const auto target = cfg.enabled.value ? 0 : this->m_vm_original_preset;
-			if (preset->m_value.i32 != target)
-			{
-				preset->m_value.i32 = target;
-				++preset->m_change_count;
-			}
-			if (!cfg.enabled.value)
-			{
-				this->m_vm_preset_captured = false;
-				this->m_vm_preset_address = 0;
+				local_slot = i - 1;
+				break;
 			}
 		}
 
-		for (std::size_t i = 0; i < this->m_vm_cvars.size(); ++i)
+		if ( local_slot < 0 )
 		{
-			auto& state = this->m_vm_cvars[i];
-			if (!cfg.enabled.value && !state.captured)
-			{
-				continue;
-			}
-			if (!state.address)
-			{
-				state.address = reinterpret_cast<std::uintptr_t>(owner->find(hashes[i]));
-			}
-			const auto bit = std::uint32_t{1} << i;
-			if (!state.address)
-			{
-				if (!(this->m_vm_missing_mask & bit))
-				{
-					logging::console::print("viewmodel: cvar unavailable: {} (will retry)", names[i]);
-					this->m_vm_missing_mask |= bit;
-				}
-				continue;
-			}
-			this->m_vm_missing_mask &= ~bit;
-			auto* cvar = reinterpret_cast<c_convar*>(state.address);
-			if (cfg.enabled.value && !state.captured)
-			{
-				state.original = cvar->m_value.fl;
-				state.captured = true;
-			}
-			const auto target = cfg.enabled.value ? values[i] : state.original;
-			// Compare with the live value, not the last requested slider position.
-			if (cvar->m_value.fl != target)
-			{
-				cvar->m_value.fl = target;
-				++cvar->m_change_count;
-			}
-			if (!cfg.enabled.value)
-			{
-				state = {};
-			}
+			return;
 		}
-		if (!cfg.enabled.value)
-			this->m_vm_missing_mask = 0;
+
+		const auto cmd = std::format( "callvote kick {}", local_slot );
+		memory::call<void>( PATTERN( patterns::engine_client_cmd ), addresses::globals::source2engine_to_client, 0, cmd.c_str(), 0x7ffef001 );
 	}
 
 } // namespace features::misc

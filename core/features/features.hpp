@@ -61,6 +61,8 @@ namespace features {
 		inline hud g_hud{};
 		inline other g_other{};
 		inline scoreboard_weapons g_scoreboard_weapons{};
+		inline vote_logs g_vote_logs{};
+		inline auto_accept g_auto_accept{};
 
 	} // namespace misc
 

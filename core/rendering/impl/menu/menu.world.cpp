@@ -172,7 +172,6 @@ namespace rendering {
 
 				xui::layout::separator( );
 				xui::checkbox( "bomb timer", other.bomb_timer );
-				xui::checkbox( "spectator list", other.spectator_list );
 
 				xui::end_child( );
 			}

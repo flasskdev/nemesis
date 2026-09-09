@@ -17,98 +17,57 @@ namespace features::misc {
 	namespace detail {
 
 		constexpr std::uint32_t invalid_particle_effect{ static_cast<std::uint32_t>( -1 ) };
-		constexpr std::uint8_t k_periwinkle_start_r{ 130 };
-		constexpr std::uint8_t k_periwinkle_start_g{ 160 };
-		constexpr std::uint8_t k_periwinkle_start_b{ 240 };
-		constexpr std::uint8_t k_periwinkle_end_r{ 200 };
-		constexpr std::uint8_t k_periwinkle_end_g{ 220 };
-		constexpr std::uint8_t k_periwinkle_end_b{ 255 };
+		constexpr auto k_hit_color_hex{ "#4ADE80" };
+		constexpr auto k_miss_color_hex{ "#FF5C80" };
 
-		[[nodiscard]] std::string chat_white( std::string_view text )
+		void chat_print_raw( const char* formatted_msg )
 		{
-			return std::format( "<font color='#FFFFFF'>{}</font>", text );
-		}
-
-		[[nodiscard]] std::string chat_dim( std::string_view text )
-		{
-			return std::format( "<font color='#CCCCCC'>{}</font>", text );
-		}
-
-		[[nodiscard]] std::string format_hit_chat_message( const std::string& name, int damage, const std::string& hitgroup, int health, const std::string& reason = {} )
-		{
-			const auto damage_str = std::to_string( damage );
-
-			if ( !reason.empty( ) )
-			{
-				return chat_dim( "hit " ) + chat_white( name ) + chat_dim( " for " ) + chat_white( damage_str ) + chat_dim( " in " ) + chat_white( hitgroup ) + chat_dim( std::format( ", {} ({} remaining)", reason, health ) );
-			}
-
-			return chat_dim( "hit " ) + chat_white( name ) + chat_dim( " for " ) + chat_white( damage_str ) + chat_dim( " in " ) + chat_white( hitgroup ) + chat_dim( std::format( " ({} remaining)", health ) );
-		}
-
-		[[nodiscard]] std::string format_knife_chat_message( const std::string& name, int damage, int health )
-		{
-			return chat_dim( "knifed " ) + chat_white( name ) + chat_dim( " for " ) + chat_white( std::to_string( damage ) ) + chat_dim( std::format( " ({} remaining)", health ) );
-		}
-
-		[[nodiscard]] std::string format_taser_chat_message( const std::string& name )
-		{
-			return chat_dim( "zapped the fuck out of " ) + chat_white( name );
-		}
-
-		[[nodiscard]] std::string make_gradient_label( const char* text, std::uint8_t sr, std::uint8_t sg, std::uint8_t sb, std::uint8_t er, std::uint8_t eg, std::uint8_t eb )
-		{
-			const auto len = std::strlen( text );
-			if ( len == 0 )
-			{
-				return {};
-			}
-
-			std::string result{};
-			result.reserve( len * 40 );
-
-			for ( auto i = 0ull; i < len; ++i )
-			{
-				const auto t = len > 1 ? static_cast< float >( i ) / static_cast< float >( len - 1 ) : 0.0f;
-				const auto r = static_cast< std::uint8_t >( sr + ( er - sr ) * t );
-				const auto g = static_cast< std::uint8_t >( sg + ( eg - sg ) * t );
-				const auto b = static_cast< std::uint8_t >( sb + ( eb - sb ) * t );
-
-				char tag[ 48 ];
-				std::snprintf( tag, sizeof( tag ), "<font color='#%02X%02X%02X'>%c</font>", r, g, b, text[ i ] );
-				result += tag;
-			}
-
-			return result;
-		}
-
-		void chat_print( const char* label_text, std::uint8_t sr, std::uint8_t sg, std::uint8_t sb, std::uint8_t er, std::uint8_t eg, std::uint8_t eb, const char* msg )
-		{
-			const auto local = systems::g_local.get( );
-			if ( !local.is_valid( ) || !local.is_alive || systems::g_local.is_in_cinematic( ) || !local.pawn )
+			const auto fn_find_hud = PATTERN (patterns::find_hud_element);
+			if ( !fn_find_hud )
 			{
 				return;
 			}
 
-			const auto hud_element = memory::call<std::uintptr_t>( PATTERN (patterns::find_hud_element), xs( "CCSGO_HudVoiceStatus" ) );
-			if ( !hud_element )
+			// 1. Primary CS2 HUD message displayer: triggers on-screen HUD toast notification
+			// so the message is visible immediately during gameplay without needing to open chat
+			const auto fn_voice = PATTERN (patterns::set_voice_data);
+			if ( fn_voice )
 			{
-				return;
+				const auto voice_hud = memory::call<std::uintptr_t>( fn_find_hud, xs( "CCSGO_HudVoiceStatus" ) );
+				if ( voice_hud )
+				{
+					const auto voice = voice_hud - 0x20;
+					std::uint8_t flags[ 2 ]{ 1, 0 };
+					memory::call<void>( fn_voice, voice, formatted_msg, 0xFFFFFFFF, flags );
+					return;
+				}
 			}
 
-			const auto voice = hud_element - 32;
-			const auto label = make_gradient_label( label_text, sr, sg, sb, er, eg, eb );
-
-			char buf[ 1024 ];
-			std::snprintf( buf, sizeof( buf ), "%s <font color='#CCCCCC'>- </font>%s", label.c_str( ), msg );
-
-			std::uint8_t flags[ 2 ]{ 1, 0 };
-			memory::call<void>( PATTERN (patterns::set_voice_data), voice, buf, 0xFFFFFFFF, flags );
+			// 2. Direct Panorama chat scrollview fallback
+			const auto fn_chat = PATTERN (patterns::print_hud_chat);
+			if ( fn_chat )
+			{
+				const auto chat_hud = memory::call<std::uintptr_t>( fn_find_hud, xs( "CCSGO_HudChat" ) );
+				if ( chat_hud )
+				{
+					const auto chat = chat_hud - 0x20;
+					memory::call<void>( fn_chat, chat, formatted_msg );
+				}
+			}
 		}
 
-		void chat_print_velocity( const char* msg )
+		inline void print_mintaly_chat( const char* text_color_hex, const std::string& log_text )
 		{
-			chat_print( "[velocity]", k_periwinkle_start_r, k_periwinkle_start_g, k_periwinkle_start_b, k_periwinkle_end_r, k_periwinkle_end_g, k_periwinkle_end_b, msg );
+			const auto r = tokens::col_accent.r;
+			const auto g = tokens::col_accent.g;
+			const auto b = tokens::col_accent.b;
+
+			const auto formatted = std::format(
+				"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> <font color='{}'>{}</font>",
+				r, g, b, text_color_hex, log_text
+			);
+
+			chat_print_raw( formatted.c_str( ) );
 		}
 
 	} // namespace detail
@@ -154,10 +113,7 @@ namespace features::misc {
 		const auto global_vars = memory::read<std::uintptr_t>( addresses::globals::global_vars );
 		const auto current_time = memory::read<float>( global_vars + 0x30 );
 
-		{
-			std::unique_lock lock( this->m_mtx );
-			this->check_misses( );
-		}
+		this->check_misses( );
 
 		this->render_hit_markers( draw_list, current_time );
 		this->render_logs( draw_list, current_time );
@@ -988,38 +944,20 @@ namespace features::misc {
 
 		if ( cfg.console_log.value || cfg.chat_log.value )
 		{
-			std::string plain_msg{};
-			std::string chat_msg{};
+			const auto group = data.weapon_type == cstypes::weapon_type::knife ? "knife" :
+				( data.weapon_type == cstypes::weapon_type::taser ? "zeus" :
+				( entry.hitgroup.empty( ) ? "body" : entry.hitgroup.c_str( ) ) );
 
-			if ( data.weapon_type == cstypes::weapon_type::taser )
-			{
-				plain_msg = std::format( "zapped the fuck out of {}", entry.name );
-				chat_msg = detail::format_taser_chat_message( entry.name );
-			}
-			else if ( data.weapon_type == cstypes::weapon_type::knife )
-			{
-				plain_msg = std::format( "knifed {} for {} ({} remaining)", entry.name, entry.damage, entry.health );
-				chat_msg = detail::format_knife_chat_message( entry.name, entry.damage, entry.health );
-			}
-			else if ( !entry.reason.empty( ) )
-			{
-				plain_msg = std::format( "hit {} for {} in {}, {} ({} remaining)", entry.name, entry.damage, entry.hitgroup, entry.reason, entry.health );
-				chat_msg = detail::format_hit_chat_message( entry.name, entry.damage, entry.hitgroup, entry.health, entry.reason );
-			}
-			else
-			{
-				plain_msg = std::format( "hit {} for {} in {} ({} remaining)", entry.name, entry.damage, entry.hitgroup, entry.health );
-				chat_msg = detail::format_hit_chat_message( entry.name, entry.damage, entry.hitgroup, entry.health );
-			}
+			const auto log_text = std::format( "hit to {} [{}]", group, entry.damage );
 
 			if ( cfg.console_log.value )
 			{
-				logging::console::print( xs( "{}" ), plain_msg );
+				logging::console::print( xs( "[mintaly] {}" ), log_text );
 			}
 
 			if ( cfg.chat_log.value )
 			{
-				detail::chat_print_velocity( chat_msg.c_str( ) );
+				detail::print_mintaly_chat( detail::k_hit_color_hex, log_text );
 			}
 		}
 
@@ -1044,44 +982,26 @@ namespace features::misc {
 		const auto name = this->get_player_name_from_pawn( shot.victim_pawn );
 		const auto group = systems::g_hitboxes.hitgroup_to_name( shot.hitgroup );
 
-		if ( cfg.console_log.value || cfg.chat_log.value )
+		const char* reason_str = reason;
+		if ( shot.forced )
 		{
-			std::string plain_msg{};
-			std::string chat_msg{};
+			reason_str = "forced";
+		}
+		else if ( !reason_str || !*reason_str )
+		{
+			reason_str = "unknown";
+		}
 
-			if ( shot.weapon_type == cstypes::weapon_type::knife || shot.weapon_type == cstypes::weapon_type::taser )
-			{
-				if ( shot.weapon_type == cstypes::weapon_type::knife )
-				{
-					plain_msg = std::format( "missed knife on {} due to latency", name );
-					chat_msg = detail::chat_dim( "missed knife on " ) + detail::chat_white( name ) + detail::chat_dim( " due to latency" );
-				}
-				else
-				{
-					plain_msg = std::format( "missed zeus on {} due to idk ill improve the zeusbot later jeez.", name );
-					chat_msg = detail::chat_dim( "missed zeus on " ) + detail::chat_white( name ) + detail::chat_dim( " due to idk ill improve the zeusbot later jeez." );
-				}
-			}
-			else if ( shot.forced )
-			{
-				plain_msg = std::format( "missed {} (forced shot, {:.0f}% hitchance)", name, shot.hitchance * 100.0f );
-				chat_msg = detail::chat_dim( "missed " ) + detail::chat_white( name ) + detail::chat_dim( std::format( " (forced shot, {:.0f}% hitchance)", shot.hitchance * 100.0f ) );
-			}
-			else
-			{
-				plain_msg = std::format( "missed {}, targeted {} (hc={:.0f}%, dmg={:.0f}, reason={})", name, group, shot.hitchance * 100.0f, shot.damage, reason );
-				chat_msg = detail::chat_dim( "missed " ) + detail::chat_white( name ) + detail::chat_dim( ", targeted " ) + detail::chat_white( group ) + detail::chat_dim( std::format( " (hc={:.0f}%, dmg={:.0f}, reason={})", shot.hitchance * 100.0f, shot.damage, reason ) );
-			}
+		const auto log_text = std::format( "miss to {}", reason_str );
 
-			if ( cfg.console_log.value )
-			{
-				logging::console::print( xs( "{}" ), plain_msg );
-			}
+		if ( cfg.console_log.value )
+		{
+			logging::console::print( xs( "[mintaly] {}" ), log_text );
+		}
 
-			if ( cfg.chat_log.value )
-			{
-				detail::chat_print_velocity( chat_msg.c_str( ) );
-			}
+		if ( cfg.chat_log.value )
+		{
+			detail::print_mintaly_chat( detail::k_miss_color_hex, log_text );
 		}
 
 		if ( !cfg.miss_log.value )
@@ -1089,18 +1009,12 @@ namespace features::misc {
 			return;
 		}
 
+		std::unique_lock lock( this->m_mtx );
+
 		log entry{};
 		entry.name = name;
-
-		if ( shot.forced )
-		{
-			entry.reason = "forced shot";
-			entry.hitgroup = std::format( "({:.0f}% hitchance)", shot.hitchance * 100.0f );
-		}
-		else
-		{
-			entry.reason = reason;
-		}
+		entry.reason = reason_str;
+		entry.hitgroup = group;
 
 		entry.damage = 0;
 		entry.health = -1;
@@ -1325,8 +1239,10 @@ namespace features::misc {
 		std::unique_lock lock( this->m_mtx );
 		const auto& cfg = settings::g_misc.m_impacts;
 		const auto [screen_w, screen_h] = xdraw::viewport_size( );
-		const auto width = std::min( 420.0f, std::max( 0.0f, screen_w - 32.0f ) );
+		const auto width = std::min( 320.0f, std::max( 0.0f, screen_w - 32.0f ) );
 		auto y = 16.0f;
+
+		xdraw::push_font( rendering::g_fonts.inter_medium[ rendering::fonts::size::petite ] );
 
 		for ( auto it = this->m_logs.begin( ); it != this->m_logs.end( ); )
 		{
@@ -1340,55 +1256,125 @@ namespace features::misc {
 			}
 
 			it->alpha.update( );
+			it->offset.update( );
+
 			const auto fade_window = std::min( 0.45f, duration * 0.2f );
 			const auto fade_out = std::clamp( ( duration - elapsed ) / fade_window, 0.0f, 1.0f );
 			const auto alpha = std::clamp( it->alpha.alpha( ) * fade_out, 0.0f, 1.0f );
-			const auto has_reason = !it->reason.empty( );
-			const auto height = has_reason ? 76.0f : 58.0f;
+
+			constexpr auto height = 28.0f;
 			if ( width < 140.0f || y + height > screen_h ) { ++it; continue; }
 
-			const auto x = 16.0f - ( 1.0f - alpha ) * 12.0f;
+			const auto slide_x = it->offset.value( );
+			const auto x = 16.0f + slide_x * ( 1.0f - alpha * 0.5f ) - ( 1.0f - fade_out ) * 14.0f;
+
 			const auto tint = [alpha]( xdraw::color color ) {
 				return color.alpha( static_cast<std::uint8_t>( color.a * alpha ) );
 			};
-			const auto kill = !it->is_miss && it->health == 0;
-			const auto accent = it->is_miss ? xdraw::color{235, 91, 105} : tokens::col_accent;
-			const auto badge = it->is_miss ? "MISS" : kill ? "KILL" : "HIT";
-			const auto badge_w = xdraw::measure_text( badge ).first + 14.0f;
-			const auto right_label = it->is_miss ? std::string{} : std::format( "-{} HP", it->damage );
+
+			const bool is_miss = it->is_miss;
+			const bool is_kill = !is_miss && it->health == 0;
+
+			// Hit / Miss specific colors for the text
+			// Miss: pink-red (#FF5C80)
+			// Hit:  mint green (#4ADE80) / emerald (#34D399) on kill
+			const auto log_color = is_miss
+				? xdraw::color{ 255, 92, 128 }
+				: ( is_kill ? xdraw::color{ 52, 211, 153 } : xdraw::color{ 74, 222, 128 } );
+
+			// Left badge: [MISS], [KILL], [HIT]
+			const auto badge = is_miss ? "MISS" : ( is_kill ? "KILL" : "HIT" );
+			const auto [badge_tw, badge_th] = xdraw::measure_text( badge );
+			const auto badge_w = badge_tw + 12.0f;
+			const auto badge_h = 17.0f;
+			const auto badge_y = y + ( height - badge_h ) * 0.5f;
+
+			// Right pill: MISSED, FATAL, or victim name
+			std::string right_label;
+			if ( is_miss )
+			{
+				right_label = "MISSED";
+			}
+			else if ( is_kill )
+			{
+				right_label = "FATAL";
+			}
+			else if ( !it->name.empty( ) && it->name != "unknown" )
+			{
+				right_label = it->name;
+			}
+			else
+			{
+				right_label = std::format( "-{} HP", it->damage );
+			}
+
 			const auto [rw, rh] = xdraw::measure_text( right_label );
-			const auto title_x = x + 14.0f + badge_w + 8.0f;
-			const auto title = rendering::theme::fit_text( it->name, x + width - 24.0f - rw - title_x );
+			const auto right_pill_w = rw + 10.0f;
+			const auto right_pill_h = 17.0f;
+			const auto right_pill_x = x + width - 10.0f - right_pill_w;
+			const auto right_pill_y = y + ( height - right_pill_h ) * 0.5f;
 
-			draw_list.rect_filled( x, y + 3.0f, width, height, tint( {0, 0, 0, 60} ), xdraw::corner_radius{10.0f} );
-			draw_list.rect_filled_blurred( x, y, width, height, xdraw::corner_radius{10.0f}, tint( {255, 255, 255, 220} ) );
-			draw_list.rect_filled( x, y, width, height, tint( tokens::col_card.alpha( 242 ) ), xdraw::corner_radius{10.0f} );
-			draw_list.rect( x, y, width, height, tint( tokens::col_border ), xdraw::corner_radius{10.0f} );
-			draw_list.rect_filled( x + 5.0f, y + 12.0f, 2.0f, height - 24.0f, tint( accent ), xdraw::corner_radius{1.0f} );
-			draw_list.rect_filled( x + 14.0f, y + 9.0f, badge_w, 20.0f, tint( accent.alpha( 28 ) ), xdraw::corner_radius{4.0f} );
-			const auto badge_h = xdraw::measure_text( badge ).second;
-			draw_list.text( x + 21.0f, y + 9.0f + ( 20.0f - badge_h ) * 0.5f, badge, tint( accent ) );
-			const auto title_h = xdraw::measure_text( title ).second;
-			draw_list.text( title_x, y + 9.0f + ( 20.0f - title_h ) * 0.5f, title, tint( tokens::col_text ) );
-			draw_list.text( x + width - 14.0f - rw, y + 9.0f + ( 20.0f - rh ) * 0.5f, right_label, tint( accent ) );
-
-			std::string detail;
-			if ( it->is_miss ) detail = it->hitgroup.empty( ) ? "Shot did not connect" : it->hitgroup;
+			// Single line text:
+			// Miss: "miss to <reason>"
+			// Hit:  "hit to <hitgroup> [<damage>]"
+			std::string text;
+			if ( is_miss )
+			{
+				const auto r_str = it->reason.empty( ) ? "unknown" : it->reason.c_str( );
+				text = std::format( "miss to {}", r_str );
+			}
 			else
 			{
 				const auto group = it->weapon_type == cstypes::weapon_type::knife ? "knife" :
-					it->weapon_type == cstypes::weapon_type::taser ? "zeus" : it->hitgroup.c_str( );
-				detail = std::format( "{} / {} HP remaining", group, std::max( 0, it->health ) );
+					( it->weapon_type == cstypes::weapon_type::taser ? "zeus" :
+					( it->hitgroup.empty( ) ? "body" : it->hitgroup.c_str( ) ) );
+				text = std::format( "hit to {} [{}]", group, it->damage );
 			}
-			draw_list.text( x + 14.0f, y + 33.0f, rendering::theme::fit_text( detail, width - 28.0f ), tint( tokens::col_text_dim ) );
-			if ( has_reason )
-				draw_list.text( x + 14.0f, y + 50.0f, rendering::theme::fit_text( it->reason, width - 28.0f ), tint( tokens::col_text_dim ) );
-			const auto remaining = std::clamp( 1.0f - elapsed / duration, 0.0f, 1.0f );
-			draw_list.rect_filled( x + 14.0f, y + height - 5.0f, width - 28.0f, 2.0f, tint( tokens::col_border ), xdraw::corner_radius{1.0f} );
-			draw_list.rect_filled( x + 14.0f, y + height - 5.0f, ( width - 28.0f ) * remaining, 2.0f, tint( accent ), xdraw::corner_radius{1.0f} );
-			y += height + 7.0f;
+
+			const auto title_x = x + 10.0f + badge_w + 8.0f;
+			const auto max_title_w = std::max( 0.0f, right_pill_x - 8.0f - title_x );
+			const auto title = rendering::theme::fit_text( text, max_title_w );
+			const auto title_h = xdraw::measure_text( title ).second;
+
+			// Card styling — clean dark translucent glass (same as menu)
+			// 1. Soft drop shadow
+			draw_list.rect_filled( x, y + 2.0f, width, height, tint( { 0, 0, 0, 60 } ), xdraw::corner_radius{ 6.0f } );
+
+			// 2. Frosted glass blur
+			draw_list.rect_filled_blurred( x, y, width, height, xdraw::corner_radius{ 6.0f }, tint( { 255, 255, 255, 210 } ) );
+
+			// 3. Dark card body (tokens::col_card — pitch dark translucent, NOT grey)
+			draw_list.rect_filled( x, y, width, height, tint( tokens::col_card.alpha( 242 ) ), xdraw::corner_radius{ 6.0f } );
+
+			// 4. Subtle border
+			const auto card_border = xui::lerp( tokens::col_border, tokens::col_accent, 0.15f );
+			draw_list.rect( x, y, width, height, tint( card_border.alpha( 180 ) ), xdraw::corner_radius{ 6.0f } );
+
+			// 5. Thin accent strip on the left edge
+			draw_list.rect_filled( x + 3.0f, y + 5.0f, 3.0f, height - 10.0f, tint( tokens::col_accent.alpha( 40 ) ), xdraw::corner_radius{ 1.5f } );
+			draw_list.rect_filled( x + 3.5f, y + 6.0f, 2.0f, height - 12.0f, tint( tokens::col_accent ), xdraw::corner_radius{ 1.0f } );
+
+			// Left badge [HIT] / [KILL] / [MISS]
+			draw_list.rect_filled( x + 10.0f, badge_y, badge_w, badge_h, tint( tokens::col_elevated ), xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( x + 10.0f, badge_y, badge_w, badge_h, tint( tokens::col_border.alpha( 160 ) ), xdraw::corner_radius{ 4.0f } );
+			draw_list.text( x + 10.0f + ( badge_w - badge_tw ) * 0.5f, badge_y + ( badge_h - badge_th ) * 0.5f, badge, tint( log_color ) );
+
+			// Right pill (MISSED / FATAL / victim name / -XX HP)
+			if ( !right_label.empty( ) )
+			{
+				draw_list.rect_filled( right_pill_x, right_pill_y, right_pill_w, right_pill_h, tint( tokens::col_elevated ), xdraw::corner_radius{ 4.0f } );
+				draw_list.rect( right_pill_x, right_pill_y, right_pill_w, right_pill_h, tint( tokens::col_border.alpha( 160 ) ), xdraw::corner_radius{ 4.0f } );
+				draw_list.text( right_pill_x + ( right_pill_w - rw ) * 0.5f, right_pill_y + ( right_pill_h - rh ) * 0.5f, right_label, tint( log_color ) );
+			}
+
+			// Main single-line text (hit to <group> [<damage>] / miss to <reason>) in hit/miss color
+			draw_list.text( title_x, y + ( height - title_h ) * 0.5f, title, tint( log_color ) );
+
+			y += height + 6.0f;
 			++it;
 		}
+
+		xdraw::pop_font( );
 	}
 
 	void impacts::render_hit_effect( xdraw::draw_list& draw_list, float time )

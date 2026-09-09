@@ -95,6 +95,7 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& prediction_setup_move;
 	extern const ::protection::addresses::address_t& prediction_state;
 	extern const ::protection::addresses::address_t& prepare_scene_material;
+	extern const ::protection::addresses::address_t& print_hud_chat;
 	extern const ::protection::addresses::address_t& process_input_event;
 	extern const ::protection::addresses::address_t& read_frame_input;
 	extern const ::protection::addresses::address_t& remove_entity;
@@ -110,6 +111,9 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& serialize_move_crc;
 	extern const ::protection::addresses::address_t& service_read;
 	extern const ::protection::addresses::address_t& set_info;
+	extern const ::protection::addresses::address_t& set_local_player_ready;
+	extern const ::protection::addresses::address_t& is_match_waiting;
+	extern const ::protection::addresses::address_t& get_ready_time_remaining;
 	extern const ::protection::addresses::address_t& set_player_model;
 	extern const ::protection::addresses::address_t& set_postprocess_vec;
 	extern const ::protection::addresses::address_t& set_shader_param;
@@ -118,6 +122,7 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& set_voice_data;
 	extern const ::protection::addresses::address_t& simulation_player;
 	extern const ::protection::addresses::address_t& sort_primitives;
+	extern const ::protection::addresses::address_t& spec_cmds_handler;
 	extern const ::protection::addresses::address_t& setup_fog;
 	extern const ::protection::addresses::address_t& play_sound;
 	extern const ::protection::addresses::address_t& string_copy;
@@ -150,6 +155,9 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& econ_item_view_remove_attribute;
 	extern const ::protection::addresses::address_t& econ_item_view_invalidate_description;
 	extern const ::protection::addresses::address_t& set_bodygroup;
+	extern const ::protection::addresses::address_t& vote_start;
+	extern const ::protection::addresses::address_t& vote_pass;
+	extern const ::protection::addresses::address_t& vote_failed;
 
 } // namespace patterns
 

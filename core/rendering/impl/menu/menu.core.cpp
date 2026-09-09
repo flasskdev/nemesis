@@ -60,9 +60,21 @@ namespace rendering {
             {
                 return { 7, 0 };
             }
-            if (category_lower.find("setting") != std::string::npos || category_lower.find("theme") != std::string::npos || category_lower.find("watermark") != std::string::npos || category_lower.find("keybind") != std::string::npos)
+            if (category_lower.find("setting") != std::string::npos || category_lower.find("theme") != std::string::npos || category_lower.find("watermark") != std::string::npos)
             {
                 return { 6, 0 };
+            }
+            if (category_lower.find("widgets") != std::string::npos || category_lower.find("hud") != std::string::npos)
+            {
+                return { 5, 2 };
+            }
+            if (category_lower.find("camera") != std::string::npos || category_lower.find("view") != std::string::npos || category_lower.find("removals") != std::string::npos)
+            {
+                return { 5, 1 };
+            }
+            if (category_lower.find("impacts") != std::string::npos || category_lower.find("effects") != std::string::npos)
+            {
+                return { 5, 3 };
             }
             return { 5, 0 }; // misc
         }
@@ -1010,7 +1022,7 @@ namespace rendering {
             {
                 const auto& item = this->m_search_entries[this->m_search_visible_indices[i]];
                 const auto avail_w = xui::layout::avail().first;
-                const auto row_h = 44.0f;
+                const auto row_h = 32.0f;
                 const auto row = xui::layout::item(avail_w, row_h);
                 const auto hovered = xui::ctx().input.in_rect(row);
 
@@ -1018,23 +1030,13 @@ namespace rendering {
 
                 auto& dl = xui::draw::current();
                 const auto row_bg = xui::lerp(tokens::col_card, tokens::col_accent.alpha(90), row_anim * 0.35f);
-                dl.rect_filled(row.x, row.y, row.w, row.h, row_bg, xdraw::corner_radius{ 8.0f });
+                dl.rect_filled(row.x, row.y, row.w, row.h, row_bg, xdraw::corner_radius{ 6.0f });
 
                 const auto label_col = xui::lerp(tokens::col_text, tokens::col_dark, row_anim * 0.2f);
-                const auto sub_col = tokens::col_text_dim;
-
                 const auto name_th = xdraw::measure_text(item.name).second;
-                const auto subtitle = item.category.empty() ? "misc" : item.category.c_str();
-                const auto sub_th = xdraw::measure_text(subtitle).second;
+                const auto name_y = row.y + (row.h - name_th) * 0.5f;
 
-                const auto block_h = name_th + 3.0f + sub_th;
-                const auto text_start_y = row.y + (row.h - block_h) * 0.5f;
-                const auto name_y = text_start_y;
-
-                dl.text(row.x + 8.0f, name_y, item.name, label_col);
-
-                const auto sub_y = name_y + name_th + 3.0f;
-                dl.text(row.x + 8.0f, sub_y, subtitle, sub_col.alpha(170));
+                dl.text(row.x + 10.0f, name_y, item.name, label_col);
 
                 if (item.bind_key != 0)
                 {
@@ -1275,6 +1277,11 @@ namespace rendering {
                 return;
             }
 
+            if (g_widgets.is_keybinds_dragging() || (g_widgets.is_keybinds_hovered() && xui::ctx().input.mouse_clicked))
+            {
+                xui::ctx().active_window = xui::null_id;
+            }
+
             xdraw::push_font(rendering::g_fonts.inter_medium[rendering::fonts::size::petite]);
 
             auto& dl = xui::draw::current();
@@ -1347,9 +1354,9 @@ namespace rendering {
             }
 
             xui::end_window();
+            xui::end();
             xdraw::pop_font();
         }
-        xui::end();
     }
 
     void menu::shutdown() const
@@ -2195,10 +2202,15 @@ namespace rendering {
         xui::layout::set_cursor(right_x - wx, this->m_body_y - wy);
         if (xui::begin_child("##settings_system", col_w, this->m_body_h, true))
         {
-            xui::section_header("WATERMARK & CONTROLS");
-            xui::toggle("Keybinds List", m.m_widgets.keybinds_list);
-            xui::layout::spacing(6.0f);
+            xui::section_header("WATERMARK");
             xui::toggle("Watermark", m.m_watermark.enabled);
+            if ( xui::begin_popup( "##wm_popup", 220.0f ) )
+            {
+                constexpr const char* wm_positions[] = { "Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right" };
+                xui::combo("Position##wm", m.m_watermark.position.value, wm_positions, 6);
+                xui::slider_float("Opacity##wm", m.m_watermark.opacity, 0.0f, 100.0f, "%.0f%%");
+                xui::end_popup( );
+            }
             xui::toggle("Steam Username", m.m_watermark.show_user);
             xui::toggle("FPS", m.m_watermark.show_fps);
             xui::toggle("Ping", m.m_watermark.show_ping);

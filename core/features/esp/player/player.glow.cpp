@@ -42,7 +42,7 @@ namespace features::esp::player {
 			return cfg.team_ragdoll.enabled.value;
 		}
 
-		if ( is_local && settings::g_misc.m_camera.thirdperson.value )
+		if ( is_local && ( settings::g_misc.m_camera.thirdperson.value || features::misc::g_camera.is_freecam_active( ) ) )
 		{
 			return cfg.local.enabled.value;
 		}
@@ -97,7 +97,7 @@ namespace features::esp::player {
 		{
 			if ( is_local )
 			{
-				if ( settings::g_misc.m_camera.thirdperson.value )
+				if ( settings::g_misc.m_camera.thirdperson.value || features::misc::g_camera.is_freecam_active( ) )
 				{
 					target = &cfg.local;
 				}

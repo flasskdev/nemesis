@@ -1013,7 +1013,6 @@ namespace rendering {
 			const auto it = skin_map( ).find( weapon->def_index );
 			if ( it == skin_map( ).end( ) )
 			{
-				xui::text( "Choose a finish below to edit its condition and pattern.", tokens::col_text_dim );
 				return;
 			}
 
@@ -1025,7 +1024,6 @@ namespace rendering {
 			xui::push_id( static_cast<std::uintptr_t>( weapon->def_index ) );
 			xui::section_header( "SKIN OPTIONS" );
 			xui::text( rendering::theme::fit_text( std::format( "{} | {}", weapon->localized_name, pk ? pk->localized_name : "Default" ), xui::layout::item_width( ) ), tokens::col_text );
-			xui::text( std::format( "Condition: {} / allowed {:.2f} to {:.2f}", skin_options::wear_names[tier], low, high ), tokens::col_text_dim );
 
 			const auto width = ( xui::layout::item_width( ) - xui::ctx( ).style.item_spacing_x * 4.0f ) / 5.0f;
 			for ( int index = 0; index < 5; ++index )
@@ -1040,7 +1038,6 @@ namespace rendering {
 			xui::layout::new_line( );
 			if ( low < high ) xui::slider_float( "Wear", skin.wear, low, high, "%.6f" );
 			else xui::text( std::format( "Fixed wear: {:.6f}", low ), tokens::col_text_dim );
-			xui::text( "Double-click the wear value for precise input.", tokens::col_text_dim );
 			integer_input( "Pattern seed (0-1000)", skin.seed, 0, 1000 );
 
 			const auto supports_stattrak = weapon->category == features::changer::econ_item_system::item_category::gun ||
@@ -1053,9 +1050,7 @@ namespace rendering {
 			else
 			{
 				skin.stattrak = false;
-				xui::text( "StatTrak is not supported for gloves.", tokens::col_text_dim );
 			}
-			xui::text( "Options are included when you save the current config.", tokens::col_text_dim );
 			xui::pop_id( );
 		}
 

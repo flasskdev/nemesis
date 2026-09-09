@@ -1,5 +1,6 @@
 #include <pch/pch.hpp>
 #include <utilities/memory/memory.hpp>
+#include <utilities/math/math.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/diag.hpp>
 #include <utilities/hooking/hooking.hpp>
@@ -12,6 +13,23 @@
 #include "../hooks.hpp"
 
 namespace hooks {
+
+	namespace detail {
+		struct viewmodel_anim_state
+		{
+			bool initialized{ false };
+			float current_x{ 0.0f };
+			float current_y{ 0.0f };
+			float current_z{ 0.0f };
+			float current_fov{ 68.0f };
+			float sway_x{ 0.0f };
+			float sway_z{ 0.0f };
+			math::vector3 last_view_angles{};
+			std::chrono::steady_clock::time_point last_time{};
+		};
+
+		inline viewmodel_anim_state g_vm_anim{};
+	}
 
 	bool cheat::initialize () {
 		if (!hooking::manager::create ({
@@ -37,6 +55,9 @@ namespace hooks {
 			{ &m_get_glow_color, &get_glow_color, xs ("get_glow_color"), PATTERN (patterns::get_glow_color) },
 			{ &m_generate_primitives, &generate_primitives, xs ("generate_primitives"), PATTERN (patterns::generate_primitives) },
 			{ &m_parse_report_hit, &parse_report_hit, xs ("parse_report_hit"), PATTERN (patterns::parse_report_hit) },
+			{ &m_vote_start, &vote_start, xs ("vote_start"), PATTERN (patterns::vote_start) },
+			{ &m_vote_pass, &vote_pass, xs ("vote_pass"), PATTERN (patterns::vote_pass) },
+			{ &m_vote_failed, &vote_failed, xs ("vote_failed"), PATTERN (patterns::vote_failed) },
 			{ &m_setup_fog, &setup_fog, xs ("setup_fog"), PATTERN (patterns::setup_fog) },
 			{ &m_set_shader_param, &set_shader_param, xs ("set_shader_param"), PATTERN (patterns::set_shader_param) },
 			{ &m_set_postprocess_vec, &set_postprocess_vec, xs ("set_postprocess_vec"), PATTERN (patterns::set_postprocess_vec) },
@@ -58,7 +79,9 @@ namespace hooks {
 			{ &m_render_decals, &render_decals, xs ("render_decals"), PATTERN (patterns::render_decals) },
 			{ &m_render_smoke, &render_smoke, xs ("render_smoke"), PATTERN (patterns::render_smoke) },
 			{ &m_draw_flash_effect, &draw_flash_effect, xs ("draw_flash_effect"), PATTERN (patterns::draw_flash_effect) },
-			{ &m_set_info, &set_info, xs ("set_info"), PATTERN (patterns::set_info) }
+			{ &m_set_info, &set_info, xs ("set_info"), PATTERN (patterns::set_info) },
+			{ &m_calculate_viewmodel, &calculate_viewmodel, xs ("calculate_viewmodel"), PATTERN (patterns::calculate_viewmodel) },
+			{ &m_spec_cmds_handler, &spec_cmds_handler, xs ("spec_cmds_handler"), PATTERN (patterns::spec_cmds_handler) }
 		};
 
 		auto unavailable_hooks = 0u;
@@ -99,6 +122,9 @@ namespace hooks {
 		m_get_glow_color.reset( );
 		m_generate_primitives.reset( );
 		m_parse_report_hit.reset( );
+		m_vote_start.reset( );
+		m_vote_pass.reset( );
+		m_vote_failed.reset( );
 		m_setup_fog.reset( );
 		m_set_shader_param.reset( );
 		m_set_postprocess_vec.reset( );
@@ -123,11 +149,14 @@ namespace hooks {
 		m_render_smoke_unmap.reset( );
 		m_draw_flash_effect.reset( );
 		m_set_info.reset( );
+		m_calculate_viewmodel.reset( );
+		m_spec_cmds_handler.reset( );
 	}
 
 	HRESULT __fastcall cheat::present( IDXGISwapChain* thisptr, UINT sync_interval, UINT flags )
 	{
 		rendering::g_context.on_present( thisptr );
+		features::misc::g_auto_accept.run( );
 
 		if ( !m_wnd_proc.is_enabled( ) && rendering::g_context.get_window( ) )
 		{
@@ -183,6 +212,7 @@ namespace hooks {
 
 		xui::wndproc( msg, wparam, lparam );
 
+
 		if ( rendering::g_menu.is_open( ) )
 		{
 			switch ( msg )
@@ -219,6 +249,7 @@ namespace hooks {
 		}
 
 		systems::g_local.update( );
+		features::misc::g_auto_accept.run( );
 
 		if ( systems::g_local.get( ).is_valid( ) && systems::g_view.has_camera( ) )
 		{
@@ -343,6 +374,13 @@ namespace hooks {
 
 			systems::g_input.desubtick( current_cmd );
 			systems::g_prediction.capture_prestate( local.pawn, movement_services );
+
+			if ( features::misc::g_camera.is_freecam_active( ) && settings::g_misc.m_camera.freecam_block_input.value )
+			{
+				features::misc::g_camera.on_create_move( current_cmd );
+				systems::g_input.apply( );
+				return;
+			}
 
 			{
 				diag::set_exception_phase( "create_move: shared update" );
@@ -618,6 +656,24 @@ namespace hooks {
 		return m_parse_report_hit.call<std::uintptr_t>( thisptr, deleting );
 	}
 
+	void __fastcall cheat::vote_start( void* panel, std::uintptr_t msg )
+	{
+		features::misc::g_vote_logs.on_vote_start( msg );
+		m_vote_start.call<void>( panel, msg );
+	}
+
+	void __fastcall cheat::vote_pass( void* panel, std::uintptr_t msg )
+	{
+		features::misc::g_vote_logs.on_vote_pass( msg );
+		m_vote_pass.call<void>( panel, msg );
+	}
+
+	void __fastcall cheat::vote_failed( void* panel, std::uintptr_t msg )
+	{
+		features::misc::g_vote_logs.on_vote_failed( msg );
+		m_vote_failed.call<void>( panel, msg );
+	}
+
 	std::uintptr_t __fastcall cheat::setup_fog( __m128i* output, int* mode )
 	{
 		if ( features::world::g_scene.on_setup_fog( output, mode ) )
@@ -657,8 +713,6 @@ namespace hooks {
 
 	void __fastcall cheat::override_view( std::uintptr_t thisptr, std::uintptr_t view_setup )
 	{
-		// Apply cvars before the engine builds this frame's view.
-		features::misc::g_other.do_viewmodel_adjust( );
 		m_override_view.call<void>( thisptr, view_setup );
 
 		features::misc::g_camera.on_override_view( view_setup );
@@ -881,9 +935,13 @@ namespace hooks {
 
 		// Release feature-owned scene objects before Source 2 tears their parents down.
 		features::misc::g_dlight.on_level_shutdown( );
+		features::misc::g_vote_logs.reset( );
+		features::misc::g_camera.reset( );
 
 		// clear all local player data on level shutdown
 		systems::g_local.reset();
+
+		detail::g_vm_anim.initialized = false;
 
 		return m_level_shutdown.call<std::uintptr_t>( a1 );
 	}
@@ -1009,6 +1067,286 @@ namespace hooks {
 		if ( settings::g_misc.m_removals.flash_alpha.value != 0.0f )
 		{
 			m_draw_flash_effect.call<void>( a1, a2, a3, a4, a5 );
+		}
+	}
+
+	void __fastcall cheat::calculate_viewmodel( std::uintptr_t thisptr, float* offsets, float* fov )
+	{
+		m_calculate_viewmodel.call<void>( thisptr, offsets, fov );
+
+		if ( !offsets || !fov )
+			return;
+
+		if ( features::misc::g_camera.is_freecam_active( ) )
+		{
+			offsets[ 0 ] = 0.0f;
+			offsets[ 1 ] = -500.0f;
+			offsets[ 2 ] = -500.0f;
+			fov[ 0 ]     = 0.0f;
+			return;
+		}
+
+		const auto& cfg = settings::g_misc.m_viewmodel_adjust;
+		const auto now = std::chrono::steady_clock::now( );
+
+		if ( !detail::g_vm_anim.initialized )
+		{
+			detail::g_vm_anim.current_x = offsets[ 0 ];
+			detail::g_vm_anim.current_y = offsets[ 1 ];
+			detail::g_vm_anim.current_z = offsets[ 2 ];
+			detail::g_vm_anim.current_fov = fov[ 0 ];
+			detail::g_vm_anim.last_time = now;
+			detail::g_vm_anim.last_view_angles = systems::g_input.get_view_angles( );
+			detail::g_vm_anim.initialized = true;
+		}
+
+		float dt = std::chrono::duration<float>( now - detail::g_vm_anim.last_time ).count( );
+		detail::g_vm_anim.last_time = now;
+		dt = std::clamp( dt, 0.0f, 0.1f );
+
+		const auto current_angles = systems::g_input.get_view_angles( );
+		auto delta_yaw = current_angles.y - detail::g_vm_anim.last_view_angles.y;
+		auto delta_pitch = current_angles.x - detail::g_vm_anim.last_view_angles.x;
+		detail::g_vm_anim.last_view_angles = current_angles;
+
+		math::helpers::normalize_angle( delta_yaw );
+
+		float target_x = offsets[ 0 ];
+		float target_y = offsets[ 1 ];
+		float target_z = offsets[ 2 ];
+		float target_fov = fov[ 0 ];
+
+		if ( cfg.enabled.value )
+		{
+			if ( std::isfinite( cfg.offset_x.value ) ) target_x = cfg.offset_x.value;
+			if ( std::isfinite( cfg.offset_y.value ) ) target_y = cfg.offset_y.value;
+			if ( std::isfinite( cfg.offset_z.value ) ) target_z = cfg.offset_z.value;
+			if ( std::isfinite( cfg.fov.value ) )      target_fov = cfg.fov.value;
+		}
+
+		if ( dt > 0.0f )
+		{
+			constexpr float k_animation_speed = 15.0f;
+			const float factor = 1.0f - std::exp( -k_animation_speed * dt );
+
+			if ( cfg.enabled.value )
+			{
+				constexpr float k_sway_scale = 0.06f;
+				const float target_sway_x = std::clamp( -delta_yaw * k_sway_scale, -1.5f, 1.5f );
+				const float target_sway_z = std::clamp( delta_pitch * k_sway_scale, -1.5f, 1.5f );
+
+				detail::g_vm_anim.sway_x = std::lerp( detail::g_vm_anim.sway_x, target_sway_x, factor );
+				detail::g_vm_anim.sway_z = std::lerp( detail::g_vm_anim.sway_z, target_sway_z, factor );
+			}
+			else
+			{
+				detail::g_vm_anim.sway_x = std::lerp( detail::g_vm_anim.sway_x, 0.0f, factor );
+				detail::g_vm_anim.sway_z = std::lerp( detail::g_vm_anim.sway_z, 0.0f, factor );
+			}
+
+			detail::g_vm_anim.current_x = std::lerp( detail::g_vm_anim.current_x, target_x, factor );
+			detail::g_vm_anim.current_y = std::lerp( detail::g_vm_anim.current_y, target_y, factor );
+			detail::g_vm_anim.current_z = std::lerp( detail::g_vm_anim.current_z, target_z, factor );
+			detail::g_vm_anim.current_fov = std::lerp( detail::g_vm_anim.current_fov, target_fov, factor );
+
+			const bool still_animating = cfg.enabled.value ||
+				( std::abs( detail::g_vm_anim.current_x - target_x ) > 0.005f ||
+				  std::abs( detail::g_vm_anim.current_y - target_y ) > 0.005f ||
+				  std::abs( detail::g_vm_anim.current_z - target_z ) > 0.005f ||
+				  std::abs( detail::g_vm_anim.current_fov - target_fov ) > 0.05f ||
+				  std::abs( detail::g_vm_anim.sway_x ) > 0.005f ||
+				  std::abs( detail::g_vm_anim.sway_z ) > 0.005f );
+
+			if ( still_animating )
+			{
+				offsets[ 0 ] = detail::g_vm_anim.current_x + detail::g_vm_anim.sway_x;
+				offsets[ 1 ] = detail::g_vm_anim.current_y;
+				offsets[ 2 ] = detail::g_vm_anim.current_z + detail::g_vm_anim.sway_z;
+				fov[ 0 ]     = detail::g_vm_anim.current_fov;
+			}
+			else
+			{
+				detail::g_vm_anim.current_x = target_x;
+				detail::g_vm_anim.current_y = target_y;
+				detail::g_vm_anim.current_z = target_z;
+				detail::g_vm_anim.current_fov = target_fov;
+			}
+		}
+		else if ( cfg.enabled.value )
+		{
+			detail::g_vm_anim.current_x = target_x;
+			detail::g_vm_anim.current_y = target_y;
+			detail::g_vm_anim.current_z = target_z;
+			detail::g_vm_anim.current_fov = target_fov;
+
+			offsets[ 0 ] = target_x;
+			offsets[ 1 ] = target_y;
+			offsets[ 2 ] = target_z;
+			fov[ 0 ]     = target_fov;
+		}
+	}
+
+	void __fastcall cheat::spec_cmds_handler( void* cmd )
+	{
+		if ( !cmd || !settings::g_misc.m_camera.unlock_spectating.value )
+		{
+			m_spec_cmds_handler.call<void>( cmd );
+			return;
+		}
+
+		const auto local = systems::g_local.get( );
+		if ( local.is_alive )
+		{
+			m_spec_cmds_handler.call<void>( cmd );
+			return;
+		}
+
+		// Always keep mp_forcecamera at 0 while unlock_spectating is enabled
+		if ( const auto cvar = CONVAR( "mp_forcecamera" ) )
+		{
+			if ( cvar->m_value.i32 != 0 )
+			{
+				cvar->m_value.i32 = 0;
+			}
+		}
+
+		const auto argc = *reinterpret_cast<const std::int32_t*>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x438 );
+		const char* cmd_name = "";
+		if ( argc > 0 )
+		{
+			const auto str_ptr = *reinterpret_cast<const char* const*>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x10 );
+			if ( str_ptr )
+			{
+				cmd_name = str_ptr;
+			}
+		}
+
+		const bool is_next = ( std::strcmp( cmd_name, "spec_next" ) == 0 );
+		const bool is_prev = ( std::strcmp( cmd_name, "spec_prev" ) == 0 );
+		const bool is_player = ( std::strcmp( cmd_name, "spec_player" ) == 0 );
+
+		if ( !is_next && !is_prev && !is_player )
+		{
+			m_spec_cmds_handler.call<void>( cmd );
+			return;
+		}
+
+		// Collect all valid alive player pawns across all teams
+		struct target_entry_t
+		{
+			std::uintptr_t pawn{};
+			int index{};
+		};
+
+		std::vector<target_entry_t> candidates{};
+		for ( const auto& p : systems::g_entities.get_by_type( systems::entities::type::player ) )
+		{
+			const auto controller = p.ptr;
+			if ( !controller )
+				continue;
+
+			const auto is_alive = memory::read<bool>( controller + SCHEMA( "CCSPlayerController", "m_bPawnIsAlive"_hash ) );
+			if ( !is_alive )
+				continue;
+
+			const auto pawn_handle = memory::read<std::uint32_t>( controller + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( !pawn_handle )
+				continue;
+
+			const auto pawn = systems::g_entities.lookup( pawn_handle );
+			if ( !pawn )
+				continue;
+
+			if ( pawn == local.pawn )
+				continue;
+
+			const auto health = memory::read<int>( pawn + SCHEMA( "C_BaseEntity", "m_iHealth"_hash ) );
+			const auto life_state = memory::read<std::uint8_t>( pawn + SCHEMA( "C_BaseEntity", "m_lifeState"_hash ) );
+			if ( health <= 0 || life_state != 0 )
+				continue;
+
+			candidates.push_back( { pawn, static_cast<int>( p.index ) } );
+		}
+
+		if ( candidates.empty( ) )
+		{
+			m_spec_cmds_handler.call<void>( cmd );
+			return;
+		}
+
+		std::sort( candidates.begin( ), candidates.end( ), []( const target_entry_t& a, const target_entry_t& b )
+		{
+			return a.index < b.index;
+		} );
+
+		std::uintptr_t target_pawn = 0;
+		if ( is_player )
+		{
+			const auto argv = *reinterpret_cast<const char* const* const*>( reinterpret_cast<std::uintptr_t>( cmd ) + 0x440 );
+			if ( argv && argc >= 2 && argv[ 1 ] )
+			{
+				const int requested_slot = std::atoi( argv[ 1 ] );
+				for ( const auto& c : candidates )
+				{
+					if ( c.index == requested_slot )
+					{
+						target_pawn = c.pawn;
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			const auto current = local.observer_pawn;
+			int current_idx = -1;
+			for ( size_t i = 0; i < candidates.size( ); ++i )
+			{
+				if ( candidates[ i ].pawn == current )
+				{
+					current_idx = static_cast<int>( i );
+					break;
+				}
+			}
+
+			if ( is_next )
+			{
+				const int next_idx = ( current_idx + 1 ) % static_cast<int>( candidates.size( ) );
+				target_pawn = candidates[ next_idx ].pawn;
+			}
+			else if ( is_prev )
+			{
+				const int prev_idx = ( current_idx - 1 + static_cast<int>( candidates.size( ) ) ) % static_cast<int>( candidates.size( ) );
+				target_pawn = candidates[ prev_idx ].pawn;
+			}
+		}
+
+		if ( !target_pawn )
+		{
+			target_pawn = candidates[ 0 ].pawn;
+		}
+
+		const auto local_player_controller = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
+		if ( !local_player_controller )
+			return;
+
+		const auto observer_pawn_handle = memory::read<std::uint32_t>( local_player_controller + SCHEMA( "CCSPlayerController", "m_hObserverPawn"_hash ) );
+		if ( !observer_pawn_handle )
+			return;
+
+		const auto observer_pawn = systems::g_entities.lookup( observer_pawn_handle );
+		if ( !observer_pawn )
+			return;
+
+		const auto observer_services = memory::read<std::uintptr_t>( observer_pawn + SCHEMA( "C_BasePlayerPawn", "m_pObserverServices"_hash ) );
+		if ( !observer_services )
+			return;
+
+		const auto vtable = *reinterpret_cast<std::uintptr_t**>( observer_services );
+		if ( vtable && vtable[ 35 ] )
+		{
+			using set_observer_target_fn = void( __fastcall* )( std::uintptr_t, std::uintptr_t );
+			reinterpret_cast<set_observer_target_fn>( vtable[ 35 ] )( observer_services, target_pawn );
 		}
 	}
 
