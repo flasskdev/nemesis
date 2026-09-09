@@ -153,4 +153,14 @@ namespace features::changer {
 		}
 	}
 
+	void agents::reset( )
+	{
+		this->m_original_model.clear( );
+		this->m_tracked_pawn = 0;
+		this->m_applied_handle = 0;
+		this->m_applied_def = 0;
+		this->m_overridden = false;
+		this->m_tracked_team = 0;
+	}
+
 } // namespace features::changer

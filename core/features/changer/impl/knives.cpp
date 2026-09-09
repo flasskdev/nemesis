@@ -155,7 +155,7 @@ namespace features::changer {
 			if ( this->m_overridden && current_subclass == target_token && current_pk == selected_skin->paint_kit_id
                 && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackSeed"_hash)) == selected_skin->seed
                 && memory::read<float>(weapon + SCHEMA("C_EconEntity", "m_flFallbackWear"_hash)) == selected_skin->wear
-                && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackStatTrak"_hash)) == (selected_skin->stattrak ? 0 : -1) )
+                && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackStatTrak"_hash)) == (selected_skin->stattrak ? selected_skin->stattrak_count : -1) )
 			{
 				break;
 			}
@@ -182,6 +182,10 @@ namespace features::changer {
 					const auto paint_kit_id = memory::read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
 					const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
 					this->update_view_model( local.pawn, pk );
+					if ( PATTERN( patterns::weapon_update_modules ) )
+					{
+						memory::call<void>( PATTERN( patterns::weapon_update_modules ), active_weapon );
+					}
 				}
 			}
 		}
@@ -230,7 +234,7 @@ namespace features::changer {
 		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ), skin->paint_kit_id );
 		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackSeed"_hash ), skin->seed );
 		memory::write<float>( weapon + SCHEMA( "C_EconEntity", "m_flFallbackWear"_hash ), skin->wear );
-		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackStatTrak"_hash ), skin->stattrak ? 0 : -1 );
+		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackStatTrak"_hash ), skin->stattrak ? skin->stattrak_count : -1 );
 
 		const auto pk = g_econ_item_system.find_paint_kit( skin->paint_kit_id );
 
@@ -309,6 +313,11 @@ namespace features::changer {
 		memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
 		memory::call_vfunc<void>( weapon, 10, 1 );
 		memory::call<void>( PATTERN( patterns::weapon_update_skin ), weapon, true );
+
+		if ( PATTERN( patterns::weapon_update_modules ) )
+		{
+			memory::call<void>( PATTERN( patterns::weapon_update_modules ), weapon );
+		}
 	}
 
 	void knives::update_view_model( std::uintptr_t pawn, const econ_item_system::paint_kit* pk )
@@ -386,6 +395,12 @@ namespace features::changer {
 	void knives::process_hud_clear( )
 	{
 		this->m_pending_hud_iv = 0;
+	}
+
+	void knives::reset( )
+	{
+		this->m_overridden = false;
+		this->m_last_active_handle = 0;
 	}
 
 } // namespace features::changer

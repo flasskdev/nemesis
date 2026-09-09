@@ -4,6 +4,7 @@
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
 #include <core/systems/systems.hpp>
+#include <core/rendering/rendering.hpp>
 #include <core/settings.hpp>
 #include <protection/game_addresses.hpp>
 #include <cctype>
@@ -194,6 +195,8 @@ namespace features::world {
 	}
 
 	void scene::on_frame_stage_notify () {
+		settings::g_world.update_active( rendering::g_widgets.s_map_name );
+
 		const auto local = systems::g_local.get ();
 
 		if (!local.pawn || !local.is_alive) {

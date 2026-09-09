@@ -720,6 +720,11 @@ namespace patterns {
 		::protection::addresses::address_type::pattern,
 		"client.dll:4055534157488DAC2400FEFFFF4881EC00030000440FB6FA488BD9");
 
+	const ::protection::addresses::address_t& weapon_update_modules = ADDRESS_IMPL(
+		::protection::addresses::hash("client.dll:48895C2408574883EC30488BD9E8????????BA01000000488BCB"),
+		::protection::addresses::address_type::pattern,
+		"client.dll:48895C2408574883EC30488BD9E8????????BA01000000488BCB");
+
 	const ::protection::addresses::address_t& econ_item_view_set_attribute = ADDRESS_IMPL(
 		::protection::addresses::hash("client.dll:40534883EC20488BD94881C108020000"),
 		::protection::addresses::address_type::pattern,
@@ -764,6 +769,11 @@ namespace patterns {
 		::protection::addresses::hash("client.dll:488B05????????4885C074??83B8A80000000375??80B8A40000000075??B001C332C0C3"),
 		::protection::addresses::address_type::pattern,
 		"client.dll:488B05????????4885C074??83B8A80000000375??80B8A40000000075??B001C332C0C3");
+
+	const ::protection::addresses::address_t& panorama_event = ADDRESS_IMPL(
+		::protection::addresses::hash("client.dll:40565741574883EC40488B3D????????4D85C0488B35????????4C8BFA490F45F8"),
+		::protection::addresses::address_type::pattern,
+		"client.dll:40565741574883EC40488B3D????????4D85C0488B35????????4C8BFA490F45F8");
 
 	const ::protection::addresses::address_t& get_ready_time_remaining = ADDRESS_IMPL(
 		::protection::addresses::hash("client.dll:40534883EC20488B0D????????488B01FF5078488B0D????????488BD8488B11FF5278"),

@@ -77,10 +77,10 @@ namespace features::changer::cosmetic_attributes {
         memory::call<void>(set, item_view, names[1], static_cast<float>(skin.seed));
         memory::call<void>(set, item_view, names[2], skin.wear);
         if (skin.stattrak) {
-            // Both attributes are stored_as_integer. The current UI supports on/off, not a kill count.
-            const auto zero = std::bit_cast<float>(std::int32_t{0});
-            memory::call<void>(set, item_view, names[3], zero);
-            memory::call<void>(set, item_view, names[4], zero);
+            const auto count_val = std::bit_cast<float>(static_cast<std::int32_t>(skin.stattrak_count));
+            const auto score_type = std::bit_cast<float>(std::int32_t{0});
+            memory::call<void>(set, item_view, names[3], count_val);
+            memory::call<void>(set, item_view, names[4], score_type);
         } else {
             memory::call<void>(remove, item_view, static_cast<int>(indices[3]));
             memory::call<void>(remove, item_view, static_cast<int>(indices[4]));

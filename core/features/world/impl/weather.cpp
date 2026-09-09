@@ -2,6 +2,7 @@
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <core/systems/systems.hpp>
+#include <core/rendering/rendering.hpp>
 #include <core/settings.hpp>
 #include <protection/game_addresses.hpp>
 #include "../world.hpp"
@@ -23,6 +24,8 @@ namespace features::world {
 
 	void weather::on_frame_stage_notify( )
 	{
+		settings::g_world.update_active( rendering::g_widgets.s_map_name );
+
 		if ( !settings::g_world.m_weather.enabled.value )
 		{
 			if ( this->m_effect_index != invalid_effect_index )

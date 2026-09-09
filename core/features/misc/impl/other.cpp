@@ -1,9 +1,14 @@
 #include <pch/pch.hpp>
+#include <algorithm>
+#include <bit>
+#include <chrono>
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
+#include <core/features/changer/cosmetic_attributes.hpp>
+#include <external/config.hpp>
 #include <protection/game_addresses.hpp>
 
 namespace features::misc {
@@ -50,7 +55,111 @@ namespace features::misc {
 		}
 
 		const auto attacker_key = cstypes::event_hash{ 0, "attacker" };
+		const auto userid_key = cstypes::event_hash{ 0, "userid" };
+
 		const auto attacker = memory::call<std::uintptr_t>(PATTERN(patterns::game_event_get_controller), event, &attacker_key);
+		const auto victim = memory::call<std::uintptr_t>(PATTERN(patterns::game_event_get_controller), event, &userid_key);
+
+		const auto local = systems::g_local.get();
+		if (!local.is_valid() || !attacker || attacker != local.controller || victim == local.controller)
+		{
+			return;
+		}
+
+		const auto victim_pawn = memory::call<std::uintptr_t>(PATTERN(patterns::game_event_get_pawn), event, &userid_key);
+		if (!victim_pawn)
+		{
+			return;
+		}
+
+		const auto victim_team = memory::read<int>(victim_pawn + SCHEMA("C_BaseEntity", "m_iTeamNum"_hash));
+		if (!local.is_this_other_team(victim_team))
+		{
+			return;
+		}
+
+		const auto weapon_services = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pWeaponServices"_hash));
+		if (!weapon_services)
+		{
+			return;
+		}
+
+		const auto active_handle = memory::read<std::uint32_t>(weapon_services + SCHEMA("CPlayer_WeaponServices", "m_hActiveWeapon"_hash));
+		const auto active_weapon = systems::g_entities.lookup(active_handle);
+		if (!active_weapon)
+		{
+			return;
+		}
+
+		const auto iv = active_weapon + SCHEMA("C_EconEntity", "m_AttributeManager"_hash) + SCHEMA("C_AttributeContainer", "m_Item"_hash);
+		const auto def_index = memory::read<std::uint16_t>(iv + SCHEMA("C_EconItemView", "m_iItemDefinitionIndex"_hash));
+		const auto def = changer::g_econ_item_system.find_def(static_cast<std::int16_t>(def_index));
+		if (!def)
+		{
+			return;
+		}
+
+		settings::changer::applied_skin* target_skin{ nullptr };
+		if (def->category == changer::econ_item_system::item_category::gun)
+		{
+			const auto it = settings::g_changer.skins.data.find(def_index);
+			if (it != settings::g_changer.skins.data.end())
+			{
+				target_skin = &it->second;
+			}
+		}
+		else if (def->category == changer::econ_item_system::item_category::knife)
+		{
+			const auto it = settings::g_changer.skins.data.find(def_index);
+			if (it != settings::g_changer.skins.data.end())
+			{
+				target_skin = &it->second;
+			}
+			else
+			{
+				for (auto& [k_def, k_skin] : settings::g_changer.skins.data)
+				{
+					const auto kdef = changer::g_econ_item_system.find_def(k_def);
+					if (kdef && kdef->category == changer::econ_item_system::item_category::knife)
+					{
+						target_skin = &k_skin;
+						break;
+					}
+				}
+			}
+		}
+
+		if (target_skin && target_skin->stattrak)
+		{
+			target_skin->stattrak_count++;
+
+			memory::write<int>(active_weapon + SCHEMA("C_EconEntity", "m_nFallbackStatTrak"_hash), target_skin->stattrak_count);
+
+			if (changer::cosmetic_attributes::available())
+			{
+				const auto set = PATTERN(patterns::econ_item_view_set_attribute);
+				const auto count_val = std::bit_cast<float>(static_cast<std::int32_t>(target_skin->stattrak_count));
+				memory::call<void>(set, iv, "kill eater", count_val);
+			}
+
+			if (PATTERN(patterns::weapon_update_modules))
+			{
+				memory::call<void>(PATTERN(patterns::weapon_update_modules), active_weapon);
+			}
+
+			config::registry::save_active();
+		}
+
+		if (settings::g_misc.m_kill_say.enabled.value && !settings::g_misc.m_kill_say.message.value.empty())
+		{
+			std::string text = settings::g_misc.m_kill_say.message.value;
+			std::replace(text.begin(), text.end(), '\n', ' ');
+			std::replace(text.begin(), text.end(), '\r', ' ');
+			std::replace(text.begin(), text.end(), '"', '\'');
+			std::replace(text.begin(), text.end(), ';', ' ');
+			const auto cmd = std::format("say \"{}\"", text);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, cmd.c_str(), 0x7ffef001);
+		}
 	}
 
 	void other::on_frame_stage_notify()
@@ -64,6 +173,7 @@ namespace features::misc {
 		this->do_player_alpha_changing();
 		this->do_reveal_radar();
 		this->do_name_changing();
+		this->do_chat_spam();
 	}
 
 	void other::do_reveal_radar() const
@@ -269,7 +379,7 @@ namespace features::misc {
 		std::string display_name = base_name;
 		if (cfg.clantag.value)
 		{
-			constexpr std::string_view tag{ "mintalyy.t.me" };
+			constexpr std::string_view tag{ "mintalynews.t.me" };
 			constexpr auto ticks_per_step{ 32 }; // 0.25 seconds at CS2's 64-tick interval.
 			constexpr auto phase_count{ static_cast<int>(tag.size() * 2) };
 
@@ -359,6 +469,55 @@ namespace features::misc {
 
 		const auto cmd = std::format( "callvote kick {}", local_slot );
 		memory::call<void>( PATTERN( patterns::engine_client_cmd ), addresses::globals::source2engine_to_client, 0, cmd.c_str(), 0x7ffef001 );
+	}
+
+	void other::do_chat_spam()
+	{
+		const auto& cfg = settings::g_misc.m_chat_spam;
+
+		if (!cfg.enabled.value || cfg.message.value.empty())
+		{
+			return;
+		}
+
+		const bool send_all  = cfg.targets.values[0];
+		const bool send_team = cfg.targets.values[1];
+
+		if (!send_all && !send_team)
+		{
+			return;
+		}
+
+		using clock = std::chrono::steady_clock;
+		static auto last_time = clock::now();
+
+		const auto now = clock::now();
+		const auto elapsed = std::chrono::duration<float>(now - last_time).count();
+
+		if (elapsed < cfg.delay.value)
+		{
+			return;
+		}
+
+		last_time = now;
+
+		std::string text = cfg.message.value;
+		std::replace(text.begin(), text.end(), '\n', ' ');
+		std::replace(text.begin(), text.end(), '\r', ' ');
+		std::replace(text.begin(), text.end(), '"', '\'');
+		std::replace(text.begin(), text.end(), ';', ' ');
+
+		if (send_all)
+		{
+			const auto cmd = std::format("say \"{}\"", text);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, cmd.c_str(), 0x7ffef001);
+		}
+
+		if (send_team)
+		{
+			const auto cmd = std::format("say_team \"{}\"", text);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, cmd.c_str(), 0x7ffef001);
+		}
 	}
 
 } // namespace features::misc

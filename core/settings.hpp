@@ -224,7 +224,7 @@ namespace settings {
 
 		struct duckpeek
 		{
-			xui::setting enabled{ false, { VK_LMENU, xui::bind_mode::hold_on }, "duck peek", "peek assistance" };
+			xui::setting enabled{ false, { 'C', xui::bind_mode::hold_on }, "duck peek", "peek assistance" };
 		} m_duckpeek{};
 
 		struct lagcomp_settings
@@ -271,7 +271,42 @@ namespace settings {
 		{
 			liquid, metallic, matte, flat, bloom, outlines, glow, electric, distortion, hologram, pearl,
 			liquid_ignorez, matte_ignorez, flat_ignorez, bloom_ignorez, outlines_ignorez, glow_ignorez, distortion_ignorez, hologram_ignorez,
+			outline_glow, outline_glow_ignorez,
 			count
+		};
+
+		static constexpr bool is_outline_material( cham_ids id ) noexcept
+		{
+			return id == cham_ids::outlines ||
+			       id == cham_ids::outlines_ignorez ||
+			       id == cham_ids::outline_glow ||
+			       id == cham_ids::outline_glow_ignorez ||
+			       id == cham_ids::glow ||
+			       id == cham_ids::glow_ignorez;
+		}
+
+		struct outline_glow_config
+		{
+			config::val<float> intensity{ 18.0f };
+			config::val<float> thickness{ 4.0f };
+			config::val<float> softness{ 1.2f };
+			config::val<float> opacity{ 1.0f };
+			config::val<float> inner_spread{ 0.0f };
+			config::val<float> pulse_speed{ 0.0f };
+
+			outline_glow_config( ) = default;
+
+			void reg( std::string_view cat, std::string_view prefix )
+			{
+				const auto s = std::string( cat );
+				const auto p = prefix.empty( ) ? "" : ( std::string( prefix ) + " " );
+				this->intensity.reg( s, p + "glow intensity" );
+				this->thickness.reg( s, p + "glow thickness" );
+				this->softness.reg( s, p + "glow softness" );
+				this->opacity.reg( s, p + "glow opacity" );
+				this->inner_spread.reg( s, p + "glow inner spread" );
+				this->pulse_speed.reg( s, p + "glow pulse speed" );
+			}
 		};
 
 		struct chams_layer
@@ -279,14 +314,21 @@ namespace settings {
 			xui::setting enabled{ false, {}, "chams layer", "chams" };
 			config::col color{ { 255, 255, 255, 255 } };
 			config::enm<cham_ids> material{ cham_ids::matte };
+			xui::setting filled{ true, {}, "filled", "chams" };
+			outline_glow_config glow{};
 
-			void init( std::string_view cat, std::string_view layer_name )
+			void init( std::string_view cat, std::string_view layer_prefix )
 			{
 				const auto s = std::string( cat );
-				this->enabled.name = std::string( layer_name );
+				const auto p = std::string( layer_prefix );
+				this->enabled.name = p + " layer";
 				this->enabled.category = s;
-				this->color.reg( s, std::string( layer_name ) + " color" );
-				this->material.reg( s, std::string( layer_name ) + " material" );
+				this->color.reg( s, p + " color" );
+				this->material.reg( s, p + " material" );
+				this->filled.name = p + " filled";
+				this->filled.category = s;
+				this->filled.value = true;
+				this->glow.reg( s, p );
 			}
 		};
 
@@ -296,6 +338,16 @@ namespace settings {
 			chams_layer primary{};
 			chams_layer secondary{};
 			chams_layer overlay{};
+
+			void init( std::string_view cat, std::string_view toggle_name = "chams" )
+			{
+				const auto s = std::string( cat );
+				this->enabled.name = std::string( toggle_name );
+				this->enabled.category = s;
+				this->primary.init( s, "primary" );
+				this->secondary.init( s, "secondary" );
+				this->overlay.init( s, "overlay" );
+			}
 		};
 
 		struct glow_target
@@ -303,8 +355,10 @@ namespace settings {
 			xui::setting enabled{ false, {}, "glow", "glow" };
 			config::col color{ { 173, 192, 255, 75 } };
 
-			void init( std::string_view cat, std::string_view color_name = "color" )
+			void init( std::string_view cat, std::string_view color_name = "color", std::string_view toggle_name = "glow" )
 			{
+				this->enabled.category = std::string( cat );
+				this->enabled.name = std::string( toggle_name );
 				this->color.reg( cat, color_name );
 			}
 		};
@@ -579,37 +633,56 @@ namespace settings {
 
 			struct chams
 			{
-				chams_config enemy
-				{
-					.enabled = { true, {}, "chams", "chams enemy" },
-					.primary = {.enabled = { true, {}, "primary layer", "chams enemy" }, .color = { { 173, 192, 255, 150 }, "chams enemy", "primary color" }, .material = { cham_ids::flat, "chams enemy", "primary material" } },
-					.secondary = {.enabled = { true, {}, "secondary layer", "chams enemy" }, .color = { { 255, 208, 243, 118 }, "chams enemy", "secondary color" }, .material = { cham_ids::flat_ignorez, "chams enemy", "secondary material" } }
-				};
-				chams_config enemy_ragdoll{ .enabled = { false, {}, "ragdoll chams", "chams enemy ragdoll" } };
-				chams_config team{ .enabled = { false, {}, "chams", "chams team" } };
-				chams_config team_ragdoll{ .enabled = { false, {}, "ragdoll chams", "chams team ragdoll" } };
-				chams_config local
-				{
-					.enabled = { true, {}, "chams", "chams local" },
-					.overlay = {.enabled = { true, {}, "overlay layer", "chams local" }, .color = { { 173, 192, 255, 175 }, "chams local", "overlay color" }, .material = { cham_ids::outlines, "chams local", "overlay material" } }
-				};
-				chams_config local_ragdoll{ .enabled = { false, {}, "ragdoll chams", "chams local ragdoll" } };
+				chams_config enemy{};
+				chams_config enemy_ragdoll{};
+				chams_config team{};
+				chams_config team_ragdoll{};
+				chams_config local{};
+				chams_config local_ragdoll{};
+				chams_config backtrack{};
+				chams_config onshot{};
+				config::val<float> onshot_fade_time{ 0.8f, "chams onshot", "fade time" };
 
-				chams_config backtrack
+				chams( )
 				{
-					.enabled = { false, {}, "backtrack chams", "chams backtrack" },
-					.primary = {.enabled = { false, {}, "primary layer", "chams backtrack" }, .color = { { 173, 192, 255, 25 }, "chams backtrack", "primary color" }, .material = { cham_ids::flat, "chams backtrack", "primary material" } },
-					.secondary = {.enabled = { false, {}, "secondary layer", "chams backtrack" }, .color = { { 173, 192, 255, 255 }, "chams backtrack", "secondary color" }, .material = { cham_ids::outlines, "chams backtrack", "secondary material" } }
-				};
+					this->enemy.init( "chams enemy", "chams" );
+					this->enemy.enabled.value = true;
+					this->enemy.primary.enabled.value = true;
+					this->enemy.primary.color.value = { 173, 192, 255, 150 };
+					this->enemy.primary.material.value = cham_ids::flat;
+					this->enemy.secondary.enabled.value = true;
+					this->enemy.secondary.color.value = { 255, 208, 243, 118 };
+					this->enemy.secondary.material.value = cham_ids::flat_ignorez;
 
-				chams_config onshot
-				{
-					.enabled = { false, {}, "onshot chams",    "chams onshot" },
-					.primary = {.enabled = { true,  {}, "primary layer",   "chams onshot" }, .color = { { 255, 100, 100, 200 }, "chams onshot", "primary color" }, .material = { cham_ids::flat, "chams onshot", "primary material" } },
-					.secondary = {.enabled = { false, {}, "secondary layer", "chams onshot" }, .color = { { 255, 100, 100, 100 }, "chams onshot", "secondary color" }, .material = { cham_ids::flat_ignorez, "chams onshot", "secondary material" } },
-					.overlay = {.enabled = { false, {}, "overlay layer",   "chams onshot" }, .color = { { 255, 100, 100, 255 }, "chams onshot", "overlay color" }, .material = { cham_ids::outlines, "chams onshot", "overlay material" } },
-				};
-				config::val<float> onshot_fade_time {0.8f, "chams onshot", "fade time"};
+					this->enemy_ragdoll.init( "chams enemy ragdoll", "ragdoll chams" );
+
+					this->team.init( "chams team", "chams" );
+
+					this->team_ragdoll.init( "chams team ragdoll", "ragdoll chams" );
+
+					this->local.init( "chams local", "chams" );
+					this->local.enabled.value = true;
+					this->local.overlay.enabled.value = true;
+					this->local.overlay.color.value = { 173, 192, 255, 175 };
+					this->local.overlay.material.value = cham_ids::outlines;
+
+					this->local_ragdoll.init( "chams local ragdoll", "ragdoll chams" );
+
+					this->backtrack.init( "chams backtrack", "backtrack chams" );
+					this->backtrack.primary.color.value = { 173, 192, 255, 25 };
+					this->backtrack.primary.material.value = cham_ids::flat;
+					this->backtrack.secondary.color.value = { 173, 192, 255, 255 };
+					this->backtrack.secondary.material.value = cham_ids::outlines;
+
+					this->onshot.init( "chams onshot", "onshot chams" );
+					this->onshot.primary.enabled.value = true;
+					this->onshot.primary.color.value = { 255, 100, 100, 200 };
+					this->onshot.primary.material.value = cham_ids::flat;
+					this->onshot.secondary.color.value = { 255, 100, 100, 100 };
+					this->onshot.secondary.material.value = cham_ids::flat_ignorez;
+					this->onshot.overlay.color.value = { 255, 100, 100, 255 };
+					this->onshot.overlay.material.value = cham_ids::outlines;
+				}
 			} m_chams{};
 
 			struct glow
@@ -620,23 +693,35 @@ namespace settings {
 				glow_target team_ragdoll{ .enabled = { false, {}, "ragdoll glow", "glow team" }, .color = { { 173, 192, 255, 40 }, "glow team", "ragdoll color" } };
 				glow_target local{ .enabled = { false, {}, "glow", "glow local" }, .color = { { 252, 217, 240, 50 }, "glow local", "color" } };
 				glow_target local_ragdoll{ .enabled = { false, {}, "ragdoll glow", "glow local" }, .color = { { 173, 192, 255, 40 }, "glow local", "ragdoll color" } };
-		} m_glow{};
+			} m_glow{};
 
-	} m_player{};
+		} m_player{};
 
 		struct viewmodel
 		{
-			chams_config weapon
+			chams_config weapon{};
+			chams_config arms{};
+
+			viewmodel( )
 			{
-				.enabled = { true, {}, "weapon chams", "viewmodel" },
-				.overlay = {.enabled = { true, {}, "overlay layer", "viewmodel weapon" }, .color = { { 217, 173, 202, 175 }, "viewmodel weapon", "overlay color" }, .material = { cham_ids::glow, "viewmodel weapon", "overlay material" } }
-			};
-			chams_config arms
-			{
-				.enabled = { true, {}, "arms chams", "viewmodel" },
-				.primary = {.enabled = { false, {}, "primary layer", "viewmodel arms" }, .color = { { 173, 192, 255, 255 }, "viewmodel arms", "primary color" }, .material = { cham_ids::outlines, "viewmodel arms", "primary material" } },
-				.overlay = {.enabled = { true, {}, "overlay layer", "viewmodel arms" }, .color = { { 173, 192, 255, 255 }, "viewmodel arms", "overlay color" }, .material = { cham_ids::outlines, "viewmodel arms", "overlay material" } }
-			};
+				this->weapon.init( "viewmodel weapon", "weapon chams" );
+				this->weapon.enabled.category = "viewmodel";
+				this->weapon.enabled.value = true;
+				this->weapon.primary.color.value = { 255, 255, 255, 255 };
+				this->weapon.primary.material.value = cham_ids::matte;
+				this->weapon.overlay.enabled.value = true;
+				this->weapon.overlay.color.value = { 217, 173, 202, 175 };
+				this->weapon.overlay.material.value = cham_ids::glow;
+
+				this->arms.init( "viewmodel arms", "arms chams" );
+				this->arms.enabled.category = "viewmodel";
+				this->arms.enabled.value = true;
+				this->arms.primary.color.value = { 173, 192, 255, 255 };
+				this->arms.primary.material.value = cham_ids::outlines;
+				this->arms.overlay.enabled.value = true;
+				this->arms.overlay.color.value = { 173, 192, 255, 255 };
+				this->arms.overlay.material.value = cham_ids::outlines;
+			}
 		} m_viewmodel{};
 
 		struct local_alpha
@@ -645,6 +730,19 @@ namespace settings {
 			config::val<float> opacity{ 0.5f, "chams local", "opacity" };
 			xui::setting only_scoped{ true, {}, "only when scoped", "chams local" };
 		} m_local_alpha{};
+
+		struct legacy_outline_glow_config : outline_glow_config
+		{
+			legacy_outline_glow_config( )
+			{
+				this->intensity.reg( "chams outline glow", "intensity" );
+				this->thickness.reg( "chams outline glow", "thickness" );
+				this->softness.reg( "chams outline glow", "softness" );
+				this->opacity.reg( "chams outline glow", "opacity" );
+				this->inner_spread.reg( "chams outline glow", "inner spread" );
+				this->pulse_speed.reg( "chams outline glow", "pulse speed" );
+			}
+		} m_outline_glow{};
 
 		struct item
 		{
@@ -751,8 +849,7 @@ namespace settings {
 					for ( auto i = 0u; i < k_group_count; ++i )
 					{
 						const auto cat = std::string( "chams items - " ) + k_group_names[ i ];
-						this->groups[ i ].primary.init( cat, "primary layer" );
-						this->groups[ i ].secondary.init( cat, "secondary layer" );
+						this->groups[ i ].init( cat, "item chams" );
 					}
 
 					this->groups[ 4 ].primary.enabled.value = true;
@@ -820,7 +917,7 @@ namespace settings {
 					for ( auto i = 0u; i < k_group_count; ++i )
 					{
 						const auto cat = std::string( "glow items - " ) + k_group_names[ i ];
-						this->groups[ i ].init( cat );
+						this->groups[ i ].init( cat, "color", k_group_names[ i ] );
 					}
 
 					this->groups[ 4 ].color = { 173, 192, 255, 50 };
@@ -900,7 +997,10 @@ namespace settings {
 						void init( std::string_view cat )
 						{
 							const auto s = std::string( cat );
-							this->enabled.name = std::string( cat );
+							this->enabled.name = "indicator " + s;
+							this->enabled.category = s;
+							this->glow.name = "glow";
+							this->glow.category = s;
 							this->arc_color.reg( s, "arc color" );
 							this->icon_color.reg( s, "icon color" );
 							this->background_color.reg( s, "background color" );
@@ -1163,7 +1263,7 @@ namespace settings {
 
 		struct impacts
 		{
-			enum class sound_type : int { shop_click, home_click, bell, killcard, bullet_casing, coin_pickup, item_drop, popcan, key_press, custom };
+			enum class sound_type : int { shop_click, home_click, bell, killcard, bullet_casing, coin_pickup, item_drop, popcan, key_press, koch, custom };
 			enum class marker_type : int { classic, damage, both };
 			enum class bullet_impact_type : int { overlay, sparks, both };
 
@@ -1252,6 +1352,16 @@ namespace settings {
 			config::val<float> aspect_ratio{ 1.333f, "camera", "aspect ratio" };
 		} m_camera{};
 
+		struct motion_blur
+		{
+			xui::setting enabled{ false, {}, "motion blur", "camera" };
+			config::val<float> strength{ 1.0f, "motion blur", "strength" };
+			config::val<float> smoothness{ 16.0f, "motion blur", "smoothness" };
+			config::val<int> samples{ 12, "motion blur", "samples" };
+			config::val<float> center_protection{ 0.20f, "motion blur", "center protection" };
+			xui::setting movement_blur{ false, {}, "movement blur", "motion blur" };
+		} m_motion_blur{};
+
 		struct viewmodel_adjust
 		{
 			xui::setting enabled{ false, {}, "viewmodel adjust", "viewmodel" };
@@ -1337,6 +1447,20 @@ namespace settings {
 			config::bools<5> grenades{ { true, true, true, false, false }, "autobuy", "grenades" };
 		} m_autobuy{};
 
+		struct kill_say
+		{
+			xui::setting enabled{ false, {}, "kill say", "misc" };
+			config::str message{ "1", "misc", "kill say message" };
+		} m_kill_say{};
+
+		struct chat_spam
+		{
+			xui::setting enabled{ false, {}, "chat spam", "misc" };
+			config::str message{ "", "misc", "chat spam message" };
+			config::val<float> delay{ 1.0f, "misc", "chat spam delay" };
+			config::bools<2> targets{ { true, false }, "misc", "chat spam targets" };
+		} m_chat_spam{};
+
 		xui::setting preserve_killfeed{ true, {}, "preserve killfeed", "misc" };
 		xui::setting reveal_radar{ true, {}, "reveal radar", "misc" };
 		xui::setting disable_game_logs{ true, {}, "disable game logs", "misc" };
@@ -1417,7 +1541,7 @@ namespace settings {
 		config::val<int> edgebug_passes{ 1, "movement", "edgebug passes" };
 		/// Adds jump up/down subticks like jumpbug after duck sequence (not in every dump path; optional).
 		xui::setting edgebug_include_jump_steps{ false, {}, "edgebug jump steps", "movement" };
-		xui::setting slowwalk{ false, { 'P', xui::bind_mode::hold_on}, "slowwalk", "movement" };
+		xui::setting slowwalk{ false, {}, "slowwalk", "movement" };
 		config::val<float> slowwalk_speed{ 33.0f, "movement", "slowwalk speed" };
 
 		struct test_strafer
@@ -1438,65 +1562,283 @@ namespace settings {
 		{
 			enum class weather_type : std::uint8_t { snow, rain, stars };
 
-			xui::setting enabled{ true, {}, "weather", "weather" };
-			config::enm<weather_type> type{ weather_type::snow, "weather", "type" };
-			config::col color{ { 117, 120, 142, 144 }, "weather", "color" };
+			xui::setting enabled;
+			config::enm<weather_type> type;
+			config::col color;
 
-			xui::setting fog_enabled{ true, {}, "fog", "weather" };
-			config::val<float> fog_density{ 0.5f, "weather", "fog density" };
-			config::val<float> fog_anisotropy{ 0.5f, "weather", "fog anisotropy" };
-			config::val<float> fog_draw_distance{ 8000.0f, "weather", "fog draw distance" };
-			config::col fog_color{ { 160, 175, 210, 255 }, "weather", "fog color" };
+			xui::setting fog_enabled;
+			config::val<float> fog_density;
+			config::val<float> fog_anisotropy;
+			config::val<float> fog_draw_distance;
+			config::col fog_color;
 
-			xui::setting wetness{ false, {}, "wetness", "weather" };
-			config::val<float> wetness_density{ 1.8f, "weather", "wetness density" };
-			config::val<float> wetness_speed{ 0.8f, "weather", "wetness speed" };
+			xui::setting wetness;
+			config::val<float> wetness_density;
+			config::val<float> wetness_speed;
 
-			xui::setting wind{ true, {}, "wind", "weather" };
-			config::val<float> wind_strength{ 3.0f, "weather", "wind strength" };
-			config::val<float> wind_direction{ 0.0f, "weather", "wind direction" };
-			config::val<float> wind_turbulence{ 1.0f, "weather", "wind turbulence" };
-		} m_weather{};
+			xui::setting wind;
+			config::val<float> wind_strength;
+			config::val<float> wind_direction;
+			config::val<float> wind_turbulence;
+
+			weather( std::string_view cat = "weather" )
+				: enabled{ true, {}, "weather", std::string( cat ) },
+				  type{ weather_type::snow, cat, "type" },
+				  color{ { 117, 120, 142, 144 }, cat, "color" },
+				  fog_enabled{ true, {}, "fog", std::string( cat ) },
+				  fog_density{ 0.5f, cat, "fog density" },
+				  fog_anisotropy{ 0.5f, cat, "fog anisotropy" },
+				  fog_draw_distance{ 8000.0f, cat, "fog draw distance" },
+				  fog_color{ { 160, 175, 210, 255 }, cat, "fog color" },
+				  wetness{ false, {}, "wetness", std::string( cat ) },
+				  wetness_density{ 1.8f, cat, "wetness density" },
+				  wetness_speed{ 0.8f, cat, "wetness speed" },
+				  wind{ true, {}, "wind", std::string( cat ) },
+				  wind_strength{ 3.0f, cat, "wind strength" },
+				  wind_direction{ 0.0f, cat, "wind direction" },
+				  wind_turbulence{ 1.0f, cat, "wind turbulence" }
+			{
+			}
+		};
 
 		struct scene
 		{
 			struct skyboxing
 			{
-				xui::setting custom_skybox{ true, {}, "skybox material", "scene" };
-				config::val<int> selected_skybox{ 0, "scene", "selected skybox" };
+				xui::setting custom_skybox;
+				config::val<int> selected_skybox;
 
-				xui::setting custom_color{ true, {}, "skybox color", "scene" };
-				config::col skybox_color{ { 249, 103, 206, 255 }, "scene", "skybox color value" };
-				config::col cloud_color{ { 173, 192, 255, 0 }, "scene", "cloud color" };
-				config::col sun_color{ { 173, 192, 255, 0 }, "scene", "sun color" };
+				xui::setting custom_color;
+				config::col skybox_color;
+				config::col cloud_color;
+				config::col sun_color;
+
+				skyboxing( std::string_view cat = "scene" )
+					: custom_skybox{ true, {}, "skybox material", std::string( cat ) },
+					  selected_skybox{ 0, cat, "selected skybox" },
+					  custom_color{ true, {}, "skybox color", std::string( cat ) },
+					  skybox_color{ { 249, 103, 206, 255 }, cat, "skybox color value" },
+					  cloud_color{ { 173, 192, 255, 0 }, cat, "cloud color" },
+					  sun_color{ { 173, 192, 255, 0 }, cat, "sun color" }
+				{
+				}
 			};
 
-			skyboxing skybox{};
+			skyboxing skybox;
 
-			xui::setting lighting{ true, {}, "lighting", "scene" };
-			config::col lighting_color{ { 173, 192, 255, 255 }, "scene", "lighting color" };
-			config::val<float> lighting_intensity{ 0.85f, "scene", "lighting intensity" };
-			config::vec3 lighting_rotation{ { -0.9f, 0.3f, 0.2f }, "scene", "lighting rotation" };
+			xui::setting lighting;
+			config::col lighting_color;
+			config::val<float> lighting_intensity;
+			config::vec3 lighting_rotation;
 
-			xui::setting world_setting{ true, {}, "world color", "scene" };
-			config::col world_color{ { 115, 125, 160, 255 }, "scene", "world color value" };
+			xui::setting world_setting;
+			config::col world_color;
 
-			xui::setting bloom{ true, {}, "bloom", "scene" };
-			config::val<float> bloom_value{ 2.0f, "scene", "bloom value" };
+			xui::setting bloom;
+			config::val<float> bloom_value;
 
-			xui::setting gamma{ true, {}, "gamma", "scene" };
-			config::val<float> gamma_value{ 2.2f, "scene", "gamma value" };
+			xui::setting gamma;
+			config::val<float> gamma_value;
 
-			xui::setting dof{ true, {}, "depth of field", "scene" };
-			config::val<float> dof_near_blurry{ 0.0f, "scene", "dof near blurry" };
-			config::val<float> dof_near_crisp{ 5.0f, "scene", "dof near crisp" };
-			config::val<float> dof_far_crisp{ 600.0f, "scene", "dof far crisp" };
-			config::val<float> dof_far_blurry{ 1400.0f, "scene", "dof far blurry" };
+			xui::setting dof;
+			config::val<float> dof_near_blurry;
+			config::val<float> dof_near_crisp;
+			config::val<float> dof_far_crisp;
+			config::val<float> dof_far_blurry;
 
-			xui::setting ambient{ true, {}, "ambient", "scene" };
-			config::col ambient_color{ { 233, 145, 255, 255 }, "scene", "ambient color" };
-			config::val<float> ambient_intensity{ 1.1f, "scene", "ambient intensity" };
-		} m_scene{};
+			xui::setting ambient;
+			config::col ambient_color;
+			config::val<float> ambient_intensity;
+
+			scene( std::string_view cat = "scene" )
+				: skybox{ cat },
+				  lighting{ true, {}, "lighting", std::string( cat ) },
+				  lighting_color{ { 173, 192, 255, 255 }, cat, "lighting color" },
+				  lighting_intensity{ 0.85f, cat, "lighting intensity" },
+				  lighting_rotation{ { -0.9f, 0.3f, 0.2f }, cat, "lighting rotation" },
+				  world_setting{ true, {}, "world color", std::string( cat ) },
+				  world_color{ { 115, 125, 160, 255 }, cat, "world color value" },
+				  bloom{ true, {}, "bloom", std::string( cat ) },
+				  bloom_value{ 2.0f, cat, "bloom value" },
+				  gamma{ true, {}, "gamma", std::string( cat ) },
+				  gamma_value{ 2.2f, cat, "gamma value" },
+				  dof{ true, {}, "depth of field", std::string( cat ) },
+				  dof_near_blurry{ 0.0f, cat, "dof near blurry" },
+				  dof_near_crisp{ 5.0f, cat, "dof near crisp" },
+				  dof_far_crisp{ 600.0f, cat, "dof far crisp" },
+				  dof_far_blurry{ 1400.0f, cat, "dof far blurry" },
+				  ambient{ true, {}, "ambient", std::string( cat ) },
+				  ambient_color{ { 233, 145, 255, 255 }, cat, "ambient color" },
+				  ambient_intensity{ 1.1f, cat, "ambient intensity" }
+			{
+			}
+		};
+
+		enum map_id : int
+		{
+			map_global = 0,
+			map_dust2,
+			map_mirage,
+			map_inferno,
+			map_nuke,
+			map_overpass,
+			map_vertigo,
+			map_ancient,
+			map_anubis,
+			map_office,
+			map_italy,
+			map_max
+		};
+
+		struct map_entry
+		{
+			const char* id_name;
+			const char* display_name;
+			const char* monogram;
+			xdraw::color grad_top;
+			xdraw::color grad_bot;
+		};
+
+		static constexpr map_entry k_map_entries[ 11 ]{
+			{ "",            "All maps", "★",   xdraw::color{ 52,  34,  98, 255 }, xdraw::color{ 16,  12,  34, 255 } },
+			{ "de_dust2",    "Dust II",  "D2",  xdraw::color{ 198, 132,  48, 255 }, xdraw::color{ 68,  34,  10, 255 } },
+			{ "de_mirage",   "Mirage",   "MRG", xdraw::color{ 188,  62,  94, 255 }, xdraw::color{ 58,  18,  50, 255 } },
+			{ "de_inferno",  "Inferno",  "INF", xdraw::color{ 192,  56,  42, 255 }, xdraw::color{ 68,  18,  14, 255 } },
+			{ "de_nuke",     "Nuke",     "NUK", xdraw::color{  28, 138, 142, 255 }, xdraw::color{ 10,  36,  48, 255 } },
+			{ "de_overpass", "Overpass", "OVP", xdraw::color{  46, 132,  68, 255 }, xdraw::color{ 14,  46,  26, 255 } },
+			{ "de_vertigo",  "Vertigo",  "VTG", xdraw::color{  36, 102, 222, 255 }, xdraw::color{ 14,  28,  72, 255 } },
+			{ "de_ancient",  "Ancient",  "ANC", xdraw::color{  32, 108,  52, 255 }, xdraw::color{ 10,  36,  16, 255 } },
+			{ "de_anubis",   "Anubis",   "ANB", xdraw::color{  30,  72, 148, 255 }, xdraw::color{ 148,  98,  30, 255 } },
+			{ "cs_office",   "Office",   "OFF", xdraw::color{  62, 152, 222, 255 }, xdraw::color{ 20,  36,  56, 255 } },
+			{ "cs_italy",    "Italy",    "ITL", xdraw::color{ 202,  82,  42, 255 }, xdraw::color{ 72,  28,  14, 255 } }
+		};
+
+		struct map_preset
+		{
+			xui::setting override_map;
+			scene m_scene;
+			weather m_weather;
+
+			map_preset( std::string_view scene_cat, std::string_view weather_cat, std::string_view name )
+				: override_map{ false, {}, "override " + std::string( name ), std::string( scene_cat ) },
+				  m_scene{ scene_cat },
+				  m_weather{ weather_cat }
+			{
+			}
+		};
+
+		static void copy_scene( scene& dst, const scene& src )
+		{
+			dst.skybox.custom_skybox.value = src.skybox.custom_skybox.value;
+			dst.skybox.selected_skybox.value = src.skybox.selected_skybox.value;
+			dst.skybox.custom_color.value = src.skybox.custom_color.value;
+			dst.skybox.skybox_color.value = src.skybox.skybox_color.value;
+			dst.skybox.cloud_color.value = src.skybox.cloud_color.value;
+			dst.skybox.sun_color.value = src.skybox.sun_color.value;
+
+			dst.lighting.value = src.lighting.value;
+			dst.lighting_color.value = src.lighting_color.value;
+			dst.lighting_intensity.value = src.lighting_intensity.value;
+			dst.lighting_rotation.value = src.lighting_rotation.value;
+
+			dst.world_setting.value = src.world_setting.value;
+			dst.world_color.value = src.world_color.value;
+
+			dst.bloom.value = src.bloom.value;
+			dst.bloom_value.value = src.bloom_value.value;
+
+			dst.gamma.value = src.gamma.value;
+			dst.gamma_value.value = src.gamma_value.value;
+
+			dst.dof.value = src.dof.value;
+			dst.dof_near_blurry.value = src.dof_near_blurry.value;
+			dst.dof_near_crisp.value = src.dof_near_crisp.value;
+			dst.dof_far_crisp.value = src.dof_far_crisp.value;
+			dst.dof_far_blurry.value = src.dof_far_blurry.value;
+
+			dst.ambient.value = src.ambient.value;
+			dst.ambient_color.value = src.ambient_color.value;
+			dst.ambient_intensity.value = src.ambient_intensity.value;
+		}
+
+		static void copy_weather( weather& dst, const weather& src )
+		{
+			dst.enabled.value = src.enabled.value;
+			dst.type.value = src.type.value;
+			dst.color.value = src.color.value;
+
+			dst.fog_enabled.value = src.fog_enabled.value;
+			dst.fog_density.value = src.fog_density.value;
+			dst.fog_anisotropy.value = src.fog_anisotropy.value;
+			dst.fog_draw_distance.value = src.fog_draw_distance.value;
+			dst.fog_color.value = src.fog_color.value;
+
+			dst.wetness.value = src.wetness.value;
+			dst.wetness_density.value = src.wetness_density.value;
+			dst.wetness_speed.value = src.wetness_speed.value;
+
+			dst.wind.value = src.wind.value;
+			dst.wind_strength.value = src.wind_strength.value;
+			dst.wind_direction.value = src.wind_direction.value;
+			dst.wind_turbulence.value = src.wind_turbulence.value;
+		}
+
+		// Global fallback preset (uses standard "scene" & "weather" categories for config backwards-compatibility)
+		map_preset m_global  { "scene",           "weather",           "global" };
+		map_preset m_dust2   { "scene_dust2",     "weather_dust2",     "dust2" };
+		map_preset m_mirage  { "scene_mirage",    "weather_mirage",    "mirage" };
+		map_preset m_inferno { "scene_inferno",   "weather_inferno",   "inferno" };
+		map_preset m_nuke    { "scene_nuke",      "weather_nuke",      "nuke" };
+		map_preset m_overpass{ "scene_overpass",  "weather_overpass",  "overpass" };
+		map_preset m_vertigo { "scene_vertigo",   "weather_vertigo",   "vertigo" };
+		map_preset m_ancient { "scene_ancient",   "weather_ancient",   "ancient" };
+		map_preset m_anubis  { "scene_anubis",    "weather_anubis",    "anubis" };
+		map_preset m_office  { "scene_office",    "weather_office",    "office" };
+		map_preset m_italy   { "scene_italy",     "weather_italy",     "italy" };
+
+		std::array<map_preset*, 11> presets{
+			&m_global, &m_dust2, &m_mirage, &m_inferno, &m_nuke,
+			&m_overpass, &m_vertigo, &m_ancient, &m_anubis, &m_office, &m_italy
+		};
+
+		// Active resolved scene & weather (read directly by scene.cpp, weather.cpp, hooks, etc.)
+		scene m_scene{ "active_scene" };
+		weather m_weather{ "active_weather" };
+
+		void update_active( const std::string& current_map )
+		{
+			int matched_idx = -1;
+			if ( !current_map.empty() )
+			{
+				std::string lower = current_map;
+				for ( char& c : lower ) c = static_cast<char>( std::tolower( static_cast<unsigned char>( c ) ) );
+
+				for ( int i = 1; i < static_cast<int>( map_max ); ++i )
+				{
+					const char* id = k_map_entries[ i ].id_name;
+					if ( lower.find( id ) != std::string::npos ||
+					     ( std::strlen( id ) > 3 && lower.find( id + 3 ) != std::string::npos ) )
+					{
+						matched_idx = i;
+						break;
+					}
+				}
+			}
+
+			const map_preset* source = &m_global;
+			if ( matched_idx > 0 && presets[ matched_idx ]->override_map.value )
+			{
+				source = presets[ matched_idx ];
+			}
+
+			copy_scene( this->m_scene, source->m_scene );
+			copy_weather( this->m_weather, source->m_weather );
+		}
+
+		world()
+		{
+			update_active( "" );
+		}
 	};
 
 	inline combat g_combat{};

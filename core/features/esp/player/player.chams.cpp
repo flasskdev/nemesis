@@ -12,6 +12,8 @@ namespace features::esp::player {
 
 	bool chams::on_generate_primitives( std::uintptr_t owner_entity, std::uint32_t owner_hash, std::uintptr_t scene_object, std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_view )
 	{
+		systems::materials::update_outline_glow( settings::g_esp.m_outline_glow );
+
 		const auto is_player = owner_hash == "C_CSPlayerPawn"_hash;
 		const auto is_arms = owner_hash == "C_CS2HudModelArms"_hash;
 		const auto is_weapon = owner_hash == "C_CS2HudModelWeapon"_hash;
@@ -36,30 +38,62 @@ namespace features::esp::player {
 
 		const auto apply_config = [ & ]( const settings::esp::chams_config& cfg, std::uintptr_t target_scene_obj, bool force_original = false )
 			{
-				if ( cfg.secondary.enabled.value )
+				const bool overlay_is_outline = cfg.overlay.enabled.value && settings::esp::is_outline_material( cfg.overlay.material.value );
+				const bool overlay_suppress_fill = overlay_is_outline && !cfg.overlay.filled.value;
+
+				const bool primary_is_outline = cfg.primary.enabled.value && settings::esp::is_outline_material( cfg.primary.material.value );
+				const bool primary_suppress_fill = primary_is_outline && !cfg.primary.filled.value;
+
+				const bool suppress_fill = overlay_suppress_fill || primary_suppress_fill;
+
+				const bool secondary_is_outline = cfg.secondary.enabled.value && settings::esp::is_outline_material( cfg.secondary.material.value );
+				if ( cfg.secondary.enabled.value && !suppress_fill )
 				{
-					this->apply_layer( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.secondary.color, cfg.secondary.material );
+					if ( secondary_is_outline )
+					{
+						this->apply_overlay( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.secondary.color, cfg.secondary.material, &cfg.secondary.glow );
+					}
+					else
+					{
+						this->apply_layer( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.secondary.color, cfg.secondary.material, &cfg.secondary.glow );
+					}
 				}
 
-				if ( cfg.primary.enabled.value )
+				const bool has_primary_fill = cfg.primary.enabled.value && !primary_is_outline && !suppress_fill;
+				if ( has_primary_fill )
 				{
-					this->apply_layer( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.primary.color, cfg.primary.material );
+					this->apply_layer( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.primary.color, cfg.primary.material, &cfg.primary.glow );
 				}
 
-				if ( !cfg.primary.enabled.value && !cfg.secondary.enabled.value && ( cfg.overlay.enabled.value || force_original ) )
+				const bool needs_original_base = !has_primary_fill && !cfg.secondary.enabled.value &&
+					( cfg.overlay.enabled.value || ( primary_is_outline && !primary_suppress_fill ) || force_original );
+
+				if ( needs_original_base && !suppress_fill )
 				{
 					original_fn( a1, target_scene_obj, scene_view, primitive_buffer );
 				}
 
+				if ( primary_is_outline )
+				{
+					this->apply_overlay( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.primary.color, cfg.primary.material, &cfg.primary.glow );
+				}
+
 				if ( cfg.overlay.enabled.value )
 				{
-					this->apply_overlay( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.overlay.color, cfg.overlay.material );
+					this->apply_overlay( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.overlay.color, cfg.overlay.material, &cfg.overlay.glow );
 				}
 			};
 
 		if ( !is_player && !is_arms && !is_weapon )
 		{
 			if ( !settings::g_esp.m_viewmodel.weapon.enabled.value )
+			{
+				return false;
+			}
+
+			if ( !settings::g_esp.m_viewmodel.weapon.primary.enabled.value &&
+			     !settings::g_esp.m_viewmodel.weapon.secondary.enabled.value &&
+			     !settings::g_esp.m_viewmodel.weapon.overlay.enabled.value )
 			{
 				return false;
 			}
@@ -77,6 +111,11 @@ namespace features::esp::player {
 		{
 			const auto& cfg = is_arms ? settings::g_esp.m_viewmodel.arms : settings::g_esp.m_viewmodel.weapon;
 			if ( !cfg.enabled.value )
+			{
+				return false;
+			}
+
+			if ( !cfg.primary.enabled.value && !cfg.secondary.enabled.value && !cfg.overlay.enabled.value )
 			{
 				return false;
 			}
@@ -217,7 +256,7 @@ namespace features::esp::player {
 
 				if ( target->overlay.enabled.value )
 				{
-					this->apply_overlay( primitive_buffer, original_fn, a1, scene_object, scene_view, target->overlay.color, target->overlay.material );
+					this->apply_overlay( primitive_buffer, original_fn, a1, scene_object, scene_view, target->overlay.color, target->overlay.material, &target->overlay.glow );
 				}
 			}
 			else
@@ -710,7 +749,7 @@ namespace features::esp::player {
 		return std::clamp (1.0f - (elapsed / fade_time), 0.0f, 1.0f);
 	}
 
-	void chams::apply_layer( std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_object, std::uintptr_t scene_view, const xdraw::color& color, settings::esp::cham_ids material_id )
+	void chams::apply_layer( std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_object, std::uintptr_t scene_view, const xdraw::color& color, settings::esp::cham_ids material_id, const settings::esp::outline_glow_config* glow_cfg )
 	{
 		const auto before = detail::read_primitive_buffer( primitive_buffer );
 		const auto prev_count = before ? before->count() : -1;
@@ -724,21 +763,53 @@ namespace features::esp::player {
 			return;
 		}
 
-		const auto material = systems::materials::find( material_id );
+		std::uintptr_t material = 0;
+		if ( glow_cfg && ( material_id == settings::esp::cham_ids::outline_glow || material_id == settings::esp::cham_ids::outline_glow_ignorez ) )
+		{
+			const bool is_iz = ( material_id == settings::esp::cham_ids::outline_glow_ignorez );
+			material = systems::materials::get_outline_glow( *glow_cfg, is_iz );
+		}
+		if ( !material )
+		{
+			material = systems::materials::find( material_id );
+		}
 		if ( !material )
 		{
 			return;
 		}
 
+		auto draw_color = color;
+		const auto pulse = glow_cfg ? glow_cfg->pulse_speed.value : settings::g_esp.m_outline_glow.pulse_speed.value;
+		if ( ( material_id == settings::esp::cham_ids::outline_glow || material_id == settings::esp::cham_ids::outline_glow_ignorez ) &&
+		     pulse > 0.01f )
+		{
+			const auto now = std::chrono::steady_clock::now( );
+			const auto sec = std::chrono::duration<float>( now.time_since_epoch( ) ).count( );
+			const auto wave = 0.5f + 0.5f * std::sin( sec * pulse * 4.0f );
+			draw_color.r = static_cast<std::uint8_t>( draw_color.r * ( 0.3f + 0.7f * wave ) );
+			draw_color.g = static_cast<std::uint8_t>( draw_color.g * ( 0.3f + 0.7f * wave ) );
+			draw_color.b = static_cast<std::uint8_t>( draw_color.b * ( 0.3f + 0.7f * wave ) );
+			draw_color.a = static_cast<std::uint8_t>( draw_color.a * ( 0.3f + 0.7f * wave ) );
+		}
+
 		for ( auto i = prev_count; i < new_count; ++i )
 		{
-			detail::replace_primitive( after->at( i ), material, color );
+			detail::replace_primitive( after->at( i ), material, draw_color );
 		}
 	}
 
-	void chams::apply_overlay( std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_object, std::uintptr_t scene_view, const xdraw::color& color, settings::esp::cham_ids material_id )
+	void chams::apply_overlay( std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_object, std::uintptr_t scene_view, const xdraw::color& color, settings::esp::cham_ids material_id, const settings::esp::outline_glow_config* glow_cfg )
 	{
-		const auto material = systems::materials::find( material_id );
+		std::uintptr_t material = 0;
+		if ( glow_cfg && ( material_id == settings::esp::cham_ids::outline_glow || material_id == settings::esp::cham_ids::outline_glow_ignorez ) )
+		{
+			const bool is_iz = ( material_id == settings::esp::cham_ids::outline_glow_ignorez );
+			material = systems::materials::get_outline_glow( *glow_cfg, is_iz );
+		}
+		if ( !material )
+		{
+			material = systems::materials::find( material_id );
+		}
 		if ( !material )
 		{
 			return;
@@ -756,9 +827,23 @@ namespace features::esp::player {
 			return;
 		}
 
+		auto draw_color = color;
+		const auto pulse = glow_cfg ? glow_cfg->pulse_speed.value : settings::g_esp.m_outline_glow.pulse_speed.value;
+		if ( ( material_id == settings::esp::cham_ids::outline_glow || material_id == settings::esp::cham_ids::outline_glow_ignorez ) &&
+		     pulse > 0.01f )
+		{
+			const auto now = std::chrono::steady_clock::now( );
+			const auto sec = std::chrono::duration<float>( now.time_since_epoch( ) ).count( );
+			const auto wave = 0.5f + 0.5f * std::sin( sec * pulse * 4.0f );
+			draw_color.r = static_cast<std::uint8_t>( draw_color.r * ( 0.3f + 0.7f * wave ) );
+			draw_color.g = static_cast<std::uint8_t>( draw_color.g * ( 0.3f + 0.7f * wave ) );
+			draw_color.b = static_cast<std::uint8_t>( draw_color.b * ( 0.3f + 0.7f * wave ) );
+			draw_color.a = static_cast<std::uint8_t>( draw_color.a * ( 0.3f + 0.7f * wave ) );
+		}
+
 		for ( auto i = prev_count; i < new_count; ++i )
 		{
-			detail::replace_primitive( after->at( i ), material, color );
+			detail::replace_primitive( after->at( i ), material, draw_color );
 		}
 
 		this->add_overlay_material( material );
@@ -804,6 +889,17 @@ namespace features::esp::player {
 
 	bool chams::is_overlay_material( std::uintptr_t mat ) const
 	{
+		if ( !mat )
+		{
+			return false;
+		}
+
+		if ( mat == systems::materials::find( settings::esp::cham_ids::outline_glow ) ||
+		     mat == systems::materials::find( settings::esp::cham_ids::outline_glow_ignorez ) )
+		{
+			return true;
+		}
+
 		const auto count = this->m_overlay_material_count.load( std::memory_order_acquire );
 
 		for ( auto i = 0; i < count; ++i )

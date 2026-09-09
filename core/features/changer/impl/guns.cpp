@@ -100,7 +100,7 @@ namespace features::changer {
 				{
 					const auto paint_kit_id = memory::read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
 					const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
-					this->update_view_model( local.pawn, pk );
+					this->rebuild_paint( active_weapon, active_handle, active_handle, local.pawn, pk );
 				}
 			}
 		}
@@ -109,10 +109,9 @@ namespace features::changer {
 	bool guns::apply( std::uintptr_t weapon, std::uintptr_t iv, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const settings::changer::applied_skin* skin, std::uint32_t account_id )
 	{
 		this->m_pending_hud_iv = 0;
-        if (!cosmetic_attributes::available()) return false;
-        memory::write<std::uint64_t>(iv + SCHEMA("C_EconItemView", "m_iItemID"_hash), 0xf000000000000010ull);
-        memory::write<bool>(iv + SCHEMA("C_EconItemView", "m_bDisallowSOC"_hash), true);
-        memory::write<int>(iv + SCHEMA("C_EconItemView", "m_iEntityQuality"_hash), skin->stattrak ? 9 : 0);
+
+		memory::write<std::uint64_t>( iv + SCHEMA( "C_EconItemView", "m_iItemID"_hash ), 0xf000000000000010ull );
+		memory::write<int>( iv + SCHEMA( "C_EconItemView", "m_iEntityQuality"_hash ), skin->stattrak ? 9 : 0 );
 
 		memory::write<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDHigh"_hash ), 0xf0000000 );
 		memory::write<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDLow"_hash ), 0x10 );
@@ -122,15 +121,31 @@ namespace features::changer {
 		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ), skin->paint_kit_id );
 		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackSeed"_hash ), skin->seed );
 		memory::write<float>( weapon + SCHEMA( "C_EconEntity", "m_flFallbackWear"_hash ), skin->wear );
-		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackStatTrak"_hash ), skin->stattrak ? 0 : -1 );
+		memory::write<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackStatTrak"_hash ), skin->stattrak ? skin->stattrak_count : -1 );
 
-        if (!cosmetic_attributes::apply(iv, *skin)) return false;
+		if ( changer::cosmetic_attributes::available( ) )
+		{
+			const auto set = PATTERN( patterns::econ_item_view_set_attribute );
+			const auto remove = PATTERN( patterns::econ_item_view_remove_attribute );
+			if ( skin->stattrak )
+			{
+				const auto count_val = std::bit_cast<float>( static_cast<std::int32_t>( skin->stattrak_count ) );
+				const auto score_type = std::bit_cast<float>( std::int32_t{ 0 } );
+				memory::call<void>( set, iv, "kill eater", count_val );
+				memory::call<void>( set, iv, "kill eater score type", score_type );
+			}
+			else
+			{
+				memory::call<void>( remove, iv, 80 );
+				memory::call<void>( remove, iv, 81 );
+			}
+		}
 
 		const auto pk = g_econ_item_system.find_paint_kit( skin->paint_kit_id );
 
 		this->rebuild_paint( weapon, handle, active_handle, pawn, pk );
 		this->schedule_hud_clear( iv );
-        return true;
+		return true;
 	}
 
 	void guns::rebuild_paint( std::uintptr_t weapon, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const econ_item_system::paint_kit* pk )
@@ -152,6 +167,11 @@ namespace features::changer {
 		memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
 		memory::call_vfunc<void>( weapon, 10, 1 );
 		memory::call<void>( PATTERN( patterns::weapon_update_skin ), weapon, true );
+
+		if ( PATTERN( patterns::weapon_update_modules ) )
+		{
+			memory::call<void>( PATTERN( patterns::weapon_update_modules ), weapon );
+		}
 	}
 
 	void guns::update_view_model( std::uintptr_t pawn, const econ_item_system::paint_kit* pk )
@@ -230,6 +250,12 @@ namespace features::changer {
 	void guns::process_hud_clear( )
 	{
 		this->m_pending_hud_iv = 0;
+	}
+
+	void guns::reset( )
+	{
+		this->m_applied_weapons.clear( );
+		this->m_last_active_handle = 0;
 	}
 
 } // namespace features::changer

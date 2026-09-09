@@ -2,6 +2,7 @@
 
 #include <array>
 #include <limits>
+#include <mutex>
 
 #include <core/systems/systems.hpp>
 
@@ -147,6 +148,7 @@ namespace features::misc {
 			math::vector3 impact_position{};
 			float best_impact_dist_sq{ FLT_MAX };
 			int tick{};
+			int bt_ticks{};
 			float time{};
 			float impact_time{};
 			std::array<systems::bones::data, 27> skeleton{};
@@ -172,6 +174,8 @@ namespace features::misc {
 			std::string mismatch_reason{};
 			std::uint32_t weapon_type{};
 			float expected_damage{};
+			float hitchance{};
+			int bt_ticks{};
 		};
 
 		struct hitmarker
@@ -188,6 +192,8 @@ namespace features::misc {
 			std::string reason{};
 			int damage{};
 			int health{};
+			float hitchance{};
+			int bt_ticks{};
 			float time{};
 			float duration{};
 			animation::spring offset{};
@@ -237,7 +243,7 @@ namespace features::misc {
 		std::vector<pending_hit> m_pending_hits{};
 		std::vector<shot_record> m_pending_shots{};
 		std::vector<bullet_impact> m_bullet_impacts{};
-		mutable std::mutex m_mtx{};
+		mutable std::recursive_mutex m_mtx{};
 
 		bool m_death_effect_loaded{};
 		bool m_bullet_impact_effect_loaded{};
@@ -281,6 +287,39 @@ namespace features::misc {
 		mutable float m_cached_fov_sensitivity{ -1.0f };
 		mutable bool m_cached_scoped{};
 		mutable float m_cached_target_fov{};
+	};
+
+	class motion_blur
+	{
+	public:
+		void on_present( IDXGISwapChain* swap_chain, ID3D11Device* device, ID3D11DeviceContext* context, ID3D11RenderTargetView* rtv, const D3D11_VIEWPORT& viewport );
+		void on_resize_buffers( );
+		void reset( );
+
+	private:
+		bool ensure_resources( ID3D11Device* device, UINT width, UINT height, DXGI_FORMAT format );
+		void release_resources( );
+
+		ID3D11Texture2D* m_scene_texture{ nullptr };
+		ID3D11ShaderResourceView* m_scene_srv{ nullptr };
+
+		ID3D11Buffer* m_constant_buffer{ nullptr };
+		ID3D11SamplerState* m_sampler_state{ nullptr };
+		ID3D11VertexShader* m_vertex_shader{ nullptr };
+		ID3D11PixelShader* m_pixel_shader{ nullptr };
+		ID3D11BlendState* m_blend_state{ nullptr };
+		ID3D11RasterizerState* m_rasterizer_state{ nullptr };
+		ID3D11DepthStencilState* m_depth_stencil_state{ nullptr };
+
+		UINT m_texture_width{ 0 };
+		UINT m_texture_height{ 0 };
+		DXGI_FORMAT m_texture_format{ DXGI_FORMAT_UNKNOWN };
+		bool m_initialized{ false };
+
+		math::vector3 m_last_angles{};
+		bool m_has_last_angles{ false };
+		math::vector2 m_smoothed_velocity{ 0.0f, 0.0f };
+		std::chrono::steady_clock::time_point m_last_time{};
 	};
 
 	class hud
@@ -357,12 +396,14 @@ namespace features::misc {
 		void do_player_alpha_changing( );
 		void do_reveal_radar( ) const;
 		void do_name_changing( );
+		void do_chat_spam( );
 		bool m_is_alpha_changed{};
 		bool m_name_changer_active{};
 		std::uintptr_t m_name_changer_controller{};
 		std::string m_original_name{};
 		std::string m_last_sent_name{};
 		float m_last_spawntime{};
+		float m_last_spam_time{};
 	};
 
 	// this is so ghetto but fuck it for now it works
@@ -513,20 +554,28 @@ namespace features::misc {
 	public:
 		void run();
 		void reset();
+		void on_panorama_event( const char* event_name );
 
 	private:
 		void accept_match();
+		void ensure_initialized();
+		bool is_match_waiting_internal();
+		std::uintptr_t get_reservation_ptr();
 
 		using fn_is_match_waiting = bool(__fastcall*)();
-		using fn_get_ready_time = int(__fastcall*)(void*);
+		using fn_set_local_player_ready = bool(__fastcall*)(void*, const char*);
+		using fn_internal_ready = bool(__fastcall*)(void*, int);
 
 		fn_is_match_waiting m_fn_is_match_waiting{ nullptr };
-		fn_get_ready_time m_fn_get_ready_time{ nullptr };
+		fn_set_local_player_ready m_fn_set_local_player_ready{ nullptr };
+		fn_internal_ready m_fn_internal_ready{ nullptr };
 		bool m_initialized{ false };
 
 		bool m_match_detected{ false };
 		bool m_accepted{ false };
+		int m_retry_count{ 0 };
 		std::chrono::steady_clock::time_point m_found_time{};
+		std::chrono::steady_clock::time_point m_accepted_time{};
 		std::chrono::steady_clock::time_point m_last_check{};
 	};
 

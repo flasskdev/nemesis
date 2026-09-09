@@ -485,6 +485,62 @@ namespace systems {
 				g_tIridescentThickness_Mask = resource:"materials/dev/primary_white_color_tga_21186c76.vtex"
 			})#";
 
+		static constexpr char outline_glow[ ] = R"#(<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d}
+            format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+            {
+                shader = "csgo_effects.vfx"
+
+                F_ADDITIVE_BLEND = 1
+                F_BLEND_MODE = 1
+                F_TRANSLUCENT = 1
+                F_IGNOREZ = 0
+                F_DISABLE_Z_BUFFERING = 0
+                F_DISABLE_Z_WRITE = 1
+                F_RENDER_BACKFACES = 0
+
+                g_vColorTint = [1.0, 1.0, 1.0, 0.0]
+                g_flOpacityScale = 1.0
+                g_flFresnelExponent = 1.2
+                g_flFresnelFalloff = 4.0
+                g_flFresnelMax = 0.0
+                g_flFresnelMin = 1.0
+                g_flColorBoost = 18.0
+
+                g_tColor = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tMask1 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tMask2 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tMask3 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tSceneDepth = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+            })#";
+
+		static constexpr char outline_glow_ignorez[ ] = R"#(<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d}
+            format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+            {
+                shader = "csgo_effects.vfx"
+
+                F_ADDITIVE_BLEND = 1
+                F_BLEND_MODE = 1
+                F_TRANSLUCENT = 1
+                F_IGNOREZ = 1
+                F_DISABLE_Z_BUFFERING = 1
+                F_DISABLE_Z_WRITE = 1
+                F_RENDER_BACKFACES = 0
+
+                g_vColorTint = [1.0, 1.0, 1.0, 0.0]
+                g_flOpacityScale = 1.0
+                g_flFresnelExponent = 1.2
+                g_flFresnelFalloff = 4.0
+                g_flFresnelMax = 0.0
+                g_flFresnelMin = 1.0
+                g_flColorBoost = 18.0
+
+                g_tColor = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tMask1 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tMask2 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tMask3 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+                g_tSceneDepth = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+            })#";
+
 	} // namespace detail
 
 	bool materials::initialize( )
@@ -497,6 +553,7 @@ namespace systems {
 		const auto glow_ignorez_ptr = load( detail::glow_ignorez, xs( "materials/dev/glow_ignorez.vmat" ) );
 		const auto distortion_ignorez_ptr = load( detail::distortion_ignorez, xs( "materials/dev/distortion_ignorez.vmat" ) );
 		const auto hologram_ignorez_ptr = load( detail::hologram_ignorez, xs( "materials/dev/hologram_ignorez.vmat" ) );
+		const auto outline_glow_ignorez_ptr = load( detail::outline_glow_ignorez, xs( "materials/dev/outline_glow_ignorez.vmat" ) );
 
 		const auto liquid_ptr = load( detail::liquid, xs( "materials/dev/liquid.vmat" ) );
 		const auto metallic_ptr = load( detail::metallic, xs( "materials/dev/metallic.vmat" ) );
@@ -509,8 +566,9 @@ namespace systems {
 		const auto distortion_ptr = load( detail::distortion, xs( "materials/dev/distortion.vmat" ) );
 		const auto hologram_ptr = load( detail::hologram, xs( "materials/dev/hologram.vmat" ) );
 		const auto pearl_ptr = load( detail::pearl, xs( "materials/dev/pearl.vmat" ) );
+		const auto outline_glow_ptr = load( detail::outline_glow, xs( "materials/dev/outline_glow.vmat" ) );
 
-		if ( !liquid_ptr || !metallic_ptr || !matte_ptr || !flat_ptr || !bloom_ptr || !outlines_ptr || !glow_ptr || !electric_ptr || !distortion_ptr || !hologram_ptr || !pearl_ptr || !liquid_ignorez_ptr || !matte_ignorez_ptr || !flat_ignorez_ptr || !bloom_ignorez_ptr || !outlines_ignorez_ptr || !glow_ignorez_ptr || !distortion_ignorez_ptr || !hologram_ignorez_ptr )
+		if ( !liquid_ptr || !metallic_ptr || !matte_ptr || !flat_ptr || !bloom_ptr || !outlines_ptr || !glow_ptr || !electric_ptr || !distortion_ptr || !hologram_ptr || !pearl_ptr || !liquid_ignorez_ptr || !matte_ignorez_ptr || !flat_ignorez_ptr || !bloom_ignorez_ptr || !outlines_ignorez_ptr || !glow_ignorez_ptr || !distortion_ignorez_ptr || !hologram_ignorez_ptr || !outline_glow_ptr || !outline_glow_ignorez_ptr )
 		{
 			return false;
 		}
@@ -534,6 +592,8 @@ namespace systems {
 		m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::glow_ignorez ) ] = glow_ignorez_ptr;
 		m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::distortion_ignorez ) ] = distortion_ignorez_ptr;
 		m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::hologram_ignorez ) ] = hologram_ignorez_ptr;
+		m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::outline_glow ) ] = outline_glow_ptr;
+		m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::outline_glow_ignorez ) ] = outline_glow_ignorez_ptr;
 
 		return true;
 	}
@@ -838,6 +898,207 @@ namespace systems {
 			*reinterpret_cast< float* >( entry + 0x08 ) = z;
 			return;
 		}
+	}
+
+	void materials::set_material_float( std::uintptr_t mat, const char* param_name, float value )
+	{
+		if ( !mat )
+		{
+			return;
+		}
+
+		const auto kv_count = *reinterpret_cast< const int* >( mat + 0x18 );
+		const auto kv_array = *reinterpret_cast< const std::uintptr_t* >( mat + 0x20 );
+		if ( !kv_array )
+		{
+			return;
+		}
+
+		for ( auto i = 0; i < kv_count; ++i )
+		{
+			const auto entry = kv_array + static_cast< std::uintptr_t >( i ) * 0x40;
+			const auto name = *reinterpret_cast< const char** >( entry + 0x28 );
+
+			if ( !name || std::strcmp( name, param_name ) != 0 )
+			{
+				continue;
+			}
+
+			*reinterpret_cast< float* >( entry + 0x00 ) = value;
+			return;
+		}
+	}
+
+	static std::string build_outline_glow_kv( float intensity, float thickness, float softness, float opacity, float inner_spread, bool ignorez )
+	{
+		return std::format(
+R"#(<!-- kv3 encoding:text:version{{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d}}
+format:generic:version{{7412167c-06e9-4698-aff2-e63eb59037e7}} -->
+{{
+    shader = "csgo_effects.vfx"
+
+    F_ADDITIVE_BLEND = 1
+    F_BLEND_MODE = 1
+    F_TRANSLUCENT = 1
+    F_IGNOREZ = {}
+    F_DISABLE_Z_BUFFERING = {}
+    F_DISABLE_Z_WRITE = 1
+    F_RENDER_BACKFACES = 0
+
+    g_vColorTint = [1.0, 1.0, 1.0, 0.0]
+    g_flOpacityScale = {:.3f}
+    g_flFresnelExponent = {:.3f}
+    g_flFresnelFalloff = {:.3f}
+    g_flFresnelMax = {:.3f}
+    g_flFresnelMin = 1.0
+    g_flColorBoost = {:.3f}
+
+    g_tColor = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+    g_tMask1 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+    g_tMask2 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+    g_tMask3 = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+    g_tSceneDepth = resource:"materials/default/default_mask_tga_fde710a5.vtex"
+}})#",
+			ignorez ? 1 : 0,
+			ignorez ? 1 : 0,
+			opacity,
+			softness,
+			thickness,
+			inner_spread,
+			intensity
+		);
+	}
+
+	void materials::update_outline_glow( const settings::esp::outline_glow_config& cfg )
+	{
+		static float last_intensity = -1.0f;
+		static float last_thickness = -1.0f;
+		static float last_softness = -1.0f;
+		static float last_opacity = -1.0f;
+		static float last_inner_spread = -1.0f;
+		static std::uint32_t s_version = 0;
+		static auto last_reload_time = std::chrono::steady_clock::time_point{};
+
+		const float cur_intensity = cfg.intensity.value;
+		const float cur_thickness = cfg.thickness.value;
+		const float cur_softness = cfg.softness.value;
+		const float cur_opacity = cfg.opacity.value;
+		const float cur_inner_spread = cfg.inner_spread.value;
+
+		const bool changed =
+			std::abs( cur_intensity - last_intensity ) > 0.05f ||
+			std::abs( cur_thickness - last_thickness ) > 0.02f ||
+			std::abs( cur_softness - last_softness ) > 0.02f ||
+			std::abs( cur_opacity - last_opacity ) > 0.01f ||
+			std::abs( cur_inner_spread - last_inner_spread ) > 0.01f;
+
+		if ( !changed )
+		{
+			return;
+		}
+
+		const auto now = std::chrono::steady_clock::now( );
+		if ( last_intensity >= 0.0f && std::chrono::duration_cast<std::chrono::milliseconds>( now - last_reload_time ).count( ) < 40 )
+		{
+			return;
+		}
+
+		last_reload_time = now;
+		last_intensity = cur_intensity;
+		last_thickness = cur_thickness;
+		last_softness = cur_softness;
+		last_opacity = cur_opacity;
+		last_inner_spread = cur_inner_spread;
+
+		++s_version;
+		const auto kv_vis = build_outline_glow_kv( cur_intensity, cur_thickness, cur_softness, cur_opacity, cur_inner_spread, false );
+		const auto kv_iz = build_outline_glow_kv( cur_intensity, cur_thickness, cur_softness, cur_opacity, cur_inner_spread, true );
+
+		const auto name_vis = std::format( "materials/dev/outline_glow_{}.vmat", s_version );
+		const auto name_iz = std::format( "materials/dev/outline_glow_iz_{}.vmat", s_version );
+
+		const auto new_vis = load( kv_vis.c_str( ), name_vis.c_str( ) );
+		const auto new_iz = load( kv_iz.c_str( ), name_iz.c_str( ) );
+
+		std::scoped_lock lock( m_mtx );
+		if ( new_vis )
+		{
+			m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::outline_glow ) ] = new_vis;
+		}
+		if ( new_iz )
+		{
+			m_loaded[ static_cast< std::size_t >( settings::esp::cham_ids::outline_glow_ignorez ) ] = new_iz;
+		}
+	}
+
+	struct glow_cache_entry
+	{
+		float last_intensity{ -1.0f };
+		float last_thickness{ -1.0f };
+		float last_softness{ -1.0f };
+		float last_opacity{ -1.0f };
+		float last_inner_spread{ -1.0f };
+		std::uintptr_t mat{ 0 };
+		std::chrono::steady_clock::time_point last_reload{};
+	};
+
+	static std::unordered_map<std::uint64_t, glow_cache_entry> s_glow_cache{};
+	static std::mutex s_glow_cache_mtx{};
+	static std::uint32_t s_glow_version{ 0 };
+
+	std::uintptr_t materials::get_outline_glow( const settings::esp::outline_glow_config& cfg, bool ignorez )
+	{
+		const auto key = reinterpret_cast<std::uintptr_t>( &cfg ) ^ ( ignorez ? 0x8000000000000000ULL : 0ULL );
+
+		const float cur_intensity = cfg.intensity.value;
+		const float cur_thickness = cfg.thickness.value;
+		const float cur_softness = cfg.softness.value;
+		const float cur_opacity = cfg.opacity.value;
+		const float cur_inner_spread = cfg.inner_spread.value;
+
+		std::scoped_lock lock( s_glow_cache_mtx );
+		auto& entry = s_glow_cache[ key ];
+
+		const bool changed =
+			entry.mat == 0 ||
+			std::abs( cur_intensity - entry.last_intensity ) > 0.05f ||
+			std::abs( cur_thickness - entry.last_thickness ) > 0.02f ||
+			std::abs( cur_softness - entry.last_softness ) > 0.02f ||
+			std::abs( cur_opacity - entry.last_opacity ) > 0.01f ||
+			std::abs( cur_inner_spread - entry.last_inner_spread ) > 0.01f;
+
+		if ( !changed )
+		{
+			return entry.mat;
+		}
+
+		const auto now = std::chrono::steady_clock::now( );
+		if ( entry.mat != 0 && std::chrono::duration_cast<std::chrono::milliseconds>( now - entry.last_reload ).count( ) < 40 )
+		{
+			return entry.mat;
+		}
+
+		entry.last_reload = now;
+		entry.last_intensity = cur_intensity;
+		entry.last_thickness = cur_thickness;
+		entry.last_softness = cur_softness;
+		entry.last_opacity = cur_opacity;
+		entry.last_inner_spread = cur_inner_spread;
+
+		++s_glow_version;
+		const auto kv = build_outline_glow_kv( cur_intensity, cur_thickness, cur_softness, cur_opacity, cur_inner_spread, ignorez );
+		const auto name = std::format( "materials/dev/outline_glow_{:x}_{}_{}.vmat",
+			reinterpret_cast<std::uintptr_t>( &cfg ) & 0xFFFF,
+			ignorez ? "iz" : "vis",
+			s_glow_version );
+
+		const auto new_mat = load( kv.c_str( ), name.c_str( ) );
+		if ( new_mat )
+		{
+			entry.mat = new_mat;
+		}
+
+		return entry.mat;
 	}
 
 } // namespace systems

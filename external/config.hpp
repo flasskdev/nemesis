@@ -695,7 +695,14 @@ namespace config {
 			case field_type::setting:
 			{
 				auto* s = static_cast<xui::setting*>(f.ptr);
-				s->value = false;
+				if ( s->name.find( "filled" ) != std::string::npos )
+				{
+					s->value = true;
+				}
+				else
+				{
+					s->value = false;
+				}
 				s->bind.key = 0;
 				s->bind.mode = xui::bind_mode::toggle;
 				s->bind.active = false;
@@ -723,6 +730,8 @@ namespace config {
 				break;
 			}
 		}
+
+		xui::slider_binds::reset();
 	}
 
 	inline void initialize()
@@ -775,7 +784,13 @@ namespace config {
 			fields_obj[key_str] = serial::field_to_json(f);
 		}
 
-		return nlohmann::json{ { "version", k_version }, { "fields", std::move(fields_obj) } };
+		auto root = nlohmann::json{ { "version", k_version }, { "fields", std::move(fields_obj) } };
+		const auto sb = xui::slider_binds::serialize();
+		if (!sb.empty())
+		{
+			root["sb"] = sb;
+		}
+		return root;
 	}
 
 	inline bool from_json(const nlohmann::json& root)
@@ -811,6 +826,19 @@ namespace config {
 
 			serial::json_to_field(it.value(), *found->second);
 		}
+
+		if (root.contains("sb") && root["sb"].is_string())
+		{
+			xui::slider_binds::deserialize(root["sb"].get<std::string>());
+		}
+		else if (root.contains("slider_binds"))
+		{
+			if (root["slider_binds"].is_string())
+				xui::slider_binds::deserialize(root["slider_binds"].get<std::string>());
+			else
+				xui::slider_binds::deserialize(root["slider_binds"].dump());
+		}
+
 		return true;
 	}
 
@@ -835,7 +863,13 @@ namespace config {
 			fields_obj[key_str] = std::move(current);
 		}
 
-		return nlohmann::json{ { "v", k_version }, { "f", std::move(fields_obj) } };
+		auto root = nlohmann::json{ { "v", k_version }, { "f", std::move(fields_obj) } };
+		const auto sb = xui::slider_binds::serialize();
+		if (!sb.empty())
+		{
+			root["sb"] = sb;
+		}
+		return root;
 	}
 
 	inline bool from_json_delta(const nlohmann::json& root)
@@ -888,12 +922,18 @@ namespace config {
 			serial::json_to_field(it.value(), *found->second);
 		}
 
+		if (root.contains("sb") && root["sb"].is_string())
+		{
+			xui::slider_binds::deserialize(root["sb"].get<std::string>());
+		}
+
 		return true;
 	}
 
 	namespace registry {
 
 		inline const std::filesystem::path k_config_dir{ L"C:\\mintaly\\configs" };
+		inline std::wstring g_active_config{ L"default" };
 
 		inline std::filesystem::path get_file_path(std::wstring_view name)
 		{
@@ -914,6 +954,7 @@ namespace config {
 				return false;
 			}
 
+			g_active_config = name;
 			const auto file_path = get_file_path(name);
 			std::ofstream file(file_path, std::ios::binary);
 			if (!file.is_open())
@@ -966,7 +1007,12 @@ namespace config {
 					return false;
 				}
 
-				return from_json(j);
+				if (from_json(j))
+				{
+					g_active_config = name;
+					return true;
+				}
+				return false;
 			}
 			catch (...) { return false; }
 		}
@@ -997,6 +1043,23 @@ namespace config {
 
 			std::sort(names.begin(), names.end());
 			return names;
+		}
+
+		inline bool save_active()
+		{
+			if (g_active_config.empty())
+			{
+				const auto configs = list();
+				if (!configs.empty())
+				{
+					g_active_config = configs.front();
+				}
+				else
+				{
+					g_active_config = L"default";
+				}
+			}
+			return save(g_active_config);
 		}
 
 	} // namespace registry

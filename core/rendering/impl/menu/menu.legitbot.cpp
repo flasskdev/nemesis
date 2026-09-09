@@ -28,13 +28,20 @@ namespace rendering {
 		const auto col_w = ( content_w - tokens::gap ) * 0.5f;
 		const auto right_x = content_x + col_w + tokens::gap;
 
+		constexpr float k_header_h = 22.0f;
+		auto draw_col_title = [&]( float x, const char* title ) {
+			auto& dl = xui::draw::current( );
+			xdraw::push_font( rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ] );
+			dl.text( x + 2.0f, body_y + 2.0f, title, tokens::col_text );
+			xdraw::pop_font( );
+		};
+
 		// LEFT COLUMN: LEGITBOT MAIN
-		xui::layout::set_cursor( content_x - wx, body_y - wy );
+		draw_col_title( content_x, "LEGITBOT MAIN" );
+		xui::layout::set_cursor( content_x - wx, body_y + k_header_h - wy );
 
-		if ( xui::begin_child( "##legitbot_main", col_w, body_h, true ) )
+		if ( xui::begin_child( "##legitbot_main", col_w, body_h - k_header_h, true ) )
 		{
-			xui::section_header("LEGITBOT MAIN");
-
 			xui::toggle( "Enable Legitbot", lb.enabled );
 			xui::layout::spacing( 3.0f );
 			xui::combo( "Weapon Group", detail::weapon_group_idx_legit, detail::weapon_group_items_legit, 6 );
@@ -68,11 +75,11 @@ namespace rendering {
 		}
 
 		// RIGHT COLUMN: TRIGGER & WEAPON ACCURACY
-		xui::layout::set_cursor( right_x - wx, body_y - wy );
+		draw_col_title( right_x, "TRIGGER & ACCURACY" );
+		xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
 
-		if ( xui::begin_child( "##legitbot_trigger_accuracy", col_w, body_h, true ) )
+		if ( xui::begin_child( "##legitbot_trigger_accuracy", col_w, body_h - k_header_h, true ) )
 		{
-			xui::section_header("TRIGGER & ACCURACY");
 
 			xui::toggle( "Triggerbot", wg.triggerbot );
 			xui::layout::spacing( 3.0f );

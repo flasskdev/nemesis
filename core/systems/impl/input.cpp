@@ -156,7 +156,19 @@ namespace systems {
 
 	math::vector3 input::get_view_angles( ) const
 	{
-		return *memory::call<math::vector3*>(PATTERN (patterns::get_view_angles), addresses::globals::csgo_input, 0 );
+		const auto fn = PATTERN( patterns::get_view_angles );
+		if ( !fn || !addresses::globals::csgo_input )
+		{
+			return {};
+		}
+
+		const auto ptr = memory::call<math::vector3*>( fn, addresses::globals::csgo_input, 0 );
+		if ( !ptr )
+		{
+			return {};
+		}
+
+		return memory::safe_read<math::vector3>( reinterpret_cast<std::uintptr_t>( ptr ) ).value_or( math::vector3{} );
 	}
 
 	proto::input_history_entry* input::push_input_history( usercmd* cmd, const input_history_params& params ) const
@@ -276,7 +288,13 @@ namespace systems {
 
 	void input::set_view_angles( const math::vector3& angles ) const
 	{
-		memory::call<void>(PATTERN (patterns::set_view_angles), addresses::globals::csgo_input, 0, &angles );
+		const auto fn = PATTERN( patterns::set_view_angles );
+		if ( !fn || !addresses::globals::csgo_input )
+		{
+			return;
+		}
+
+		memory::call<void>( fn, addresses::globals::csgo_input, 0, &angles );
 	}
 
 	void input::desubtick( usercmd* cmd ) const

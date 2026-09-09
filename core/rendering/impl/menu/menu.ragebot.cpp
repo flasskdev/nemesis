@@ -37,27 +37,51 @@ namespace rendering {
 		const auto col_w = ( content_w - tokens::gap ) * 0.5f;
 		const auto right_x = content_x + col_w + tokens::gap;
 
-		// LEFT COLUMN: AIMBOT MAIN
-		xui::layout::set_cursor( content_x - wx, body_y - wy );
+		constexpr float k_header_h = 22.0f;
+		auto draw_col_title = [&]( float x, const char* title ) {
+			auto& dl = xui::draw::current( );
+			xdraw::push_font( rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ] );
+			dl.text( x + 2.0f, body_y + 2.0f, title, tokens::col_text );
+			xdraw::pop_font( );
+		};
 
-		if ( xui::begin_child( "##ragebot_aimbot_main", col_w, body_h, true ) )
+		// LEFT COLUMN: RAGEBOT MAIN
+		draw_col_title( content_x, "RAGEBOT MAIN" );
+		xui::layout::set_cursor( content_x - wx, body_y + k_header_h - wy );
+
+		if ( xui::begin_child( "##ragebot_main", col_w, body_h - k_header_h, true ) )
 		{
-			xui::section_header("AIMBOT MAIN");
+			auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
 
 			xui::toggle( "Enable Ragebot", rb.enabled );
+			if ( xui::begin_popup( "##rb_popup", 220.0f ) )
+			{
+				xui::checkbox( "Force Bodyaim", wg.body_aim );
+				xui::checkbox( "Extrapolation", lg.extrapolation );
+				if ( lg.extrapolation.value )
+				{
+					xui::layout::spacing( 3.0f );
+					xui::slider_int( "Max Ticks", lg.max_extrapolate_ticks, 1, 16, "%d ticks" );
+				}
+				xui::end_popup( );
+			}
+
 			xui::layout::spacing( 3.0f );
-            xui::combo("Weapon Group", detail::weapon_group_idx, detail::weapon_group_items, 6);
-            auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
-            xui::toggle("Silent Aim", wg.silent);
+			xui::combo("Weapon Group", detail::weapon_group_idx, detail::weapon_group_items, 6);
+			xui::toggle("Silent Aim", wg.silent);
 			xui::layout::spacing( 3.0f );
 			xui::slider_float( "Field of View", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
 
 			xui::layout::spacing( 8.0f );
+			xui::slider_int( "Hit Chance", wg.hitchance, 0, 100, "%d%%" );
+			xui::layout::spacing( 3.0f );
+			xui::slider_int( "Minimum Damage", wg.min_damage, 5, 125, "%d hp" );
+
+			xui::layout::spacing( 8.0f );
+			xui::toggle( "Auto Stop", wg.autostop );
+			xui::toggle( "Auto Scope", autos.scope );
 			xui::toggle( "No Spread", wg.no_spread );
-			xui::layout::spacing( 3.0f );
-			xui::toggle( "Extrapolation", lg.extrapolation );
-			xui::layout::spacing( 3.0f );
-			xui::toggle( "Force Bodyaim", wg.body_aim );
+
 			xui::layout::spacing( 3.0f );
 			xui::slider_float( "Pointscale", wg.pointscale, 0.0f, 100.0f, "%.0f%%" );
 			xui::layout::spacing( 4.0f );
@@ -66,39 +90,12 @@ namespace rendering {
 			xui::end_child( );
 		}
 
-		// RIGHT COLUMN: ACCURACY ENGINE
-		xui::layout::set_cursor( right_x - wx, body_y - wy );
+		// RIGHT COLUMN: ANTI AIM
+		draw_col_title( right_x, "ANTI AIM" );
+		xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
 
-		if ( xui::begin_child( "##ragebot_accuracy_engine", col_w, body_h, true ) )
+		if ( xui::begin_child( "##ragebot_antiaim", col_w, body_h - k_header_h, true ) )
 		{
-            auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
-			xui::section_header("ACCURACY ENGINE");
-
-            xui::toggle("Auto Stop", wg.autostop);
-            xui::toggle("Auto Scope", autos.scope);
-            xui::layout::spacing(8.0f);
-            xui::layout::separator();
-            xui::layout::spacing(8.0f);
-
-			xui::slider_int( "Hit Chance", wg.hitchance, 0, 100, "%d%%" );
-			xui::layout::spacing( 3.0f );
-			xui::slider_int( "Minimum Damage", wg.min_damage, 5, 125, "%d hp" );
-
-			xui::layout::spacing( 8.0f );
-			xui::toggle( "Hitchance Override", wg.hitchance_override );
-			if ( xui::begin_popup( "##hitchance_popup", 220.0f ) )
-			{
-				xui::slider_int( "value##hc", wg.hitchance_override_value, 0, 100, "%d%%" );
-				xui::end_popup( );
-			}
-
-			xui::layout::spacing( 3.0f );
-			xui::toggle( "Mindamage Override", wg.min_damage_override );
-			if ( xui::begin_popup( "##mindamage_popup", 220.0f ) )
-			{
-				xui::slider_int( "value##md", wg.min_damage_override_value, 0, 130, "%d" );
-				xui::end_popup( );
-			}
 
 			xui::toggle( "Anti Aim", aa.enabled );
 			if ( xui::begin_popup( "##aa_popup", 220.0f ) )
@@ -111,10 +108,22 @@ namespace rendering {
 			}
 			xui::layout::spacing( 3.0f );
 			xui::combo( "Pitch", aa.pitch.value, detail::pitch_items, 3 );
+
+			xui::layout::spacing( 8.0f );
+			xui::layout::separator( );
+			xui::layout::spacing( 8.0f );
+
+			xui::toggle( "Auto Revolver", autos.revolver );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Quick Peek Assist", qp.enabled );
+			if ( xui::begin_popup( "##qp_popup", 220.0f ) )
+			{
+				xui::color_picker( "start color", qp.color );
+				xui::color_picker( "retrack color", qp.retrack_color );
+				xui::end_popup( );
+			}
 			xui::layout::spacing( 3.0f );
-			xui::toggle( "Auto Revolver", autos.revolver );
+			xui::toggle( "Duck Peek Assist", dp.enabled );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Zeusbot", zb.enabled );
 			xui::layout::spacing( 3.0f );

@@ -113,6 +113,7 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& set_info;
 	extern const ::protection::addresses::address_t& set_local_player_ready;
 	extern const ::protection::addresses::address_t& is_match_waiting;
+	extern const ::protection::addresses::address_t& panorama_event;
 	extern const ::protection::addresses::address_t& get_ready_time_remaining;
 	extern const ::protection::addresses::address_t& set_player_model;
 	extern const ::protection::addresses::address_t& set_postprocess_vec;
@@ -151,6 +152,7 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& weapon_update_composite_material;
 	extern const ::protection::addresses::address_t& weapon_update_mesh;
 	extern const ::protection::addresses::address_t& weapon_update_skin;
+	extern const ::protection::addresses::address_t& weapon_update_modules;
 	extern const ::protection::addresses::address_t& econ_item_view_set_attribute;
 	extern const ::protection::addresses::address_t& econ_item_view_remove_attribute;
 	extern const ::protection::addresses::address_t& econ_item_view_invalidate_description;

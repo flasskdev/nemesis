@@ -60,18 +60,18 @@ namespace features::esp::item {
 
 		if ( cfg.secondary.enabled.value )
 		{
-			this->apply_layer( primitive_buffer, original_fn, a1, scene_object, scene_view, cfg.secondary.color, cfg.secondary.material );
+			this->apply_layer( primitive_buffer, original_fn, a1, scene_object, scene_view, cfg.secondary.color, cfg.secondary.material, &cfg.secondary.glow );
 		}
 
 		if ( cfg.primary.enabled.value )
 		{
-			this->apply_layer( primitive_buffer, original_fn, a1, scene_object, scene_view, cfg.primary.color, cfg.primary.material );
+			this->apply_layer( primitive_buffer, original_fn, a1, scene_object, scene_view, cfg.primary.color, cfg.primary.material, &cfg.primary.glow );
 		}
 
 		return true;
 	}
 
-	void chams::apply_layer( std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_object, std::uintptr_t scene_view, const xdraw::color& color, settings::esp::cham_ids material_id )
+	void chams::apply_layer( std::uintptr_t primitive_buffer, void( __fastcall* original_fn )( std::uintptr_t, std::uintptr_t, std::uintptr_t, std::uintptr_t ), std::uintptr_t a1, std::uintptr_t scene_object, std::uintptr_t scene_view, const xdraw::color& color, settings::esp::cham_ids material_id, const settings::esp::outline_glow_config* glow_cfg )
 	{
 		const auto before = detail::read_primitive_buffer( primitive_buffer );
 		const auto prev_count = before ? before->count() : -1;
@@ -85,7 +85,16 @@ namespace features::esp::item {
 			return;
 		}
 
-		const auto material = systems::materials::find( material_id );
+		std::uintptr_t material = 0;
+		if ( glow_cfg && ( material_id == settings::esp::cham_ids::outline_glow || material_id == settings::esp::cham_ids::outline_glow_ignorez ) )
+		{
+			const bool is_iz = ( material_id == settings::esp::cham_ids::outline_glow_ignorez );
+			material = systems::materials::get_outline_glow( *glow_cfg, is_iz );
+		}
+		if ( !material )
+		{
+			material = systems::materials::find( material_id );
+		}
 		if ( !material )
 		{
 			return;

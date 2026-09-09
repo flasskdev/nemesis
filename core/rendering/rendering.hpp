@@ -47,7 +47,7 @@ namespace rendering {
 
         enum class tab : int
         {
-            ragebot, legitbot, movement, visuals, skins, misc, settings, config, count
+            ragebot, legitbot, movement, visuals, skins, misc, config, count
         };
 
         static constexpr float k_sidebar_w = tokens::sidebar_w;
@@ -63,6 +63,7 @@ namespace rendering {
         void rebuild_search_index();
         void close_search();
         void activate_search_result(std::size_t index);
+        void draw_user_popup();
 
         void draw_ragebot(float group_w) const;
         void draw_legitbot(float group_w) const;
@@ -72,7 +73,6 @@ namespace rendering {
         void draw_world(float group_w, int subtab) const;
         void draw_skins(float group_w) const;
         void draw_misc(float group_w) const;
-        void draw_settings(float group_w) const;
         void draw_config(float group_w);
 
         bool m_open{ true };
@@ -86,6 +86,10 @@ namespace rendering {
         int m_saved_cursor_x{};
         int m_saved_cursor_y{};
 
+        bool m_user_popup_open{ false };
+        int m_user_subtab{ 0 }; // 0: none, 1: theme, 2: watermark
+        bool m_binding_menu_key{ false };
+
         float m_x{ 100.0f };
         float m_y{ 100.0f };
         float m_w{ 920.0f };
@@ -98,6 +102,8 @@ namespace rendering {
 
         int m_tab{};
         int m_subtab{};
+        int m_visuals_subtab{};
+        bool m_visuals_expanded{ false };
         int m_subtab_pill_tab{ -1 };
         float m_subtab_pill_x{ -1.0f };
 
@@ -106,6 +112,7 @@ namespace rendering {
         float m_intro_bar_phase{};
         bool m_intro_base_graphics_ready{};
         bool m_intro_finished{};
+        bool m_intro_skip_requested{};
 
         bool m_search_open{};
         std::string m_user_name{ "Steam user" };
@@ -156,15 +163,17 @@ namespace rendering {
             int count{};
         };
 
+        static constexpr subtab_info k_visuals_player_subtabs{ { "enemy", "team", "local" }, 3 };
+        static constexpr subtab_info k_visuals_world_subtabs{ { "items", "world", "weather" }, 3 };
+
         static constexpr subtab_info k_subtab_defs[static_cast<int>(tab::count)]
         {
             { { "general" }, 1 },
             { { "general" }, 1 },
             { { "general" }, 1 },
-            { { "main", "enemy", "team", "local", "items", "world", "weather" }, 7 },
+            { { "enemy", "team", "local" }, 3 },
             { { "guns", "knives", "gloves", "agents" }, 4 },
             { { "main", "view", "hud", "effects" }, 4 },
-            { { "general" }, 1 },
             { { "general" }, 1 }
         };
     };

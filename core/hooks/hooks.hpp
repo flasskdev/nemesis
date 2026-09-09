@@ -15,7 +15,6 @@ namespace hooks {
 		static HRESULT __fastcall present( IDXGISwapChain* thisptr, UINT sync_interval, UINT flags );
 		static HRESULT __fastcall resize_buffers( IDXGISwapChain* thisptr, UINT buffer_count, UINT width, UINT height, DXGI_FORMAT new_format, UINT swap_chain_flags );
 		static LRESULT __stdcall wnd_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
-		static void __stdcall om_set_render_targets( ID3D11DeviceContext* ctx, UINT num_views, ID3D11RenderTargetView* const* rtvs, ID3D11DepthStencilView* dsv );
 		static void __fastcall cmd_interpreter( std::uintptr_t render_thread, std::uintptr_t item, std::uint8_t flag );
 		static void __fastcall frame_stage_notify( std::uintptr_t thisptr, int stage );
 		static void __fastcall create_move( std::uintptr_t thisptr, int slot, bool active );
@@ -61,12 +60,12 @@ namespace hooks {
 		static void __fastcall vote_start( void* panel, std::uintptr_t msg );
 		static void __fastcall vote_pass( void* panel, std::uintptr_t msg );
 		static void __fastcall vote_failed( void* panel, std::uintptr_t msg );
+		static void* __fastcall panorama_event( void* thisptr, const char* event_name, void* p1, void* p2 );
 
 	private:
 		inline static hooking::jmp m_present{};
 		inline static hooking::jmp m_resize_buffers{};
 		inline static hooking::jmp m_wnd_proc{};
-		inline static hooking::jmp m_om_set_render_targets{};
 		inline static hooking::jmp m_cmd_interpreter{};
 		inline static hooking::jmp m_frame_stage_notify{};
 		inline static hooking::jmp m_create_move{};
@@ -87,6 +86,7 @@ namespace hooks {
 		inline static hooking::jmp m_vote_start{};
 		inline static hooking::jmp m_vote_pass{};
 		inline static hooking::jmp m_vote_failed{};
+		inline static hooking::jmp m_panorama_event{};
 		inline static hooking::jmp m_setup_fog{};
 		inline static hooking::jmp m_set_shader_param{};
 		inline static hooking::jmp m_set_postprocess_vec{};

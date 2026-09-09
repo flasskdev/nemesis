@@ -63,6 +63,7 @@ namespace features {
 		inline scoreboard_weapons g_scoreboard_weapons{};
 		inline vote_logs g_vote_logs{};
 		inline auto_accept g_auto_accept{};
+		inline motion_blur g_motion_blur{};
 
 	} // namespace misc
 

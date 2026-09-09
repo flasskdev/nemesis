@@ -12,7 +12,7 @@ namespace rendering {
 
 	namespace detail {
 
-		constexpr const char* sound_types[ ]{ "shop click", "home click", "bell", "killcard", "bullet casing", "coin pickup", "item drop", "popcan", "key press", "custom" };
+		constexpr const char* sound_types[ ]{ "shop click", "home click", "bell", "killcard", "bullet casing", "coin pickup", "item drop", "popcan", "key press", "koch", "custom" };
 		constexpr auto k_sound_type_count{ static_cast< int >( std::size( sound_types ) ) };
 
 		void draw_custom_sound_picker( config::str& file_setting, std::string_view combo_label, std::string_view preview_id, float preview_volume )
@@ -85,14 +85,21 @@ namespace rendering {
 		const auto right_x = content_x + col_w + tokens::gap;
 		const auto subtab = std::clamp( this->m_subtab, 0, 3 );
 
+		constexpr float k_header_h = 22.0f;
+		auto draw_col_title = [&]( float x, const char* title ) {
+			auto& dl = xui::draw::current( );
+			xdraw::push_font( rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ] );
+			dl.text( x + 2.0f, body_y + 2.0f, title, tokens::col_text );
+			xdraw::pop_font( );
+		};
+
 		if ( subtab == 0 )
 		{
 			// SUBTAB 0: MAIN (GAMEPLAY & UTILITY)
-			xui::layout::set_cursor( content_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_main_left", col_w, body_h, true ) )
+			draw_col_title( content_x, "GAMEPLAY & LOGS" );
+			xui::layout::set_cursor( content_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_main_left", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "GAMEPLAY & LOGS" );
-
 				xui::toggle( "Hit Logs", impacts.hit_log );
 				if ( xui::begin_popup( "##hitlog_popup", 220.0f ) )
 				{
@@ -135,11 +142,10 @@ namespace rendering {
 				xui::end_child( );
 			}
 
-			xui::layout::set_cursor( right_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_main_right", col_w, body_h, true ) )
+			draw_col_title( right_x, "IDENTITY & UTILITY" );
+			xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_main_right", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "IDENTITY & UTILITY" );
-
 				xui::toggle( "Nickname Override", m.m_name_changer.override_name );
 				if ( xui::begin_popup( "##restore_name", 250.0f ) )
 				{
@@ -174,6 +180,23 @@ namespace rendering {
 				}
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Auto Accept", m.auto_accept );
+				xui::layout::spacing( 3.0f );
+				xui::toggle( "Kill Say", m.m_kill_say.enabled );
+				if ( xui::begin_popup( "##restore_killsay", 250.0f ) )
+				{
+					xui::text_input( "text##killsay", m.m_kill_say.message.value, 127, "kill message..." );
+					xui::end_popup( );
+				}
+				xui::layout::spacing( 3.0f );
+				xui::toggle( "Chat Spam", m.m_chat_spam.enabled );
+				if ( xui::begin_popup( "##restore_chatspam", 250.0f ) )
+				{
+					xui::text_input( "text##chatspam", m.m_chat_spam.message.value, 127, "spam message..." );
+					xui::slider_float( "delay##chatspam", m.m_chat_spam.delay, 0.5f, 5.0f, "%.1fs" );
+					static constexpr const char* spam_target_names[]{ "All", "Team" };
+					xui::multicombo( "targets##chatspam", m.m_chat_spam.targets, spam_target_names, 2 );
+					xui::end_popup( );
+				}
 
 				xui::end_child( );
 			}
@@ -181,11 +204,10 @@ namespace rendering {
 		else if ( subtab == 1 )
 		{
 			// SUBTAB 1: VIEW (CAMERA & REMOVALS)
-			xui::layout::set_cursor( content_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_view_left", col_w, body_h, true ) )
+			draw_col_title( content_x, "CAMERA & VIEW" );
+			xui::layout::set_cursor( content_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_view_left", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "CAMERA & VIEW" );
-
 				xui::toggle( "Custom FOV", cam.change_fov );
 				if ( xui::begin_popup( "##fov_popup", 220.0f ) )
 				{
@@ -236,14 +258,25 @@ namespace rendering {
 					xui::end_popup( );
 				}
 
+				xui::layout::spacing( 3.0f );
+				xui::toggle( "Motion Blur", m.m_motion_blur.enabled );
+				if ( xui::begin_popup( "##motion_blur_popup", 240.0f ) )
+				{
+					xui::slider_float( "strength##mb", m.m_motion_blur.strength, 0.1f, 3.0f, "%.2f" );
+					xui::slider_float( "smoothness##mb", m.m_motion_blur.smoothness, 1.0f, 25.0f, "%.1f" );
+					xui::slider_int( "samples##mb", m.m_motion_blur.samples.value, 4, 24 );
+					xui::slider_float( "center clarity##mb", m.m_motion_blur.center_protection, 0.0f, 1.0f, "%.2f" );
+					xui::checkbox( "movement blur##mb", m.m_motion_blur.movement_blur );
+					xui::end_popup( );
+				}
+
 				xui::end_child( );
 			}
 
-			xui::layout::set_cursor( right_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_view_right", col_w, body_h, true ) )
+			draw_col_title( right_x, "REMOVALS" );
+			xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_view_right", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "REMOVALS" );
-
 				xui::toggle( "Remove Crosshair", rem.crosshair );
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Remove Scope", rem.scope );
@@ -271,11 +304,10 @@ namespace rendering {
 		else if ( subtab == 2 )
 		{
 			// SUBTAB 2: HUD (WIDGETS & HUD OVERLAYS)
-			xui::layout::set_cursor( content_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_hud_left", col_w, body_h, true ) )
+			draw_col_title( content_x, "WIDGETS" );
+			xui::layout::set_cursor( content_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_hud_left", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "WIDGETS" );
-
 				xui::toggle( "Keybinds List", m.m_widgets.keybinds_list );
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Spectator List", m.m_widgets.spectator_list );
@@ -283,11 +315,10 @@ namespace rendering {
 				xui::end_child( );
 			}
 
-			xui::layout::set_cursor( right_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_hud_right", col_w, body_h, true ) )
+			draw_col_title( right_x, "HUD OVERLAYS" );
+			xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_hud_right", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "HUD OVERLAYS" );
-
 				xui::toggle( "Crosshair Overlay", m.m_hud.m_crosshair.enabled );
 				if ( xui::begin_popup( "##restore_crosshair", 250.0f ) )
 				{
@@ -345,11 +376,10 @@ namespace rendering {
 		else if ( subtab == 3 )
 		{
 			// SUBTAB 3: EFFECTS (SOUNDS, PARTICLES, LIGHT)
-			xui::layout::set_cursor( content_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_effects_left", col_w, body_h, true ) )
+			draw_col_title( content_x, "HIT & IMPACT EFFECTS" );
+			xui::layout::set_cursor( content_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_effects_left", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "HIT & IMPACT EFFECTS" );
-
 				xui::toggle( "Hit Sound", impacts.hit_sound );
 				if ( xui::begin_popup( "##hitsound_popup", 220.0f ) )
 				{
@@ -425,11 +455,10 @@ namespace rendering {
 				xui::end_child( );
 			}
 
-			xui::layout::set_cursor( right_x - wx, body_y - wy );
-			if ( xui::begin_child( "##misc_effects_right", col_w, body_h, true ) )
+			draw_col_title( right_x, "ENVIRONMENT & LIGHTING" );
+			xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
+			if ( xui::begin_child( "##misc_effects_right", col_w, body_h - k_header_h, true ) )
 			{
-				xui::section_header( "ENVIRONMENT & LIGHTING" );
-
 				xui::toggle( "Projectile Trajectory", m.m_projectile_trajectory.enabled );
 				if ( xui::begin_popup( "##restore_trajectory", 250.0f ) )
 				{

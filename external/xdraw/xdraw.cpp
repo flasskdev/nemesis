@@ -15,7 +15,7 @@
 
 #include "dependencies/fonts.hpp"
 #include "dependencies/shaders.hpp"
-#include "../../core/resources/fonts/inter.hpp"
+#include "../../core/resources/fonts/verdana.hpp"
 
 namespace xdraw {
 
@@ -2351,8 +2351,8 @@ namespace xdraw {
 			return false;
 		}
 
-		const auto inter = load_font( std::span<const std::byte>( reinterpret_cast< const std::byte* >( resources::fonts::inter::bold ), sizeof( resources::fonts::inter::bold ) ), 15.0f );
-		if ( !inter )
+		const auto verdana = load_font( std::span<const std::byte>( reinterpret_cast< const std::byte* >( resources::fonts::verdana::bold ), sizeof( resources::fonts::verdana::bold ) ), 15.0f );
+		if ( !verdana )
 		{
 			return false;
 		}
@@ -2360,7 +2360,7 @@ namespace xdraw {
 		const auto math = load_font( std::span<const std::byte>( reinterpret_cast< const std::byte* >( fonts::noto_math ), sizeof( fonts::noto_math ) ), 15.0f );
 		if ( math )
 		{
-			inter->fallback = math;
+			verdana->fallback = math;
 			detail::g.math_font = math;
 		}
 

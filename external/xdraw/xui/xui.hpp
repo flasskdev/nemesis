@@ -354,6 +354,43 @@ namespace xui {
 
 	inline setting::setting( bool v, bind_info b, std::string n, std::string c ) : value{ v }, bind{ std::move( b ) }, name{ std::move( n ) }, category{ std::move( c ) } { binds::register_setting( this ); }
 
+	struct slider_bind
+	{
+		int key{ 0 };
+		bind_mode mode{ bind_mode::hold_on };
+		float value{ 0.0f };
+		bool active{ false };
+	};
+
+	struct slider_bind_entry
+	{
+		static constexpr std::size_t k_max_binds = 5;
+		void* ptr{ nullptr };
+		std::uintptr_t id{ 0 };
+		std::string label{};
+		std::string fmt{ "%d" };
+		float v_min{ 0.0f };
+		float v_max{ 100.0f };
+		bool is_integral{ true };
+		float base_value{ 0.0f };
+		bool has_base_value{ false };
+		std::size_t count{ 0 };
+		slider_bind binds[ k_max_binds ]{};
+	};
+
+	namespace slider_binds {
+
+		slider_bind_entry* get_or_create( void* ptr, std::uintptr_t id, std::string_view label, float v_min, float v_max, bool is_integral, std::string_view fmt );
+		[[nodiscard]] slider_bind_entry* find_by_ptr( void* ptr );
+		[[nodiscard]] slider_bind_entry* find_by_id( std::uintptr_t id );
+		void process( const input_state& input );
+		[[nodiscard]] std::vector<slider_bind_entry*> all( );
+		[[nodiscard]] std::string serialize( );
+		void deserialize( std::string_view s );
+		void reset( );
+
+	} // namespace slider_binds
+
 	class overlay
 	{
 	public:
@@ -518,6 +555,8 @@ namespace xui {
 		std::unordered_map<std::uintptr_t, float> child_height_cache{};
 		std::unordered_map<std::uintptr_t, child_scroll_state> child_scroll_cache{};
 
+		bool modal_blocking{ false };
+
 		[[nodiscard]] bool overlay_blocking( ) const;
 	};
 
@@ -536,10 +575,10 @@ namespace xui {
 	bool begin_window( std::string_view title, float& x, float& y, float& w, float& h, bool resizable = false, float min_w = 200.0f, float min_h = 200.0f, float reveal = 1.0f );
 	void end_window( );
 
-	bool begin_child( std::string_view title, float w, float h = 0.0f, bool scrollable = false );
+	bool begin_child( std::string_view title, float w, float h = 0.0f, bool scrollable = false, bool has_background = true );
 	void end_child( );
 
-	bool begin_popup( std::string_view label, float width = 200.0f );
+	bool begin_popup( std::string_view label, float width = 200.0f, const xdraw::color* swatch_color = nullptr, bool is_arrow = false );
 	void end_popup( );
 
 	void text( std::string_view label, xdraw::color col );
@@ -586,7 +625,7 @@ namespace xui {
 
 	bool multicombo( std::string_view label, bool* selected, const char* const items[ ], int count, float width = 0.0f );
 
-	bool color_picker( std::string_view label, xdraw::color& col, float width = 0.0f, bool show_alpha = true );
+	bool color_picker( std::string_view label, xdraw::color& col, float width = 0.0f, bool show_alpha = true, bool* filled = nullptr );
 
 	bool text_input( std::string_view label, std::string& buf, std::size_t max_len = 256, std::string_view hint = "" );
 

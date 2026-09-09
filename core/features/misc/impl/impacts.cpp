@@ -11,6 +11,7 @@
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
+#include <core/features/misc/koch_sound.hpp>
 
 namespace features::misc {
 
@@ -364,8 +365,6 @@ namespace features::misc {
 				}
 			}
 
-			this->check_misses( );
-
 			const auto& cfg = settings::g_misc.m_impacts;
 			if ( cfg.bullet_impact_effect.value || cfg.bullet_tracers.value )
 			{
@@ -472,6 +471,8 @@ namespace features::misc {
 		std::unique_lock lock( this->m_mtx );
 
 		const auto target_velocity = memory::read<math::vector3>( victim_pawn + SCHEMA( "C_BaseEntity", "m_vecVelocity"_hash ) );
+		const auto current_tick = features::combat::g_shared.ctx( ).current_tick;
+		const auto bt_ticks = ( tick > 0 && current_tick >= tick ) ? ( current_tick - tick ) : 0;
 
 		this->m_pending_shots.push_back(
 			{
@@ -485,6 +486,7 @@ namespace features::misc {
 				.aim_angle = aim_angle,
 				.shoot_position = shoot_position,
 				.tick = tick,
+				.bt_ticks = bt_ticks,
 				.time = current_time,
 				.skeleton = skeleton,
 				.resolved = false,
@@ -495,7 +497,7 @@ namespace features::misc {
 				.weapon_type = features::combat::g_shared.ctx( ).weapon_type,
 			} );
 
-		if ( this->m_pending_shots.size( ) > 10 )
+		if ( this->m_pending_shots.size( ) > 64 )
 		{
 			this->m_pending_shots.erase( this->m_pending_shots.begin( ) );
 		}
@@ -503,11 +505,30 @@ namespace features::misc {
 
 	const char* impacts::classify_shot_deviation( const shot_record& shot ) const
 	{
-		if ( !shot.impact_confirmed )
+		// 1. Check if the victim is actually dead
+		bool victim_dead = false;
+		if ( shot.victim_pawn )
+		{
+			const auto life_state = memory::read<std::uint8_t>( shot.victim_pawn + SCHEMA( "C_BaseEntity", "m_lifeState"_hash ) );
+			const auto health = memory::read<int>( shot.victim_pawn + SCHEMA( "C_BaseEntity", "m_iHealth"_hash ) );
+			if ( life_state != 0 || health <= 0 )
+			{
+				victim_dead = true;
+			}
+		}
+
+		if ( victim_dead )
 		{
 			return "death";
 		}
 
+		// 2. If no impact on world was confirmed, it flew past due to weapon spread
+		if ( !shot.impact_confirmed )
+		{
+			return "spread";
+		}
+
+		// 3. Prediction errors
 		if ( shot.server_confirmed && std::fabsf( shot.server_inaccuracy - shot.predicted_inaccuracy ) > 0.003f )
 		{
 			return "prediction error";
@@ -515,7 +536,7 @@ namespace features::misc {
 
 		if ( shot.server_shoot_position_confirmed && ( shot.server_shoot_position - shot.shoot_position ).length_sqr( ) > 1.0f )
 		{
-			return "shoot position mismatch";
+			return "prediction error";
 		}
 
 		const auto shoot_position = shot.server_shoot_position_confirmed ? shot.server_shoot_position : shot.shoot_position;
@@ -528,7 +549,7 @@ namespace features::misc {
 
 		if ( impact_dist <= 0.1f )
 		{
-			return "impact too close to origin (likely penetration)";
+			return "occlusion";
 		}
 
 		const auto impact_dir = to_impact * ( 1.0f / impact_dist );
@@ -544,12 +565,9 @@ namespace features::misc {
 		const auto ideal_ray_dist = this->ray_distance_to_nearest_hitbox( shot, ideal_forward );
 		const auto target_dist = ( shot.skeleton[ 0 ].position - shoot_position ).length( );
 
-		// The scalar cone is only an estimate of the server's shot state. Reserve
-		// this label for an impact that clearly belongs to another direction;
-		// smaller deviations are classified from their hitbox geometry below.
 		if ( angular_deviation > impact_mismatch_angle )
 		{
-			return "impact mismatch";
+			return "spread";
 		}
 
 		if ( ideal_ray_dist <= 1.0f && impact_dist < target_dist * 0.85f )
@@ -557,9 +575,6 @@ namespace features::misc {
 			return "occlusion";
 		}
 
-		// If the server impact ray misses the saved hitboxes, weapon spread is
-		// already sufficient to explain the miss. Do not blame lag compensation
-		// merely because it passed within several units of the target.
 		if ( ray_dist > 1.0f )
 		{
 			return "spread";
@@ -567,12 +582,7 @@ namespace features::misc {
 
 		if ( impact_dist > target_dist * 1.05f )
 		{
-			if ( shot.target_velocity.length_2d( ) < 5.0f )
-			{
-				return "server discrepancy";
-			}
-
-			return "lag compensation";
+			return "resolver";
 		}
 
 		if ( hitbox_dist > 16.0f )
@@ -580,7 +590,7 @@ namespace features::misc {
 			return "spread";
 		}
 
-		return "server discrepancy";
+		return "resolver";
 	}
 
 	impacts::hit_data impacts::parse_event( std::uintptr_t event )
@@ -617,6 +627,8 @@ namespace features::misc {
 		auto expected_damage{ 0.0f };
 		auto was_aimbot{ false };
 		auto weapon_type{ 0u };
+		auto hitchance{ 0.0f };
+		auto bt_ticks{ 0 };
 		std::string mismatch_reason{};
 		math::vector3 impact_pos{};
 
@@ -628,6 +640,9 @@ namespace features::misc {
 				impact_pos = this->m_pending_hits.back( ).position;
 			}
 
+			const auto global_vars = memory::read<std::uintptr_t>( addresses::globals::global_vars );
+			const auto current_time = global_vars ? memory::read<float>( global_vars + 0x30 ) : 0.0f;
+
 			auto matched_shot = this->m_pending_shots.end( );
 			for ( auto it = this->m_pending_shots.begin( ); it != this->m_pending_shots.end( ); ++it )
 			{
@@ -636,11 +651,13 @@ namespace features::misc {
 					continue;
 				}
 
-				if ( matched_shot == this->m_pending_shots.end( ) ||
-					( it->impact_confirmed && ( !matched_shot->impact_confirmed || it->impact_time > matched_shot->impact_time ) ) )
+				if ( it->impact_confirmed && ( current_time - it->impact_time ) > 0.12f )
 				{
-					matched_shot = it;
+					continue;
 				}
+
+				matched_shot = it;
+				break;
 			}
 
 			if ( matched_shot != this->m_pending_shots.end( ) )
@@ -649,6 +666,8 @@ namespace features::misc {
 				was_aimbot = true;
 				weapon_type = matched_shot->weapon_type;
 				expected_damage = matched_shot->damage;
+				hitchance = matched_shot->hitchance;
+				bt_ticks = matched_shot->bt_ticks;
 				matched_shot->resolved = true;
 
 				if ( expected_hitgroup > 0 && hitgroup != expected_hitgroup )
@@ -680,7 +699,6 @@ namespace features::misc {
 			}
 		}
 
-
 		return
 		{
 			.victim = victim,
@@ -692,7 +710,9 @@ namespace features::misc {
 			.was_aimbot = was_aimbot,
 			.mismatch_reason = std::move( mismatch_reason ),
 			.weapon_type = weapon_type,
-			.expected_damage = expected_damage
+			.expected_damage = expected_damage,
+			.hitchance = hitchance,
+			.bt_ticks = bt_ticks
 		};
 	}
 
@@ -931,6 +951,8 @@ namespace features::misc {
 		entry.duration = cfg.hit_log_duration;
 		entry.hitgroup = systems::g_hitboxes.hitgroup_to_name( data.hitgroup );
 		entry.weapon_type = data.weapon_type;
+		entry.hitchance = data.hitchance;
+		entry.bt_ticks = data.bt_ticks;
 
 		if ( data.was_aimbot && !data.mismatch_reason.empty( ) )
 		{
@@ -947,8 +969,10 @@ namespace features::misc {
 			const auto group = data.weapon_type == cstypes::weapon_type::knife ? "knife" :
 				( data.weapon_type == cstypes::weapon_type::taser ? "zeus" :
 				( entry.hitgroup.empty( ) ? "body" : entry.hitgroup.c_str( ) ) );
+			const auto target_name = entry.name.empty( ) || entry.name == "unknown" ? "enemy" : entry.name.c_str( );
+			const auto health_str = entry.health <= 0 ? "fatal" : std::format( "{} hp rem", entry.health );
 
-			const auto log_text = std::format( "hit to {} [{}]", group, entry.damage );
+			const auto log_text = std::format( "hit {} in {} for {} dmg ({})", target_name, group, entry.damage, health_str );
 
 			if ( cfg.console_log.value )
 			{
@@ -979,20 +1003,23 @@ namespace features::misc {
 		const auto current_time = memory::read<float>( global_vars + 0x30 );
 		const auto& cfg = settings::g_misc.m_impacts;
 
-		const auto name = this->get_player_name_from_pawn( shot.victim_pawn );
-		const auto group = systems::g_hitboxes.hitgroup_to_name( shot.hitgroup );
+		const auto raw_name = this->get_player_name_from_pawn( shot.victim_pawn );
+		const auto name = ( raw_name.empty( ) || raw_name == "unknown" ) ? "enemy" : raw_name;
+		const char* raw_group = systems::g_hitboxes.hitgroup_to_name( shot.hitgroup );
+		const char* group = ( !raw_group || !*raw_group ) ? "body" : raw_group;
+		const auto bt_ticks = shot.bt_ticks;
+		const auto hc = static_cast< int >( std::round( shot.hitchance * 100.0f ) );
 
 		const char* reason_str = reason;
-		if ( shot.forced )
-		{
-			reason_str = "forced";
-		}
-		else if ( !reason_str || !*reason_str )
+		if ( !reason_str || !*reason_str )
 		{
 			reason_str = "unknown";
 		}
 
-		const auto log_text = std::format( "miss to {}", reason_str );
+		const auto log_text = std::format(
+			"missed {} ({}) due to {} (hc: {}%, bt: {}t)",
+			name, group, reason_str, hc, bt_ticks
+		);
 
 		if ( cfg.console_log.value )
 		{
@@ -1015,6 +1042,8 @@ namespace features::misc {
 		entry.name = name;
 		entry.reason = reason_str;
 		entry.hitgroup = group;
+		entry.hitchance = shot.hitchance;
+		entry.bt_ticks = bt_ticks;
 
 		entry.damage = 0;
 		entry.health = -1;
@@ -1041,64 +1070,53 @@ namespace features::misc {
 	void impacts::check_misses( )
 	{
 		const auto global_vars = memory::read<std::uintptr_t>( addresses::globals::global_vars );
+		if ( !global_vars )
+		{
+			return;
+		}
 		const auto current_time = memory::read<float>( global_vars + 0x30 );
-
-		constexpr auto hurt_grace_period{ 0.35f };
-		constexpr auto absolute_timeout{ 1.0f };
 
 		const auto& cfg = settings::g_misc.m_impacts;
 
-		for ( auto it = this->m_pending_shots.begin( ); it != this->m_pending_shots.end( ); )
+		std::vector<std::pair<shot_record, const char*>> misses_to_log;
+
 		{
-			if ( it->resolved )
-			{
-				it = this->m_pending_shots.erase( it );
-				continue;
-			}
+			std::unique_lock lock( this->m_mtx );
 
-			const auto elapsed = current_time - it->time;
-			const auto impact_elapsed = it->impact_confirmed ? ( current_time - it->impact_time ) : 0.0f;
-			const auto is_stale = it->impact_confirmed && impact_elapsed > hurt_grace_period;
-			const auto is_expired = elapsed > absolute_timeout;
-
-			if ( is_stale || is_expired )
+			for ( auto it = this->m_pending_shots.begin( ); it != this->m_pending_shots.end( ); )
 			{
-				// A predicted trigger command is not necessarily a shot (notably
-				// while cocking the R8). Discard it unless the server fire path or
-				// a bullet impact confirms that a round was emitted.
-				if ( !it->server_confirmed && !it->impact_confirmed )
+				if ( it->resolved )
 				{
 					it = this->m_pending_shots.erase( it );
 					continue;
 				}
 
-				it->resolved = true;
+				const auto elapsed = std::max( 0.0f, current_time - it->time );
+				const auto impact_elapsed = it->impact_confirmed ? std::max( 0.0f, current_time - it->impact_time ) : 0.0f;
+				const auto is_stale = it->impact_confirmed && impact_elapsed > 0.12f;
+				const auto is_expired = elapsed > 0.35f;
 
-				if ( cfg.miss_log.value || cfg.console_log.value || cfg.chat_log.value )
+				if ( is_stale || is_expired )
 				{
-					const char* reason;
+					it->resolved = true;
 
-					if ( it->forced )
+					if ( cfg.miss_log.value || cfg.console_log.value || cfg.chat_log.value )
 					{
-						reason = "forced";
-					}
-					else if ( !it->impact_confirmed )
-					{
-						reason = "death";
-					}
-					else
-					{
-						reason = this->classify_shot_deviation( *it );
+						const char* reason = this->classify_shot_deviation( *it );
+						misses_to_log.emplace_back( *it, reason );
 					}
 
-					this->add_miss_log( *it, reason );
+					it = this->m_pending_shots.erase( it );
+					continue;
 				}
 
-				it = this->m_pending_shots.erase( it );
-				continue;
+				++it;
 			}
+		}
 
-			++it;
+		for ( const auto& [shot, reason] : misses_to_log )
+		{
+			this->add_miss_log( shot, reason );
 		}
 	}
 
@@ -1239,7 +1257,7 @@ namespace features::misc {
 		std::unique_lock lock( this->m_mtx );
 		const auto& cfg = settings::g_misc.m_impacts;
 		const auto [screen_w, screen_h] = xdraw::viewport_size( );
-		const auto width = std::min( 320.0f, std::max( 0.0f, screen_w - 32.0f ) );
+		const auto width = std::min( 340.0f, std::max( 0.0f, screen_w - 32.0f ) );
 		auto y = 16.0f;
 
 		xdraw::push_font( rendering::g_fonts.inter_medium[ rendering::fonts::size::petite ] );
@@ -1249,17 +1267,18 @@ namespace features::misc {
 			const auto enabled = it->is_miss ? cfg.miss_log.value : cfg.hit_log.value;
 			const auto elapsed = time - it->time;
 			const auto duration = std::isfinite( it->duration ) ? std::max( it->duration, 0.1f ) : 3.5f;
-			if ( !enabled || !std::isfinite( elapsed ) || elapsed < 0.0f || elapsed >= duration )
+			if ( !enabled || !std::isfinite( elapsed ) || elapsed < -1.0f || elapsed >= duration )
 			{
 				it = this->m_logs.erase( it );
 				continue;
 			}
 
+			const auto safe_elapsed = std::max( 0.0f, elapsed );
 			it->alpha.update( );
 			it->offset.update( );
 
 			const auto fade_window = std::min( 0.45f, duration * 0.2f );
-			const auto fade_out = std::clamp( ( duration - elapsed ) / fade_window, 0.0f, 1.0f );
+			const auto fade_out = std::clamp( ( duration - safe_elapsed ) / fade_window, 0.0f, 1.0f );
 			const auto alpha = std::clamp( it->alpha.alpha( ) * fade_out, 0.0f, 1.0f );
 
 			constexpr auto height = 28.0f;
@@ -1289,23 +1308,30 @@ namespace features::misc {
 			const auto badge_h = 17.0f;
 			const auto badge_y = y + ( height - badge_h ) * 0.5f;
 
-			// Right pill: MISSED, FATAL, or victim name
+			// Right pill:
+			// For miss: "{hc}% HC" (or "{reason}" if hc <= 0)
+			// For kill: "FATAL"
+			// For hit:  "{health} HP"
 			std::string right_label;
 			if ( is_miss )
 			{
-				right_label = "MISSED";
+				const auto hc = static_cast< int >( std::round( it->hitchance * 100.0f ) );
+				if ( hc > 0 )
+				{
+					right_label = std::format( "{}% HC", hc );
+				}
+				else
+				{
+					right_label = it->reason.empty( ) ? "MISSED" : it->reason;
+				}
 			}
 			else if ( is_kill )
 			{
 				right_label = "FATAL";
 			}
-			else if ( !it->name.empty( ) && it->name != "unknown" )
-			{
-				right_label = it->name;
-			}
 			else
 			{
-				right_label = std::format( "-{} HP", it->damage );
+				right_label = std::format( "{} HP", it->health );
 			}
 
 			const auto [rw, rh] = xdraw::measure_text( right_label );
@@ -1315,20 +1341,22 @@ namespace features::misc {
 			const auto right_pill_y = y + ( height - right_pill_h ) * 0.5f;
 
 			// Single line text:
-			// Miss: "miss to <reason>"
-			// Hit:  "hit to <hitgroup> [<damage>]"
+			// Miss: "{name} ({hitgroup}) - {reason}"
+			// Hit:  "{name} in {hitgroup} [-{damage}]"
 			std::string text;
+			const auto target_name = ( it->name.empty( ) || it->name == "unknown" ) ? "enemy" : it->name.c_str( );
 			if ( is_miss )
 			{
+				const auto group = it->hitgroup.empty( ) ? "body" : it->hitgroup.c_str( );
 				const auto r_str = it->reason.empty( ) ? "unknown" : it->reason.c_str( );
-				text = std::format( "miss to {}", r_str );
+				text = std::format( "{} ({}) - {}", target_name, group, r_str );
 			}
 			else
 			{
 				const auto group = it->weapon_type == cstypes::weapon_type::knife ? "knife" :
 					( it->weapon_type == cstypes::weapon_type::taser ? "zeus" :
 					( it->hitgroup.empty( ) ? "body" : it->hitgroup.c_str( ) ) );
-				text = std::format( "hit to {} [{}]", group, it->damage );
+				text = std::format( "{} in {} [-{}]", target_name, group, it->damage );
 			}
 
 			const auto title_x = x + 10.0f + badge_w + 8.0f;
@@ -1586,21 +1614,16 @@ namespace features::misc {
 
 	namespace custom_sound_detail {
 
+		inline void ensure_directories( )
+		{
+			std::error_code ec{};
+			std::filesystem::create_directories( L"C:\\mintaly\\sounds", ec );
+		}
+
 		[[nodiscard]] std::wstring sounds_directory( )
 		{
-			wchar_t app_data[ MAX_PATH ]{};
-			if ( FAILED( SHGetFolderPathW( nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, app_data ) ) )
-			{
-				return {};
-			}
-
-			const auto root = std::wstring( app_data ) + L"\\velocity";
-			const auto sounds = root + L"\\sounds";
-
-			CreateDirectoryW( root.c_str( ), nullptr );
-			CreateDirectoryW( sounds.c_str( ), nullptr );
-
-			return sounds;
+			ensure_directories( );
+			return L"C:\\mintaly";
 		}
 
 		[[nodiscard]] std::string sanitize_filename( std::string_view name )
@@ -1681,6 +1704,39 @@ void play_engine_path( const char* sound_path, float volume )
 			play_fn( path.c_str( ), nullptr, 0x00020003u );
 		}
 
+		void play_wav_memory( const void* data, float volume )
+		{
+			using PlaySoundW_t = BOOL( WINAPI* )( LPCWSTR, HMODULE, DWORD );
+			using waveOutSetVolume_t = UINT( WINAPI* )( UINT_PTR, DWORD );
+
+			static const auto winmm = []() -> HMODULE {
+				HMODULE mod = GetModuleHandleW( L"winmm.dll" );
+				return mod ? mod : LoadLibraryW( L"winmm.dll" );
+			}();
+
+			if ( !winmm || !data )
+			{
+				return;
+			}
+
+			static const auto play_fn = reinterpret_cast<PlaySoundW_t>( GetProcAddress( winmm, "PlaySoundW" ) );
+			if ( !play_fn )
+			{
+				return;
+			}
+
+			static const auto set_vol_fn = reinterpret_cast<waveOutSetVolume_t>( GetProcAddress( winmm, "waveOutSetVolume" ) );
+			if ( set_vol_fn )
+			{
+				const auto level = static_cast<WORD>( std::clamp( volume / 100.0f, 0.0f, 1.0f ) * 0xFFFFu );
+				const DWORD vol = static_cast<DWORD>( level ) | ( static_cast<DWORD>( level ) << 16 );
+				set_vol_fn( static_cast<UINT_PTR>( static_cast<UINT>( -1 ) ), vol ); // WAVE_MAPPER
+			}
+
+			// SND_MEMORY(0x4) | SND_ASYNC(0x1) | SND_NODEFAULT(0x2)
+			play_fn( reinterpret_cast<LPCWSTR>( data ), nullptr, 0x00000007u );
+		}
+
 		[[nodiscard]] std::wstring resolve_sound_path( std::string_view filename )
 		{
 			const auto sanitized = sanitize_filename( filename );
@@ -1689,21 +1745,26 @@ void play_engine_path( const char* sound_path, float volume )
 				return {};
 			}
 
-			const auto directory = sounds_directory( );
-			if ( directory.empty( ) )
-			{
-				return {};
-			}
+			// Ensure directories exist
+			ensure_directories( );
 
 			const auto wide_name = std::wstring( sanitized.begin( ), sanitized.end( ) );
-			const auto full_path = directory + L"\\" + wide_name;
 
-			if ( !std::filesystem::exists( full_path ) )
+			// Check C:\mintaly\<filename>
+			const auto root_path = std::wstring( L"C:\\mintaly\\" ) + wide_name;
+			if ( std::filesystem::exists( root_path ) )
 			{
-				return {};
+				return root_path;
 			}
 
-			return full_path;
+			// Check C:\mintaly\sounds\<filename>
+			const auto sounds_path = std::wstring( L"C:\\mintaly\\sounds\\" ) + wide_name;
+			if ( std::filesystem::exists( sounds_path ) )
+			{
+				return sounds_path;
+			}
+
+			return {};
 		}
 
 
@@ -1711,56 +1772,46 @@ void play_engine_path( const char* sound_path, float volume )
 
 	std::string impacts::custom_sounds_directory_narrow( )
 	{
-		const auto directory = custom_sound_detail::sounds_directory( );
-		if ( directory.empty( ) )
-		{
-			return {};
-		}
-
-		const auto size_needed = WideCharToMultiByte( CP_UTF8, 0, directory.c_str( ), -1, nullptr, 0, nullptr, nullptr );
-		if ( size_needed == 0 )
-		{
-			return {};
-		}
-
-		std::string result;
-		result.resize( static_cast< std::size_t >( size_needed - 1 ) );
-		WideCharToMultiByte( CP_UTF8, 0, directory.c_str( ), -1, result.data( ), size_needed, nullptr, nullptr );
-
-		return result;
+		return "C:\\mintaly";
 	}
 
 	std::vector<std::string> impacts::list_custom_sounds( )
 	{
 		std::vector<std::string> files{};
 
-		const auto directory = custom_sound_detail::sounds_directory( );
-		if ( directory.empty( ) )
-		{
-			return files;
-		}
-
-		std::error_code ec{};
-		for ( const auto& entry : std::filesystem::directory_iterator( directory, ec ) )
-		{
-			if ( ec || !entry.is_regular_file( ) )
+		const auto scan_dir = [&]( const std::wstring& dir_path ) {
+			std::error_code ec{};
+			if ( !std::filesystem::exists( dir_path, ec ) || ec )
 			{
-				continue;
+				return;
 			}
 
-			const auto filename = entry.path( ).filename( ).string( );
-			if ( filename.empty( ) )
+			for ( const auto& entry : std::filesystem::directory_iterator( dir_path, ec ) )
 			{
-				continue;
-			}
+				if ( ec || !entry.is_regular_file( ) )
+				{
+					continue;
+				}
 
-			if ( !custom_sound_detail::has_extension( filename, ".wav" ) )
-			{
-				continue;
-			}
+				const auto filename = entry.path( ).filename( ).string( );
+				if ( filename.empty( ) || !custom_sound_detail::has_extension( filename, ".wav" ) )
+				{
+					continue;
+				}
 
-			files.push_back( filename );
-		}
+				if ( std::find( files.begin( ), files.end( ), filename ) == files.end( ) )
+				{
+					files.push_back( filename );
+				}
+			}
+		};
+
+		// Ensure C:\mintaly and C:\mintaly\sounds exist
+		custom_sound_detail::ensure_directories( );
+
+		// Check C:\mintaly directly and C:\mintaly\sounds
+		scan_dir( L"C:\\mintaly" );
+		scan_dir( L"C:\\mintaly\\sounds" );
 
 		std::sort( files.begin( ), files.end( ) );
 		return files;
@@ -1780,6 +1831,12 @@ void play_engine_path( const char* sound_path, float volume )
 		if ( type == settings::misc::impacts::sound_type::custom )
 		{
 			this->play_custom_sound( custom_file, volume );
+			return;
+		}
+
+		if ( type == settings::misc::impacts::sound_type::koch )
+		{
+			custom_sound_detail::play_wav_memory( sounds::g_koch_wav, volume );
 			return;
 		}
 

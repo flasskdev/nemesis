@@ -14,158 +14,290 @@ namespace features::misc {
 	{
 		m_match_detected = false;
 		m_accepted = false;
+		m_retry_count = 0;
 		m_found_time = {};
+		m_accepted_time = {};
 		m_last_check = {};
 	}
 
-	void auto_accept::run()
+	void auto_accept::ensure_initialized()
 	{
-		if (!settings::g_misc.auto_accept.value)
-		{
-			m_match_detected = false;
-			m_accepted = false;
+		if ( m_initialized )
 			return;
-		}
 
-		const auto now = std::chrono::steady_clock::now();
-		if (now - m_last_check < std::chrono::milliseconds(100))
-			return;
-		m_last_check = now;
+		m_fn_is_match_waiting = reinterpret_cast<fn_is_match_waiting>(
+			PATTERN( patterns::is_match_waiting ) );
+		m_fn_set_local_player_ready = reinterpret_cast<fn_set_local_player_ready>(
+			PATTERN( patterns::set_local_player_ready ) );
 
-		// Check if the accept popup is showing via Panorama panel tree
-		bool waiting = false;
-
-		if (addresses::globals::panorama)
+		if ( m_fn_set_local_player_ready )
 		{
-			auto* panorama = reinterpret_cast<c_panorama_ui_engine*>(addresses::globals::panorama);
-			if (panorama)
+			const auto fn_addr = reinterpret_cast<std::uintptr_t>( m_fn_set_local_player_ready );
+			for ( std::size_t offset = 0x1E; offset < 0x30; ++offset )
 			{
-				auto* ui_engine = panorama->get_ui_engine();
-				if (ui_engine && ui_engine->m_panels_array)
+				const auto byte = memory::safe_read<std::uint8_t>( fn_addr + offset ).value_or( 0 );
+				if ( byte == 0xE8 )
 				{
-					// Search for popup_accept_match panel in the panel list
-					for (int i = 0; i < ui_engine->m_panel_count; ++i)
+					const auto rel = memory::safe_read<std::int32_t>( fn_addr + offset + 1 ).value_or( 0 );
+					if ( rel != 0 )
 					{
-						const auto& pd = ui_engine->m_panels_array[i];
-						if (!pd.m_panel || !pd.m_visible)
-							continue;
-
-						auto* panel = pd.m_panel;
-						if (!panel->m_panel_name)
-							continue;
-
-						// The match accept popup panel
-						if (strcmp(panel->m_panel_name, "PopupAcceptMatch") == 0 ||
-							strcmp(panel->m_panel_name, "popup_accept_match") == 0 ||
-							strcmp(panel->m_panel_name, "MatchAccept") == 0)
-						{
-							waiting = true;
-							break;
-						}
+						m_fn_internal_ready = reinterpret_cast<fn_internal_ready>( fn_addr + offset + 5 + rel );
+						break;
 					}
 				}
 			}
 		}
 
-		// Fallback: try native functions if patterns resolved
-		if (!waiting)
+		m_initialized = true;
+
+		logging::console::print(
+			xs( "[auto_accept] initialized | is_match_waiting: {:#x}, set_local_player_ready: {:#x}, internal_ready: {:#x}\n" ),
+			reinterpret_cast<std::uintptr_t>( m_fn_is_match_waiting ),
+			reinterpret_cast<std::uintptr_t>( m_fn_set_local_player_ready ),
+			reinterpret_cast<std::uintptr_t>( m_fn_internal_ready ) );
+	}
+
+	std::uintptr_t auto_accept::get_reservation_ptr()
+	{
+		if ( !m_fn_is_match_waiting )
+			return 0;
+
+		const auto fn = reinterpret_cast<std::uintptr_t>( m_fn_is_match_waiting );
+		const auto b0 = memory::safe_read<std::uint8_t>( fn ).value_or( 0 );
+		const auto b1 = memory::safe_read<std::uint8_t>( fn + 1 ).value_or( 0 );
+		const auto b2 = memory::safe_read<std::uint8_t>( fn + 2 ).value_or( 0 );
+		if ( b0 == 0x48 && b1 == 0x8B && b2 == 0x05 )
 		{
-			if (!m_initialized)
+			const auto rel = memory::safe_read<std::int32_t>( fn + 3 ).value_or( 0 );
+			if ( rel != 0 )
 			{
-				m_fn_is_match_waiting = reinterpret_cast<fn_is_match_waiting>(
-					PATTERN(patterns::is_match_waiting));
-				m_fn_get_ready_time = reinterpret_cast<fn_get_ready_time>(
-					PATTERN(patterns::get_ready_time_remaining));
-				m_initialized = true;
-			}
-
-			if (m_fn_get_ready_time)
-			{
-				const auto remaining = m_fn_get_ready_time(nullptr);
-				if (remaining > 0)
-					waiting = true;
-			}
-
-			if (!waiting && m_fn_is_match_waiting)
-			{
-				if (m_fn_is_match_waiting())
-					waiting = true;
+				const auto ptr_addr = fn + 7 + rel;
+				return memory::safe_read<std::uintptr_t>( ptr_addr ).value_or( 0 );
 			}
 		}
+		return 0;
+	}
 
-		if (waiting)
+	bool auto_accept::is_match_waiting_internal()
+	{
+		// 1. Direct engine query (checks ServerConfirmedReservation != nullptr && state == 3 && accepted == 0)
+		if ( m_fn_is_match_waiting && m_fn_is_match_waiting() )
+			return true;
+
+		// 2. Reservation state check (state 3 = MatchReady, has_accepted = 0)
+		// NOTE: Never check state == 1 (state 1 is SEARCHING in queue, not match found!)
+		if ( const auto reservation = this->get_reservation_ptr(); reservation != 0 )
 		{
-			if (!m_match_detected)
+			const auto state = memory::safe_read<std::int32_t>( reservation + 0xA8 ).value_or( 0 );
+			const auto accepted = memory::safe_read<std::uint8_t>( reservation + 0xA4 ).value_or( 0 );
+			if ( state == 3 && accepted == 0 )
+				return true;
+		}
+
+		return false;
+	}
+
+	void auto_accept::on_panorama_event( const char* event_name )
+	{
+		if ( !settings::g_misc.auto_accept.value || !event_name )
+			return;
+
+		if ( reinterpret_cast<std::uintptr_t>( event_name ) < 0x10000 )
+			return;
+
+		__try
+		{
+			bool has_null = false;
+			for ( std::size_t i = 0; i < 256; ++i )
 			{
-				m_match_detected = true;
-				m_found_time = now;
-				logging::console::print(xs("[auto_accept] match found! accepting in 0.5s...\n"));
+				if ( event_name[ i ] == '\0' )
+				{
+					has_null = true;
+					break;
+				}
 			}
 
-			constexpr auto k_delay = 0.5f;
-			const auto elapsed = std::chrono::duration<float>(now - m_found_time).count();
+			if ( !has_null )
+				return;
 
-			if (elapsed >= k_delay && !m_accepted)
+			this->ensure_initialized();
+
+			// Diagnostic logging for relevant Panorama events
+			if ( strstr( event_name, "popup" ) || strstr( event_name, "match" ) ||
+			     strstr( event_name, "accept" ) || strstr( event_name, "ReadyUp" ) )
 			{
-				this->accept_match();
-				m_accepted = true;
+				logging::console::print( xs( "[auto_accept] panorama event: {}\n" ), event_name );
+			}
+
+			// popup_accept_match_found is fired by CS2 when a competitive/premier/casual match is found
+			if ( strcmp( event_name, "popup_accept_match_found" ) == 0 ||
+			     strstr( event_name, "accept_match_found" ) != nullptr ||
+			     strstr( event_name, "MatchAssistedReadyUp" ) != nullptr ||
+			     strstr( event_name, "ReadyUp" ) != nullptr ||
+			     strstr( event_name, "csgo_matchmaking_match_found" ) != nullptr )
+			{
+				if ( !m_accepted )
+				{
+					const auto now = std::chrono::steady_clock::now();
+					m_match_detected = true;
+					m_found_time = now;
+					m_last_check = now;
+
+					logging::console::print(
+						xs( "[auto_accept] MATCH DETECTED via '{}'! Accepting...\n" ),
+						event_name );
+
+					// Alert user immediately
+					const auto hwnd = rendering::g_context.get_window();
+					if ( hwnd && GetForegroundWindow() != hwnd )
+					{
+						FLASHWINFO fi{};
+						fi.cbSize = sizeof( FLASHWINFO );
+						fi.hwnd = hwnd;
+						fi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+						fi.uCount = 3;
+						fi.dwTimeout = 0;
+						FlashWindowEx( &fi );
+						MessageBeep( MB_ICONINFORMATION );
+					}
+
+					// Accept immediately
+					this->accept_match();
+
+					if ( !this->is_match_waiting_internal() )
+					{
+						m_accepted = true;
+						m_accepted_time = now;
+					}
+				}
+			}
+		}
+		__except( EXCEPTION_EXECUTE_HANDLER )
+		{
+			return;
+		}
+	}
+
+	void auto_accept::run()
+	{
+		if ( !settings::g_misc.auto_accept.value )
+		{
+			m_match_detected = false;
+			m_accepted = false;
+			return;
+		}
+
+		this->ensure_initialized();
+
+		const auto now = std::chrono::steady_clock::now();
+		const bool waiting = this->is_match_waiting_internal();
+
+		if ( waiting )
+		{
+			if ( !m_match_detected )
+			{
+				m_match_detected = true;
+				m_accepted = false;
+				m_found_time = now;
+				m_retry_count = 0;
+				m_last_check = now;
+
+				logging::console::print( xs( "[auto_accept] MATCH DETECTED via is_match_waiting! Accepting...\n" ) );
+
+				// Alert user immediately
+				const auto hwnd = rendering::g_context.get_window();
+				if ( hwnd && GetForegroundWindow() != hwnd )
+				{
+					FLASHWINFO fi{};
+					fi.cbSize = sizeof( FLASHWINFO );
+					fi.hwnd = hwnd;
+					fi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+					fi.uCount = 3;
+					fi.dwTimeout = 0;
+					FlashWindowEx( &fi );
+					MessageBeep( MB_ICONINFORMATION );
+				}
+			}
+
+			// Accept and retry every ~150ms while match is waiting
+			if ( !m_accepted )
+			{
+				if ( m_retry_count == 0 || ( now - m_last_check ) >= std::chrono::milliseconds( 150 ) )
+				{
+					m_last_check = now;
+					m_retry_count++;
+					this->accept_match();
+				}
+
+				// If match is no longer waiting, the engine / GC confirmed acceptance!
+				if ( !this->is_match_waiting_internal() )
+				{
+					m_accepted = true;
+					m_accepted_time = now;
+					logging::console::print( xs( "[auto_accept] match accepted confirmed!\n" ) );
+				}
 			}
 		}
 		else
 		{
-			m_match_detected = false;
-			m_accepted = false;
+			// No match waiting: if previously accepted, reset after 3s cooldown
+			if ( m_accepted )
+			{
+				if ( now - m_accepted_time > std::chrono::seconds( 3 ) )
+				{
+					this->reset();
+				}
+			}
+			else if ( m_match_detected )
+			{
+				if ( now - m_found_time > std::chrono::seconds( 5 ) )
+				{
+					this->reset();
+				}
+			}
 		}
 	}
 
 	void auto_accept::accept_match()
 	{
-		logging::console::print(xs("[auto_accept] accepting match!\n"));
+		static bool s_in_accept = false;
+		if ( s_in_accept )
+			return;
+		s_in_accept = true;
 
-		// Dispatch Panorama MatchAssistedAccept event through the UI engine
-		if (addresses::globals::panorama)
+		logging::console::print( xs( "[auto_accept] ACCEPTING MATCH...\n" ) );
+
+		bool accepted = false;
+
+		// Method 1: SetLocalPlayerReady(nullptr, "deferred")
+		// In CS2, SetLocalPlayerReady ONLY executes the internal ready logic when passed "deferred"!
+		// Passing "accept" jumps over the internal ready call and returns false.
+		if ( m_fn_set_local_player_ready )
 		{
-			auto* panorama = reinterpret_cast<c_panorama_ui_engine*>(addresses::globals::panorama);
-			if (panorama)
-			{
-				auto* ui_engine = panorama->get_ui_engine();
-				if (ui_engine && addresses::globals::hud)
-				{
-					const auto hud = memory::safe_read<std::uintptr_t>(addresses::globals::hud).value_or(0);
-					if (hud)
-					{
-						const auto panel = memory::safe_read<c_ui_panel*>(hud + 0x8).value_or(nullptr);
-						if (panel)
-						{
-							const auto vtable = memory::safe_read<std::uintptr_t>(
-								reinterpret_cast<std::uintptr_t>(panel));
-							if (vtable && *vtable)
-							{
-								// Try multiple event names that different CS2 versions use
-								ui_engine->run_script(panel, "$.DispatchEvent('MatchAssistedAccept');");
-								ui_engine->run_script(panel, "$.DispatchEvent('CSGOReadyUpForMatch');");
-								
-								logging::console::print(xs("[auto_accept] dispatched Panorama events\n"));
-							}
-						}
-					}
-				}
-			}
+			accepted = m_fn_set_local_player_ready( nullptr, "deferred" );
+			logging::console::print(
+				xs( "[auto_accept] SetLocalPlayerReady('deferred') returned {}\n" ),
+				accepted );
+
+			// Also try "accept" as fallback
+			m_fn_set_local_player_ready( nullptr, "accept" );
 		}
 
-		// Alert user
-		const auto hwnd = rendering::g_context.get_window();
-		if (hwnd && GetForegroundWindow() != hwnd)
+		// Method 2: Direct internal ready call (calls GC ready with state 2 = Accepted)
+		if ( m_fn_internal_ready )
 		{
-			FLASHWINFO fi{};
-			fi.cbSize = sizeof(FLASHWINFO);
-			fi.hwnd = hwnd;
-			fi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
-			fi.uCount = 5;
-			fi.dwTimeout = 0;
-			FlashWindowEx(&fi);
-			MessageBeep(MB_ICONINFORMATION);
+			const auto res = m_fn_internal_ready( nullptr, 2 );
+			logging::console::print(
+				xs( "[auto_accept] internal_ready(nullptr, 2) returned {}\n" ),
+				res );
+			if ( res ) accepted = true;
 		}
+
+		// IMPORTANT: DO NOT OVERWRITE local ServerConfirmedReservation state (+0xA8 or +0xA4)!
+		// Overwriting client memory does NOT accept the match on Valve's server, but it DOES
+		// trick Panorama into hiding the accept window, which causes the match to time out!
+
+		s_in_accept = false;
 	}
 
 } // namespace features::misc

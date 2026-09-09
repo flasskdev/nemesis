@@ -10,6 +10,7 @@
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
+#include <external/xdraw/xui/xui.hpp>
 #include "../hooks.hpp"
 
 namespace hooks {
@@ -58,6 +59,7 @@ namespace hooks {
 			{ &m_vote_start, &vote_start, xs ("vote_start"), PATTERN (patterns::vote_start) },
 			{ &m_vote_pass, &vote_pass, xs ("vote_pass"), PATTERN (patterns::vote_pass) },
 			{ &m_vote_failed, &vote_failed, xs ("vote_failed"), PATTERN (patterns::vote_failed) },
+			{ &m_panorama_event, &panorama_event, xs ("panorama_event"), PATTERN (patterns::panorama_event) },
 			{ &m_setup_fog, &setup_fog, xs ("setup_fog"), PATTERN (patterns::setup_fog) },
 			{ &m_set_shader_param, &set_shader_param, xs ("set_shader_param"), PATTERN (patterns::set_shader_param) },
 			{ &m_set_postprocess_vec, &set_postprocess_vec, xs ("set_postprocess_vec"), PATTERN (patterns::set_postprocess_vec) },
@@ -104,7 +106,6 @@ namespace hooks {
 	void cheat::shutdown( )
 	{
 		m_wnd_proc.reset( );
-		m_om_set_render_targets.reset( );
 		m_present.reset( );
 		m_resize_buffers.reset( );
 		m_cmd_interpreter.reset( );
@@ -125,6 +126,7 @@ namespace hooks {
 		m_vote_start.reset( );
 		m_vote_pass.reset( );
 		m_vote_failed.reset( );
+		m_panorama_event.reset( );
 		m_setup_fog.reset( );
 		m_set_shader_param.reset( );
 		m_set_postprocess_vec.reset( );
@@ -163,15 +165,6 @@ namespace hooks {
 			if ( m_wnd_proc.create( reinterpret_cast< void* >( GetWindowLongPtrW( rendering::g_context.get_window( ), GWLP_WNDPROC ) ), &wnd_proc ) )
 			{
 				m_wnd_proc.enable( );
-			}
-		}
-
-		if ( !m_om_set_render_targets.is_enabled( ) && rendering::g_context.is_initialized( ) )
-		{
-			const auto om_addr = memory::get_vfunc( reinterpret_cast< std::uintptr_t >( rendering::g_context.get_context( ) ), 33 );
-			if ( m_om_set_render_targets.create( reinterpret_cast< void* >( om_addr ), &om_set_render_targets ) )
-			{
-				m_om_set_render_targets.enable( );
 			}
 		}
 
@@ -215,6 +208,11 @@ namespace hooks {
 
 		if ( rendering::g_menu.is_open( ) )
 		{
+			const auto& ui_ctx = xui::ctx( );
+			const bool has_active_input = ui_ctx.active_text_input != xui::null_id
+				|| ui_ctx.active_keybind != xui::null_id
+				|| ui_ctx.active_slider_edit != xui::null_id;
+
 			switch ( msg )
 			{
 			case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_LBUTTONDBLCLK:
@@ -223,17 +221,20 @@ namespace hooks {
 			case WM_MOUSEWHEEL: case WM_MOUSEHWHEEL:
 			case WM_MOUSEMOVE:
 				return 0;
+
+			case WM_KEYDOWN: case WM_KEYUP:
+			case WM_SYSKEYDOWN: case WM_SYSKEYUP:
+			case WM_CHAR:
+				if ( has_active_input )
+					return 0;
+				break;
+
 			default:
 				break;
 			}
 		}
 
 		return m_wnd_proc.call<LRESULT>( hwnd, msg, wparam, lparam );
-	}
-
-	void __stdcall cheat::om_set_render_targets( ID3D11DeviceContext* ctx, UINT num_views, ID3D11RenderTargetView* const* rtvs, ID3D11DepthStencilView* dsv )
-	{
-		m_om_set_render_targets.call<void>( ctx, num_views, rtvs, dsv );
 	}
 
 	void __fastcall cheat::cmd_interpreter( std::uintptr_t render_thread, std::uintptr_t item, std::uint8_t flag )
@@ -447,7 +448,8 @@ namespace hooks {
 			diag::set_exception_phase( "create_move: final subtick" );
 			const auto final_base = current_cmd->csgo_user_cmd.mutable_base( );
 			if ( final_base && final_base->subtick_moves_size( ) > 0
-				&& !features::movement::g_test_strafer.handled_this_tick( ) )
+				&& !features::movement::g_test_strafer.handled_this_tick( )
+				&& !features::movement::g_slowwalk.active_this_tick( ) )
 			{
 				final_base->set_forwardmove( 0.0f );
 				final_base->set_leftmove( 0.0f );
@@ -476,6 +478,12 @@ namespace hooks {
 
 	void __fastcall cheat::handle_view_angles( std::uintptr_t thisptr, int a2 )
 	{
+		if ( !systems::g_local.get( ).is_valid( ) )
+		{
+			m_handle_view_angles.call<void>( thisptr, a2 );
+			return;
+		}
+
 		const auto view_angles = systems::g_input.get_view_angles( );
 
 		m_handle_view_angles.call<void>( thisptr, a2 );
@@ -672,6 +680,16 @@ namespace hooks {
 	{
 		features::misc::g_vote_logs.on_vote_failed( msg );
 		m_vote_failed.call<void>( panel, msg );
+	}
+
+	void* __fastcall cheat::panorama_event( void* thisptr, const char* event_name, void* p1, void* p2 )
+	{
+		if ( event_name )
+		{
+			features::misc::g_auto_accept.on_panorama_event( event_name );
+		}
+
+		return m_panorama_event.call<void*>( thisptr, event_name, p1, p2 );
 	}
 
 	std::uintptr_t __fastcall cheat::setup_fog( __m128i* output, int* mode )
@@ -922,6 +940,8 @@ namespace hooks {
 			rendering::g_widgets.s_map_name.clear( );
 		}
 
+		settings::g_world.update_active( rendering::g_widgets.s_map_name );
+
 		features::world::g_scene.reset_skybox_state( );
 		features::misc::g_impacts.on_level_change( );
 		features::misc::g_scoreboard_weapons.on_level_change( );
@@ -932,14 +952,28 @@ namespace hooks {
 	std::uintptr_t __fastcall cheat::level_shutdown( std::uintptr_t a1 )
 	{
 		rendering::g_widgets.s_map_name.clear();
+		settings::g_world.update_active( "" );
 
 		// Release feature-owned scene objects before Source 2 tears their parents down.
 		features::misc::g_dlight.on_level_shutdown( );
 		features::misc::g_vote_logs.reset( );
 		features::misc::g_camera.reset( );
+		features::misc::g_motion_blur.reset( );
+		features::misc::g_impacts.on_level_change( );
+		features::misc::g_scoreboard_weapons.on_level_change( );
+		features::world::g_scene.reset_skybox_state( );
+
+		features::changer::g_guns.reset( );
+		features::changer::g_knives.reset( );
+		features::changer::g_gloves.reset( );
+		features::changer::g_agents.reset( );
+
+		// clear cached entities and view state on level shutdown
+		systems::g_entities.reset( );
+		systems::g_view.reset( );
 
 		// clear all local player data on level shutdown
-		systems::g_local.reset();
+		systems::g_local.reset( );
 
 		detail::g_vm_anim.initialized = false;
 
@@ -1077,6 +1111,12 @@ namespace hooks {
 		if ( !offsets || !fov )
 			return;
 
+		if ( !systems::g_local.get( ).is_valid( ) || !systems::g_view.has_camera( ) )
+		{
+			detail::g_vm_anim.initialized = false;
+			return;
+		}
+
 		if ( features::misc::g_camera.is_freecam_active( ) )
 		{
 			offsets[ 0 ] = 0.0f;
@@ -1195,7 +1235,7 @@ namespace hooks {
 		}
 
 		const auto local = systems::g_local.get( );
-		if ( local.is_alive )
+		if ( !local.is_valid( ) || local.is_alive )
 		{
 			m_spec_cmds_handler.call<void>( cmd );
 			return;

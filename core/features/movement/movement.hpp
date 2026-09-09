@@ -55,7 +55,12 @@ namespace features::movement {
 	class slowwalk
 	{
 	public:
-		void on_create_move( systems::input::usercmd* cmd ) const;
+		void on_create_move( systems::input::usercmd* cmd );
+
+		[[nodiscard]] bool active_this_tick( ) const { return this->m_active_this_tick; }
+
+	private:
+		bool m_active_this_tick{ false };
 	};
 
 	class test_strafer

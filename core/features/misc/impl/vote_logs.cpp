@@ -166,19 +166,51 @@ namespace features::misc {
 
 		const auto disp_str = read_protobuf_string( msg + 0x48 );
 		const auto details_str = read_protobuf_string( msg + 0x50 );
+		const auto other_team_str = read_protobuf_string( msg + 0x58 );
 
 		std::string reason = "unknown";
-		if ( disp_str == "kick" )
+
+		const bool is_kick_vote = ( disp_str == "kick" ) ||
+		                          ( disp_str.find( "kick" ) != std::string::npos ) ||
+		                          ( disp_str == "other" ) ||
+		                          ( disp_str == "#SFUI_vote_other" ) ||
+		                          ( disp_str.find( "vote_other" ) != std::string::npos ) ||
+		                          ( disp_str.find( "kick_player" ) != std::string::npos );
+
+		if ( is_kick_vote )
 		{
-			const auto target_slot = memory::safe_read<int>( msg + 0x70 ).value_or( -1 );
+			auto target_slot = memory::safe_read<int>( msg + 0x70 ).value_or( -1 );
+			if ( target_slot < 0 || target_slot >= 64 )
+			{
+				const auto alt_slot = memory::safe_read<int>( msg + 0x74 ).value_or( -1 );
+				if ( alt_slot >= 0 && alt_slot < 64 )
+					target_slot = alt_slot;
+			}
+
+			if ( ( target_slot < 0 || target_slot >= 64 ) && !details_str.empty( ) )
+			{
+				char* end_ptr = nullptr;
+				const auto parsed = std::strtol( details_str.c_str( ), &end_ptr, 10 );
+				if ( end_ptr && *end_ptr == '\0' && parsed >= 0 && parsed < 64 )
+				{
+					target_slot = static_cast<int>( parsed );
+				}
+			}
+
 			std::string target_name{};
 			if ( target_slot >= 0 && target_slot < 64 )
 			{
 				target_name = get_player_name_by_slot( target_slot );
 			}
-			if ( target_name.empty( ) && !details_str.empty( ) )
+
+			if ( target_name.empty( ) && !details_str.empty( ) && details_str != "other" && !details_str.starts_with( "#" ) )
 			{
 				target_name = details_str;
+			}
+
+			if ( target_name.empty( ) && !other_team_str.empty( ) && other_team_str != "other" && !other_team_str.starts_with( "#" ) )
+			{
+				target_name = other_team_str;
 			}
 
 			if ( !target_name.empty( ) )
@@ -229,6 +261,21 @@ namespace features::misc {
 			else if ( reason.starts_with( "#Panorama_Vote_" ) )
 				reason.erase( 0, 15 );
 			std::ranges::replace( reason, '_', ' ' );
+
+			if ( reason == "other" || reason == "kick player other" )
+			{
+				auto target_slot = memory::safe_read<int>( msg + 0x70 ).value_or( -1 );
+				std::string target_name{};
+				if ( target_slot >= 0 && target_slot < 64 )
+					target_name = get_player_name_by_slot( target_slot );
+				if ( target_name.empty( ) && !details_str.empty( ) && details_str != "other" && !details_str.starts_with( "#" ) )
+					target_name = details_str;
+
+				if ( !target_name.empty( ) )
+					reason = "kick " + target_name;
+				else
+					reason = "kick";
+			}
 		}
 
 		const auto r = tokens::col_accent.r;

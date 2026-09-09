@@ -6,15 +6,23 @@
 
 namespace systems {
 
+	void view::reset( )
+	{
+		this->m_matrix_valid.store( false, std::memory_order_release );
+		this->m_origin = { k_invalid, k_invalid, k_invalid };
+		this->m_angles = { k_invalid, k_invalid, k_invalid };
+		this->m_fov = k_invalid;
+	}
+
 	void view::update( std::uintptr_t view )
 	{
 		this->update_matrix( );
 
 		if ( view )
 		{
-			this->m_origin = memory::read<math::vector3>( view + 0x0 );
-			this->m_angles = memory::read<math::vector3>( view + 0xc );
-			this->m_fov = memory::read<float>( view + 0x18 );
+			this->m_origin = memory::safe_read<math::vector3>( view + 0x0 ).value_or( math::vector3{ k_invalid, k_invalid, k_invalid } );
+			this->m_angles = memory::safe_read<math::vector3>( view + 0xc ).value_or( math::vector3{ k_invalid, k_invalid, k_invalid } );
+			this->m_fov = memory::safe_read<float>( view + 0x18 ).value_or( k_invalid );
 		}
 		else
 		{
@@ -32,7 +40,14 @@ namespace systems {
 			return;
 		}
 
-		const auto matrix = memory::read<math::matrix4x4>( addresses::globals::view_matrix );
+		const auto matrix_opt = memory::safe_read<math::matrix4x4>( addresses::globals::view_matrix );
+		if ( !matrix_opt.has_value( ) )
+		{
+			this->m_matrix_valid.store( false, std::memory_order_release );
+			return;
+		}
+
+		const auto& matrix = *matrix_opt;
 		auto valid = true;
 		auto magnitude = 0.0f;
 

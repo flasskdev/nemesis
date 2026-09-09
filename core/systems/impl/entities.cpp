@@ -103,6 +103,14 @@ namespace systems {
 		}
 	}
 
+	void entities::reset( )
+	{
+		std::unique_lock lock( this->m_cache_mtx );
+		this->m_cached.clear( );
+		this->m_cached_list_entries.fill( 0 );
+		this->m_cached_entity_list = 0;
+	}
+
 	bool entities::exists( std::uintptr_t entity_ptr ) const
 	{
 		std::shared_lock lock( this->m_cache_mtx );
@@ -144,7 +152,12 @@ namespace systems {
 
 	std::uintptr_t entities::get_by_index( std::int32_t index )
 	{
-		const auto entity_list = memory::read<std::uintptr_t>( addresses::globals::entity_list );
+		if ( !addresses::globals::entity_list )
+		{
+			return 0;
+		}
+
+		const auto entity_list = memory::safe_read<std::uintptr_t>( addresses::globals::entity_list ).value_or( 0 );
 		if ( !entity_list )
 		{
 			return 0;
@@ -157,10 +170,14 @@ namespace systems {
 		}
 
 		const auto chunk_index = index >> 9;
+		if ( chunk_index < 0 || chunk_index >= static_cast<int>( this->m_cached_list_entries.size( ) ) )
+		{
+			return 0;
+		}
 
 		if ( !this->m_cached_list_entries[ chunk_index ] )
 		{
-			this->m_cached_list_entries[ chunk_index ] = memory::read<std::uintptr_t>( entity_list + ( static_cast< std::uintptr_t >( chunk_index ) * 8 ) + 0x10 );
+			this->m_cached_list_entries[ chunk_index ] = memory::safe_read<std::uintptr_t>( entity_list + ( static_cast< std::uintptr_t >( chunk_index ) * 8 ) + 0x10 ).value_or( 0 );
 		}
 
 		const auto list_entry = this->m_cached_list_entries[ chunk_index ];
@@ -169,29 +186,29 @@ namespace systems {
 			return 0;
 		}
 
-		return memory::read<std::uintptr_t>( list_entry + ( static_cast< std::uintptr_t >( index & 0x1ff ) * 112 ) );
+		return memory::safe_read<std::uintptr_t>( list_entry + ( static_cast< std::uintptr_t >( index & 0x1ff ) * 112 ) ).value_or( 0 );
 	}
 
 	std::uintptr_t entities::lookup( std::uint32_t handle ) const
 	{
-		if ( !handle || handle == 0xffffffff )
+		if ( !handle || handle == 0xffffffff || !addresses::globals::entity_list )
 		{
 			return 0;
 		}
 
-		const auto entity_list = memory::read<std::uintptr_t>( addresses::globals::entity_list );
+		const auto entity_list = memory::safe_read<std::uintptr_t>( addresses::globals::entity_list ).value_or( 0 );
 		if ( !entity_list )
 		{
 			return 0;
 		}
 
-		const auto list_entry = memory::read<std::uintptr_t>( entity_list + ( static_cast< std::uintptr_t >( ( handle & 0x7fff ) >> 9 ) * 8 ) + 0x10 );
+		const auto list_entry = memory::safe_read<std::uintptr_t>( entity_list + ( static_cast< std::uintptr_t >( ( handle & 0x7fff ) >> 9 ) * 8 ) + 0x10 ).value_or( 0 );
 		if ( !list_entry || list_entry == 0xffffffffffffffff )
 		{
 			return 0;
 		}
 
-		const auto entity = memory::read<std::uintptr_t>( list_entry + ( static_cast< std::uintptr_t >( handle & 0x1ff ) * 112 ) );
+		const auto entity = memory::safe_read<std::uintptr_t>( list_entry + ( static_cast< std::uintptr_t >( handle & 0x1ff ) * 112 ) ).value_or( 0 );
 		if ( !entity || entity == 0xffffffffffffffff || entity < 0x10000 )
 		{
 			return 0;

@@ -334,7 +334,7 @@ namespace features::combat {
 		[[nodiscard]] bool is_cocking_revolver( ) const noexcept { return this->m_revolver_cock_ticks > 0; }
 		[[nodiscard]] bool should_release_duck_for_shot( ) const noexcept { return this->m_release_duck_for_shot; }
 		[[nodiscard]] bool duckpeek_wants_reduck( ) const noexcept { return this->m_duckpeek_reduck; }
-		void clear_duckpeek_reduck( ) noexcept { this->m_duckpeek_reduck = false; }
+		void clear_duckpeek_reduck( ) noexcept { this->m_duckpeek_reduck = false; this->m_duckpeek_reduck_ticks = 0; }
 
 		static constexpr auto k_max_lagcomp_records{ 16 };
 		// Scanning the newest and oldest valid records covers the useful lag-comp
@@ -459,11 +459,13 @@ namespace features::combat {
 		bool m_firing_this_tick{};
 		bool m_release_duck_for_shot{};
 		bool m_duckpeek_reduck{};
+		int m_duckpeek_reduck_ticks{};
 
 		std::uint8_t m_knife_attack{};
 		bool m_zeus_fired{};
 
 		int m_revolver_cock_ticks{};
+		bool m_revolver_cocking_started{};
 		std::atomic<penetration_crosshair_state> m_penetration_crosshair_state{ penetration_crosshair_state::unavailable };
 
 		std::vector<shared::lagcomp::record> m_extrapolated_records{};

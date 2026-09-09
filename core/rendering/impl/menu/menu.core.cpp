@@ -48,7 +48,35 @@ namespace rendering {
             {
                 return { 2, 0 };
             }
-            if (category_lower.find("visual") != std::string::npos || category_lower.find("esp") != std::string::npos || category_lower.find("cham") != std::string::npos || category_lower.find("glow") != std::string::npos || category_lower.find("enemy") != std::string::npos || category_lower.find("world") != std::string::npos || category_lower.find("item") != std::string::npos || category_lower.find("projectile") != std::string::npos)
+            if (category_lower.find("enemy") != std::string::npos)
+            {
+                return { 3, 0 };
+            }
+            if (category_lower.find("team") != std::string::npos)
+            {
+                return { 3, 1 };
+            }
+            if (category_lower.find("local") != std::string::npos)
+            {
+                return { 3, 2 };
+            }
+            if (category_lower.find("item") != std::string::npos || category_lower.find("projectile") != std::string::npos || category_lower.find("bomb") != std::string::npos)
+            {
+                return { 3, 10 };
+            }
+            if (category_lower.find("skybox") != std::string::npos || category_lower.find("lighting") != std::string::npos || category_lower.find("bloom") != std::string::npos || category_lower.find("gamma") != std::string::npos || category_lower.find("dof") != std::string::npos)
+            {
+                return { 3, 11 };
+            }
+            if (category_lower.find("weather") != std::string::npos || category_lower.find("fog") != std::string::npos || category_lower.find("wetness") != std::string::npos || category_lower.find("wind") != std::string::npos)
+            {
+                return { 3, 12 };
+            }
+            if (category_lower.find("world") != std::string::npos)
+            {
+                return { 3, 11 };
+            }
+            if (category_lower.find("visual") != std::string::npos || category_lower.find("esp") != std::string::npos || category_lower.find("cham") != std::string::npos || category_lower.find("glow") != std::string::npos)
             {
                 return { 3, 0 };
             }
@@ -58,11 +86,11 @@ namespace rendering {
             }
             if (category_lower.find("config") != std::string::npos)
             {
-                return { 7, 0 };
+                return { 6, 0 };
             }
             if (category_lower.find("setting") != std::string::npos || category_lower.find("theme") != std::string::npos || category_lower.find("watermark") != std::string::npos)
             {
-                return { 6, 0 };
+                return { 5, 0 };
             }
             if (category_lower.find("widgets") != std::string::npos || category_lower.find("hud") != std::string::npos)
             {
@@ -81,7 +109,8 @@ namespace rendering {
 
         constexpr const char* k_cham_material_names[]{
             "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl",
-            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)"
+            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)",
+            "outline glow", "outline glow (iz)"
         };
         constexpr auto k_cham_material_count = static_cast<int>(settings::esp::cham_ids::count);
 
@@ -990,8 +1019,25 @@ namespace rendering {
         }
 
         const auto& chosen = this->m_search_entries[this->m_search_visible_indices[index]];
-        this->m_tab = std::clamp(chosen.tab, 0, 7);
-        this->m_subtab = std::clamp(chosen.subtab, 0, k_subtab_defs[this->m_tab].count - 1);
+        this->m_tab = std::clamp(chosen.tab, 0, 6);
+        if (this->m_tab == static_cast<int>(tab::visuals))
+        {
+            this->m_visuals_expanded = true;
+            if (chosen.subtab >= 10)
+            {
+                this->m_visuals_subtab = 1;
+                this->m_subtab = std::clamp(chosen.subtab - 10, 0, k_visuals_world_subtabs.count - 1);
+            }
+            else
+            {
+                this->m_visuals_subtab = 0;
+                this->m_subtab = std::clamp(chosen.subtab, 0, k_visuals_player_subtabs.count - 1);
+            }
+        }
+        else
+        {
+            this->m_subtab = std::clamp(chosen.subtab, 0, k_subtab_defs[this->m_tab].count - 1);
+        }
         xui::set_highlight_target(chosen.name, 1.2f);
         this->close_search();
     }
@@ -1297,18 +1343,85 @@ namespace rendering {
             const auto sb_h = wh - tokens::gap * 2.0f;
             const auto sidebar_edge = wx + sb_w + tokens::gap;
             dl.rect_filled(wx + 1.0f, wy + 1.0f, sidebar_edge - wx - 1.0f, wh - 2.0f,
-                xui::lerp(tokens::col_dark, tokens::col_card, 0.12f), xdraw::corner_radius::left(tokens::window_rounding - 1.0f));
-            dl.line(sidebar_edge, wy + 1.0f, sidebar_edge, wy + wh - 1.0f, tokens::col_border);
+                xui::lerp(tokens::col_dark, tokens::col_card, 0.12f).alpha(140), xdraw::corner_radius::left(tokens::window_rounding - 1.0f));
+            dl.line(sidebar_edge, wy + 1.0f, sidebar_edge, wy + wh - 1.0f, tokens::col_border.alpha(120));
+
+            // User popup click and modal blocking handling
+            const auto sb_full_w = menu::k_sidebar_w + tokens::gap;
+            const auto pop_footer_y = wy + wh - 64.0f;
+            const xui::rect pop_profile_rect{ wx + 8.0f, pop_footer_y + 8.0f, sb_full_w - 16.0f, 48.0f };
+            const float pop_main_w = pop_profile_rect.w;
+            const float pop_main_h = 136.0f;
+            const float pop_main_x = pop_profile_rect.x;
+            const float pop_target_main_y = pop_profile_rect.y - pop_main_h - 6.0f;
+            const xui::rect pop_main_rect{ pop_main_x, pop_target_main_y, pop_main_w, pop_main_h };
+
+            const bool pop_sub_open = (this->m_user_subtab == 1 || this->m_user_subtab == 2);
+            const float pop_sub_w = (this->m_user_subtab == 1) ? 230.0f : 240.0f;
+            const float pop_sub_h = (this->m_user_subtab == 1) ? 385.0f : 375.0f;
+            const float pop_sub_x = pop_main_x + pop_main_w + 6.0f;
+            const float pop_target_sub_y = std::clamp(pop_target_main_y + pop_main_h - pop_sub_h, wy + 10.0f, wy + wh - pop_sub_h - 10.0f);
+            const xui::rect pop_sub_rect{ pop_sub_x, pop_target_sub_y, pop_sub_w, pop_sub_h };
+
+            auto& input_ref = xui::ctx().input;
+            bool restore_popup_click = false;
+
+            if (this->m_user_popup_open)
+            {
+                xui::ctx().modal_blocking = true;
+                const bool in_prof = input_ref.in_rect(pop_profile_rect);
+                const bool in_main = input_ref.in_rect(pop_main_rect);
+                const bool in_sub = pop_sub_open && input_ref.in_rect(pop_sub_rect);
+
+                if (input_ref.mouse_clicked)
+                {
+                    if (in_prof)
+                    {
+                        this->m_user_popup_open = false;
+                        this->m_user_subtab = 0;
+                        this->m_binding_menu_key = false;
+                        input_ref.mouse_clicked = false;
+                        input_ref.mouse_down = false;
+                        xui::ctx().modal_blocking = false;
+                    }
+                    else if (!in_main && !in_sub)
+                    {
+                        // Clicked outside popup - dismiss it and consume click from background
+                        this->m_user_popup_open = false;
+                        this->m_user_subtab = 0;
+                        this->m_binding_menu_key = false;
+                        input_ref.mouse_clicked = false;
+                        input_ref.mouse_down = false;
+                        xui::ctx().modal_blocking = false;
+                    }
+                    else
+                    {
+                        // Click is inside popup - hide from background widgets, restore for draw_user_popup
+                        input_ref.mouse_clicked = false;
+                        restore_popup_click = true;
+                    }
+                }
+            }
+
             this->draw_side_bar(wh);
             const auto accent_x = wx + tokens::window_rounding + 1.0f;
             const auto accent_w = std::max(0.0f, ww - (tokens::window_rounding + 1.0f) * 2.0f);
             const auto half_w = accent_w * 0.5f;
             const auto edge = tokens::col_accent.alpha(0);
             const auto center = tokens::col_accent.alpha(static_cast<std::uint8_t>(150.0f * menu_reveal));
-            dl.rect_filled_gradient(accent_x, wy + 2.0f, half_w, 2.0f,
+            dl.rect_filled_gradient(accent_x, wy, half_w, 2.0f,
                 edge, center, center, edge);
-            dl.rect_filled_gradient(accent_x + half_w, wy + 2.0f, half_w, 2.0f,
+            dl.rect_filled_gradient(accent_x + half_w, wy, half_w, 2.0f,
                 center, edge, edge, center);
+
+            // Liquid glass top highlight and glass perimeter rim
+            dl.rect_filled_gradient(wx + 1.0f, wy + 1.0f, ww - 2.0f, 32.0f,
+                xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(20.0f * menu_reveal) },
+                xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(20.0f * menu_reveal) },
+                xdraw::color{ 255, 255, 255, 0 },
+                xdraw::color{ 255, 255, 255, 0 },
+                xdraw::corner_radius::top(tokens::window_rounding - 1.0f));
+            dl.rect(wx, wy, ww, wh, xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(32.0f * menu_reveal) }, xdraw::corner_radius{ tokens::window_rounding }, 1.0f);
 
             const auto content_x = sb_x + sb_w + tokens::gap;
             const auto content_y = sb_y;
@@ -1336,6 +1449,10 @@ namespace rendering {
                 this->draw_search_results(content_x, body_y, content_w, body_h);
                 xui::ctx().inside_overlay = xui::null_id;
                 xui::end_window();
+                if (restore_popup_click) input_ref.mouse_clicked = true;
+                this->draw_user_popup();
+                xui::ctx().modal_blocking = false;
+                xui::ctx().inside_overlay = xui::null_id;
                 xui::end();
                 xdraw::pop_font();
                 return;
@@ -1349,11 +1466,20 @@ namespace rendering {
             case 3: this->draw_visuals(col_w); break;
             case 4: this->draw_skins(col_w); break;
             case 5: this->draw_misc(col_w); break;
-            case 6: this->draw_settings(col_w); break;
-            case 7: this->draw_config(col_w); break;
+            case 6: this->draw_config(col_w); break;
             }
 
             xui::end_window();
+
+            if (restore_popup_click)
+            {
+                xui::ctx().input.mouse_clicked = true;
+            }
+
+            this->draw_user_popup();
+            xui::ctx().modal_blocking = false;
+            xui::ctx().inside_overlay = xui::null_id;
+
             xui::end();
             xdraw::pop_font();
         }
@@ -1411,16 +1537,35 @@ namespace rendering {
         xdraw::pop_font();
         dl.line(sb_x + 1.0f, sb_y + 82.0f, sb_x + sb_w, sb_y + 82.0f, tokens::col_border);
 
-        constexpr std::array<const char*, 8> names{ {"Ragebot", "Legitbot", "Movement", "Visuals", "Skins", "Misc", "Settings", "Configs"} };
+        constexpr std::array<const char*, 7> names{ {"Ragebot", "Legitbot", "Movement", "Visuals", "Skins", "Misc", "Configs"} };
+        float curr_y = sb_y + 98.0f;
         for (int i = 0; i < static_cast<int>(names.size()); ++i)
         {
-            const xui::rect button{ sb_x + 10.0f, sb_y + 98.0f + i * 42.0f, sb_w - 20.0f, 37.0f };
+            const xui::rect button{ sb_x + 10.0f, curr_y, sb_w - 20.0f, 37.0f };
             const bool hovered = input.in_rect(button) && !ctx.overlay_blocking();
             const bool active = this->m_tab == i;
             if (!this->m_search_open && hovered && input.mouse_clicked)
             {
-                this->m_tab = i;
-                this->m_subtab = 0;
+                if (i == 3) // Visuals
+                {
+                    if (this->m_tab != 3)
+                    {
+                        this->m_tab = 3;
+                        this->m_visuals_expanded = true;
+                        this->m_visuals_subtab = 0;
+                        this->m_subtab = 0;
+                    }
+                    else
+                    {
+                        this->m_visuals_expanded = !this->m_visuals_expanded;
+                    }
+                }
+                else
+                {
+                    this->m_tab = i;
+                    this->m_subtab = 0;
+                    this->m_visuals_expanded = false;
+                }
                 ctx.active_window = xui::null_id;
             }
             const auto amount = xui::anim::lerp(xui::fnv1a("mintaly_sidebar") + i,
@@ -1475,16 +1620,7 @@ namespace rendering {
                 dl.line(cx - 6, cy - 2, cx + 6, cy - 2, icon_color);
                 dl.line(cx - 2, cy - 2, cx - 2, cy + 6, icon_color);
                 break;
-            case 6: // Settings
-                dl.circle(cx, cy, 5.0f, icon_color, 1.2f);
-                dl.circle(cx, cy, 2.0f, icon_color, 1.2f);
-                for (int tooth = 0; tooth < 8; ++tooth) {
-                    const auto angle = static_cast<float>(tooth) * 0.785398163f;
-                    dl.line(cx + std::cos(angle) * 5.0f, cy + std::sin(angle) * 5.0f,
-                        cx + std::cos(angle) * 8.0f, cy + std::sin(angle) * 8.0f, icon_color, 1.2f);
-                }
-                break;
-            case 7: // Configs
+            case 6: // Configs
                 dl.line(cx, cy - 7, cx, cy + 2, icon_color, 1.2f);
                 dl.line(cx - 3, cy - 1, cx, cy + 2, icon_color, 1.2f);
                 dl.line(cx + 3, cy - 1, cx, cy + 2, icon_color, 1.2f);
@@ -1497,14 +1633,141 @@ namespace rendering {
             const auto text_h = xdraw::measure_text(names[i]).second;
             dl.text(button.x + 43.0f, button.y + (button.h - text_h) * 0.5f,
                 names[i], active ? tokens::col_text : icon_color);
+
+            const auto raw_expand = xui::anim::lerp(xui::fnv1a("visuals_sidebar_expand"), this->m_visuals_expanded ? 1.0f : 0.0f, 13.0f);
+            const auto expand_anim = xui::ease::smoothstep(raw_expand);
+
+            if (i == 3)
+            {
+                const auto ch_x = button.x + button.w - 14.0f;
+                const auto ch_y = button.y + button.h * 0.5f;
+                const auto ch_color = (expand_anim > 0.5f || active) ? tokens::col_accent : tokens::col_text_dim;
+
+                const float p1_x = std::lerp(ch_x - 2.0f, ch_x - 3.5f, expand_anim);
+                const float p1_y = std::lerp(ch_y - 3.5f, ch_y - 1.5f, expand_anim);
+                const float p2_x = std::lerp(ch_x + 1.5f, ch_x, expand_anim);
+                const float p2_y = std::lerp(ch_y, ch_y + 2.0f, expand_anim);
+                const float p3_x = std::lerp(ch_x - 2.0f, ch_x + 3.5f, expand_anim);
+                const float p3_y = std::lerp(ch_y + 3.5f, ch_y - 1.5f, expand_anim);
+
+                dl.line(p1_x, p1_y, p2_x, p2_y, ch_color, 1.2f);
+                dl.line(p2_x, p2_y, p3_x, p3_y, ch_color, 1.2f);
+            }
             xdraw::pop_font();
+
+            const float sub_area_y = curr_y + 42.0f;
+            const float total_sub_h = 64.0f;
+            const float current_sub_h = total_sub_h * expand_anim;
+
+            curr_y += 42.0f;
+
+            if (i == 3)
+            {
+                if (expand_anim > 0.001f)
+                {
+                    dl.push_clip(sb_x, sub_area_y, sb_w, current_sub_h);
+
+                    constexpr const char* vsub_names[2] = { "Player", "World" };
+                    const float tree_x = sb_x + 22.0f;
+                    const float branch_start_y = button.y + button.h - 2.0f;
+                    const float branch_end_y = sub_area_y + 28.0f * 2.0f - 14.0f;
+                    const auto line_col = tokens::col_border.alpha(static_cast<std::uint8_t>(130.0f * expand_anim));
+                    dl.line(tree_x, branch_start_y, tree_x, branch_end_y, line_col, 1.0f);
+
+                    for (int v = 0; v < 2; ++v)
+                    {
+                        const float item_y = sub_area_y + v * 30.0f;
+                        const xui::rect sub_btn{ sb_x + 28.0f, item_y, sb_w - 38.0f, 28.0f };
+                        const bool sub_active = (this->m_tab == 3 && this->m_visuals_subtab == v);
+                        const bool sub_hovered = (expand_anim > 0.6f) && input.in_rect(sub_btn) && !ctx.overlay_blocking();
+
+                        const float conn_y = sub_btn.y + sub_btn.h * 0.5f;
+                        dl.line(tree_x, conn_y, sub_btn.x - 3.0f, conn_y, line_col, 1.0f);
+
+                        if (!this->m_search_open && sub_hovered && input.mouse_clicked)
+                        {
+                            this->m_tab = 3;
+                            this->m_visuals_subtab = v;
+                            this->m_subtab = 0;
+                            ctx.active_window = xui::null_id;
+                        }
+
+                        const auto sub_anim = xui::anim::lerp(xui::fnv1a("vsub_item") + v,
+                            sub_active ? 1.0f : sub_hovered ? 0.4f : 0.0f, 14.0f);
+
+                        if (sub_anim > 0.01f)
+                        {
+                            const auto sub_bg = tokens::col_accent.alpha(static_cast<std::uint8_t>(22.0f * sub_anim * expand_anim));
+                            dl.rect_filled(sub_btn.x, sub_btn.y, sub_btn.w, sub_btn.h, sub_bg, xdraw::corner_radius{ 4.0f });
+                        }
+                        if (sub_active)
+                        {
+                            const auto strip_col = tokens::col_accent.alpha(static_cast<std::uint8_t>(255.0f * expand_anim));
+                            dl.rect_filled(sub_btn.x, sub_btn.y + 5.0f, 2.0f, sub_btn.h - 10.0f, strip_col, xdraw::corner_radius{ 1.0f });
+                        }
+
+                        const auto sub_base_col = sub_active ? tokens::col_accent : xui::lerp(tokens::col_text_dim, tokens::col_text, sub_anim);
+                        const auto sub_col = sub_base_col.alpha(static_cast<std::uint8_t>(sub_base_col.a * expand_anim));
+                        const auto sub_cx = sub_btn.x + 13.0f;
+                        const auto sub_cy = sub_btn.y + sub_btn.h * 0.5f;
+
+                        if (v == 0) // Player mini icon
+                        {
+                            dl.circle(sub_cx, sub_cy - 4.0f, 2.8f, sub_col, 1.1f);
+                            dl.rect(sub_cx - 4.5f, sub_cy + 1.0f, 9.0f, 5.0f, sub_col, xdraw::corner_radius::top(2.5f), 1.1f);
+                        }
+                        else // World mini icon
+                        {
+                            dl.circle(sub_cx, sub_cy, 4.5f, sub_col, 1.1f);
+                            dl.line(sub_cx - 4.5f, sub_cy, sub_cx + 4.5f, sub_cy, sub_col, 1.0f);
+                            dl.line(sub_cx, sub_cy - 4.5f, sub_cx, sub_cy + 4.5f, sub_col, 1.0f);
+                        }
+
+                        xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+                        const auto sub_th = xdraw::measure_text(vsub_names[v]).second;
+                        const auto text_base_col = sub_active ? tokens::col_text : sub_base_col;
+                        const auto text_col = text_base_col.alpha(static_cast<std::uint8_t>(text_base_col.a * expand_anim));
+                        dl.text(sub_btn.x + 25.0f, sub_btn.y + (sub_btn.h - sub_th) * 0.5f,
+                            vsub_names[v], text_col);
+                        xdraw::pop_font();
+                    }
+
+                    dl.pop_clip();
+                }
+
+                curr_y += current_sub_h;
+            }
         }
 
         const auto footer_y = sb_y + h - 64.0f;
-        dl.line(sb_x + 1.0f, footer_y, sb_x + sb_w, footer_y, tokens::col_border);
-        constexpr float avatar_size = 36.0f;
-        const auto avatar_x = sb_x + 18.0f;
-        const auto avatar_y = footer_y + 14.0f;
+        dl.line(sb_x + 1.0f, footer_y, sb_x + sb_w, footer_y, tokens::col_border.alpha(120));
+
+        const xui::rect profile_rect{ sb_x + 8.0f, footer_y + 8.0f, sb_w - 16.0f, 48.0f };
+        const bool profile_hovered = input.in_rect(profile_rect) && !ctx.overlay_blocking();
+        const auto profile_hover_anim = xui::anim::lerp(xui::fnv1a("menu_profile_hover"),
+            (profile_hovered || this->m_user_popup_open) ? 1.0f : 0.0f, 14.0f);
+
+        if (profile_hovered && input.mouse_clicked && !this->m_search_open)
+        {
+            this->m_user_popup_open = !this->m_user_popup_open;
+            if (!this->m_user_popup_open)
+            {
+                this->m_user_subtab = 0;
+                this->m_binding_menu_key = false;
+            }
+        }
+
+        if (profile_hover_anim > 0.01f)
+        {
+            const auto bg_col = tokens::col_accent.alpha(static_cast<std::uint8_t>(22.0f * profile_hover_anim));
+            const auto border_col = tokens::col_accent.alpha(static_cast<std::uint8_t>(75.0f * profile_hover_anim));
+            dl.rect_filled(profile_rect.x, profile_rect.y, profile_rect.w, profile_rect.h, bg_col, xdraw::corner_radius{ 8.0f });
+            dl.rect(profile_rect.x, profile_rect.y, profile_rect.w, profile_rect.h, border_col, xdraw::corner_radius{ 8.0f }, 1.0f);
+        }
+
+        constexpr float avatar_size = 34.0f;
+        const auto avatar_x = profile_rect.x + 7.0f;
+        const auto avatar_y = profile_rect.y + (profile_rect.h - avatar_size) * 0.5f;
         if (this->m_textures.user.resource)
         {
             dl.image(avatar_x, avatar_y, avatar_size, avatar_size,
@@ -1512,17 +1775,26 @@ namespace rendering {
         }
         else
         {
-            dl.circle_filled(avatar_x + 18, avatar_y + 18, 18, tokens::col_elevated);
-            dl.circle(avatar_x + 18, avatar_y + 13, 5, tokens::col_text_dim, 1.2f);
-            dl.rect(avatar_x + 9, avatar_y + 21, 18, 9, tokens::col_text_dim, xdraw::corner_radius{ 4.5f });
+            dl.circle_filled(avatar_x + avatar_size * 0.5f, avatar_y + avatar_size * 0.5f, avatar_size * 0.5f, tokens::col_elevated);
+            dl.circle(avatar_x + avatar_size * 0.5f, avatar_y + avatar_size * 0.5f - 4.0f, 4.5f, tokens::col_text_dim, 1.2f);
+            dl.rect(avatar_x + avatar_size * 0.5f - 7.5f, avatar_y + avatar_size * 0.5f + 3.0f, 15.0f, 8.0f, tokens::col_text_dim, xdraw::corner_radius{ 4.0f });
         }
-        dl.circle(avatar_x + 18, avatar_y + 18, 18, tokens::col_border);
-        const auto text_x = avatar_x + avatar_size + 12.0f;
-        const auto text_w = sb_x + sb_w - text_x - 16.0f;
+        dl.circle(avatar_x + avatar_size * 0.5f, avatar_y + avatar_size * 0.5f, avatar_size * 0.5f, tokens::col_border);
+        const auto text_x = avatar_x + avatar_size + 10.0f;
+        const auto text_w = profile_rect.x + profile_rect.w - text_x - 20.0f;
         xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
-        dl.text(text_x, footer_y + 17.0f, theme::fit_text(this->m_user_name, text_w), tokens::col_text);
+        dl.text(text_x, profile_rect.y + 8.0f, theme::fit_text(this->m_user_name, text_w),
+            (profile_hovered || this->m_user_popup_open) ? tokens::col_accent : tokens::col_text);
         xdraw::pop_font();
-        dl.text(text_x, footer_y + 34.0f, "Steam", tokens::col_text_dim);
+        dl.text(text_x, profile_rect.y + 25.0f, "Steam", tokens::col_text_dim);
+
+        // Options indicator icon (three dots)
+        const auto opt_cx = profile_rect.x + profile_rect.w - 12.0f;
+        const auto opt_cy = profile_rect.y + profile_rect.h * 0.5f;
+        const auto opt_col = (this->m_user_popup_open || profile_hovered) ? tokens::col_accent : tokens::col_text_dim;
+        dl.circle_filled(opt_cx, opt_cy - 4.0f, 1.5f, opt_col);
+        dl.circle_filled(opt_cx, opt_cy, 1.5f, opt_col);
+        dl.circle_filled(opt_cx, opt_cy + 4.0f, 1.5f, opt_col);
     }
 
     void menu::try_load_user_avatar()
@@ -1599,40 +1871,40 @@ namespace rendering {
         style.combo_h = 30.0f;
         style.combo_item_h = 28.0f;
         style.button_rounding = 5.0f;
-        style.window_bg = tokens::col_dark;
-        style.window_border = tokens::col_border;
-        style.child_bg = tokens::col_card;
-        style.child_border = tokens::col_border;
-        style.checkbox_bg = tokens::col_elevated;
-        style.checkbox_border = tokens::col_border;
+        style.window_bg = tokens::col_dark.alpha( 225 );
+        style.window_border = tokens::col_border.alpha( 190 );
+        style.child_bg = tokens::col_card.alpha( 205 );
+        style.child_border = tokens::col_border.alpha( 170 );
+        style.checkbox_bg = tokens::col_elevated.alpha( 210 );
+        style.checkbox_border = tokens::col_border.alpha( 180 );
         style.checkbox_mark = tokens::col_accent;
         style.checkbox_mark_icon = tokens::col_dark;
-        style.slider_track = tokens::col_border;
+        style.slider_track = tokens::col_border.alpha( 180 );
         style.slider_fill = tokens::col_accent;
-        style.button_bg = tokens::col_elevated;
-        style.button_border = tokens::col_border;
-        style.button_hovered = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.12f);
-        style.button_active = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.24f);
-        style.keybind_bg = tokens::col_elevated;
-        style.keybind_border = tokens::col_border;
+        style.button_bg = tokens::col_elevated.alpha( 210 );
+        style.button_border = tokens::col_border.alpha( 180 );
+        style.button_hovered = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.12f).alpha( 230 );
+        style.button_active = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.24f).alpha( 240 );
+        style.keybind_bg = tokens::col_elevated.alpha( 210 );
+        style.keybind_border = tokens::col_border.alpha( 180 );
         style.keybind_waiting = tokens::col_accent;
-        style.combo_bg = tokens::col_elevated;
-        style.combo_border = tokens::col_border;
+        style.combo_bg = tokens::col_elevated.alpha( 210 );
+        style.combo_border = tokens::col_border.alpha( 180 );
         style.combo_arrow = tokens::col_text_dim;
         style.combo_hovered = style.button_hovered;
-        style.combo_popup_bg = tokens::col_card;
-        style.combo_popup_border = tokens::col_border;
-        style.combo_popup_item_hovered = tokens::col_elevated;
-        style.combo_popup_item_selected = tokens::col_accent.alpha(30);
-        style.popup_bg = tokens::col_card;
-        style.popup_border = tokens::col_border;
-        style.picker_bg = tokens::col_elevated;
-        style.picker_border = tokens::col_border;
-        style.picker_popup_bg = tokens::col_card;
-        style.picker_popup_border = tokens::col_border;
-        style.text_input_bg = tokens::col_elevated;
-        style.text_input_border = tokens::col_border;
-        style.separator = tokens::col_border;
+        style.combo_popup_bg = tokens::col_card.alpha( 230 );
+        style.combo_popup_border = tokens::col_border.alpha( 200 );
+        style.combo_popup_item_hovered = tokens::col_elevated.alpha( 225 );
+        style.combo_popup_item_selected = tokens::col_accent.alpha(35);
+        style.popup_bg = tokens::col_card.alpha( 230 );
+        style.popup_border = tokens::col_border.alpha( 200 );
+        style.picker_bg = tokens::col_elevated.alpha( 210 );
+        style.picker_border = tokens::col_border.alpha( 180 );
+        style.picker_popup_bg = tokens::col_card.alpha( 230 );
+        style.picker_popup_border = tokens::col_border.alpha( 200 );
+        style.text_input_bg = tokens::col_elevated.alpha( 210 );
+        style.text_input_border = tokens::col_border.alpha( 180 );
+        style.separator = tokens::col_border.alpha( 150 );
         style.text = tokens::col_text;
         style.text_dim = tokens::col_text_dim;
         style.accent = tokens::col_accent;
@@ -1647,12 +1919,16 @@ namespace rendering {
         const auto bar_y = this->m_y + tokens::gap;
 
         // Page title ("Ragebot", etc.)
-        constexpr const char* page_titles[8] = {
-            "RAGEBOT", "LEGITBOT", "MOVEMENT", "VISUALS", "SKINS", "MISC", "SETTINGS", "CONFIGS"
+        constexpr const char* page_titles[7] = {
+            "RAGEBOT", "LEGITBOT", "MOVEMENT", "VISUALS", "SKINS", "MISC", "CONFIGS"
         };
 
-        const auto tab_idx = std::clamp(this->m_tab, 0, 7);
-        const auto page_title = page_titles[tab_idx];
+        const auto tab_idx = std::clamp(this->m_tab, 0, 6);
+        const char* page_title = page_titles[tab_idx];
+        if (tab_idx == static_cast<int>(tab::visuals))
+        {
+            page_title = (this->m_visuals_subtab == 0) ? "PLAYER" : "WORLD";
+        }
 
         xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::big]);
         const auto [title_w, title_h] = xdraw::measure_text(page_title);
@@ -1660,9 +1936,12 @@ namespace rendering {
         dl.text(content_x, title_y, page_title, tokens::col_text);
         xdraw::pop_font();
 
-        if (k_subtab_defs[tab_idx].count > 1)
+        const subtab_info& subtabs = (tab_idx == static_cast<int>(tab::visuals))
+            ? (this->m_visuals_subtab == 0 ? k_visuals_player_subtabs : k_visuals_world_subtabs)
+            : k_subtab_defs[tab_idx];
+
+        if (subtabs.count > 1)
         {
-            const auto& subtabs = k_subtab_defs[tab_idx];
             float curr_x = content_x + title_w + 24.0f;
             const auto pill_y = bar_y + (tokens::subtab_bar_h - 26.0f) * 0.5f;
             xdraw::push_font(rendering::g_fonts.inter_medium[rendering::fonts::size::petite]);
@@ -1844,12 +2123,19 @@ namespace rendering {
         const auto body_h = this->m_body_h;
         const auto right_x = content_x + col_w + tokens::gap;
 
-        // LEFT COLUMN: MOVEMENT MAIN
-        xui::layout::set_cursor(content_x - wx, body_y - wy);
-        if (xui::begin_child("##movement_main", col_w, body_h, true))
-        {
-            xui::section_header("MOVEMENT MAIN");
+        constexpr float k_header_h = 22.0f;
+        auto draw_col_title = [&]( float x, const char* title ) {
+            auto& dl = xui::draw::current( );
+            xdraw::push_font( rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ] );
+            dl.text( x + 2.0f, body_y + 2.0f, title, tokens::col_text );
+            xdraw::pop_font( );
+        };
 
+        // LEFT COLUMN: MOVEMENT MAIN
+        draw_col_title( content_x, "MOVEMENT MAIN" );
+        xui::layout::set_cursor(content_x - wx, body_y + k_header_h - wy);
+        if (xui::begin_child("##movement_main", col_w, body_h - k_header_h, true))
+        {
             xui::toggle("Bunny Hop", mov.bhop);
             xui::layout::spacing(3.0f);
             xui::toggle("Air Strafe", mov.m_test_strafer.enabled);
@@ -1864,10 +2150,10 @@ namespace rendering {
         }
 
         // RIGHT COLUMN: MOVEMENT ASSIST
-        xui::layout::set_cursor(right_x - wx, body_y - wy);
-        if (xui::begin_child("##movement_assist", col_w, body_h, true))
+        draw_col_title( right_x, "MOVEMENT ASSIST" );
+        xui::layout::set_cursor(right_x - wx, body_y + k_header_h - wy);
+        if (xui::begin_child("##movement_assist", col_w, body_h - k_header_h, true))
         {
-            xui::section_header("MOVEMENT ASSIST");
 
             xui::toggle("Jump Bug", mov.jumpbug);
             xui::layout::spacing(3.0f);
@@ -1891,334 +2177,501 @@ namespace rendering {
 
     void menu::draw_visuals(float col_w) const
     {
-        if (this->m_subtab >= 1 && this->m_subtab <= 3)
+        if (this->m_visuals_subtab == 0)
         {
-            this->draw_player(col_w, this->m_subtab - 1);
+            this->draw_player(col_w, std::clamp(this->m_subtab, 0, 2));
             return;
         }
-        if (this->m_subtab >= 4 && this->m_subtab <= 6)
+        if (this->m_visuals_subtab == 1)
         {
-            this->draw_world(col_w, this->m_subtab - 4);
+            this->draw_world(col_w, std::clamp(this->m_subtab, 0, 2));
             return;
-        }
-        auto& esp = settings::g_esp;
-        auto& p = esp.m_player;
-
-        // Определяем текущие настройки на основе subtab (Enemy/Team)
-        // В draw_visuals обычно отображается Enemy (subtab 0), если не указано иное.
-        // Для простоты берем enemy, так как в оригинальном коде visuals часто показывает общие или enemy настройки.
-        // Если нужно переключение Enemy/Team, это делается через m_subtab, но здесь оставим как в примере player.cpp для subtab 0 (Enemy)
-        auto& ov = p.m_overlay[0];
-        auto& chams = p.m_chams.enemy;
-        auto& glow = p.m_glow.enemy;
-        auto& item = esp.m_item;
-        auto& proj = esp.m_projectile;
-        auto& scene = settings::g_world.m_scene;
-
-        const auto wx = this->m_x;
-        const auto wy = this->m_y;
-        const auto content_x = wx + tokens::gap + menu::k_sidebar_w + tokens::gap;
-        const auto body_y = wy + tokens::gap + tokens::subtab_bar_h + tokens::gap;
-        const auto body_h = this->m_body_h;
-        const auto right_x = content_x + col_w + tokens::gap;
-
-        // LEFT COLUMN: PLAYER ESP
-        xui::layout::set_cursor(content_x - wx, body_y - wy);
-        if (xui::begin_child("##visuals_player_esp", col_w, body_h, true))
-        {
-            xui::section_header("PLAYER ESP");
-
-            xui::toggle("Enable ESP", ov.enabled);
-            xui::layout::spacing(3.0f);
-
-            // Box ESP
-            xui::toggle("Box ESP", ov.m_box.enabled);
-            if (xui::begin_popup("##box_popup", 220.0f))
-            {
-                constexpr const char* box_styles[]{ "full", "cornered" };
-                xui::combo("style##box", ov.m_box.style.value, box_styles, 2);
-                xui::checkbox("fill", ov.m_box.fill);
-                xui::checkbox("outline", ov.m_box.outline);
-                xui::slider_float("corner length", ov.m_box.corner_length, 2.0f, 20.0f, "%.0f");
-                xui::color_picker("visible color##box", ov.m_box.visible_color);
-                xui::color_picker("occluded color##box", ov.m_box.occluded_color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // Name ESP
-            xui::toggle("Name ESP", ov.m_name.enabled);
-            if (xui::begin_popup("##name_popup", 220.0f))
-            {
-                xui::color_picker("color##name", ov.m_name.color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // Health Bar
-            xui::toggle("Health Bar", ov.m_health_bar.enabled);
-            if (xui::begin_popup("##health_popup", 220.0f))
-            {
-                constexpr const char* bar_positions[]{ "left", "top", "bottom" };
-                xui::combo("position##hp", ov.m_health_bar.position.value, bar_positions, 3);
-                xui::checkbox("outline##hp", ov.m_health_bar.outline_setting);
-                xui::checkbox("gradient##hp", ov.m_health_bar.gradient);
-                xui::checkbox("show value##hp", ov.m_health_bar.show_value);
-                xui::checkbox("glow##hp", ov.m_health_bar.glow);
-                xui::color_picker("full color##hp", ov.m_health_bar.full_color);
-                xui::color_picker("low color##hp", ov.m_health_bar.low_color);
-                xui::color_picker("background##hp", ov.m_health_bar.background_color);
-                xui::color_picker("outline color##hp", ov.m_health_bar.outline_color);
-                xui::color_picker("text color##hp", ov.m_health_bar.text_color);
-                xui::color_picker("glow color##hp", ov.m_health_bar.glow_color);
-                xui::slider_float("glow strength##hp", ov.m_health_bar.glow_strength, 0.1f, 1.0f, "%.2f");
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // Weapon Text
-            xui::toggle("Weapon Text", ov.m_weapon.enabled);
-            if (xui::begin_popup("##weapon_popup", 220.0f))
-            {
-                constexpr const char* display_types[]{ "text", "icon", "text + icon" };
-                xui::combo("display##wep", ov.m_weapon.display.value, display_types, 3);
-                xui::color_picker("text color##wep", ov.m_weapon.text_color);
-                xui::color_picker("icon color##wep", ov.m_weapon.icon_color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // Skeleton
-            xui::toggle("Skeleton", ov.m_skeleton.enabled);
-            if (xui::begin_popup("##skeleton_popup", 220.0f))
-            {
-                constexpr const char* skel_modes[]{ "normal", "backtrack" };
-                xui::combo("mode##skel", ov.m_skeleton.type.value, skel_modes, 2);
-                xui::slider_float("thickness##skel", ov.m_skeleton.thickness, 0.5f, 4.0f, "%.1f");
-                xui::color_picker("visible color##skel", ov.m_skeleton.visible_color);
-                xui::color_picker("occluded color##skel", ov.m_skeleton.occluded_color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // Ammo Bar
-            xui::toggle("Ammo Bar", ov.m_ammo_bar.enabled);
-            if (xui::begin_popup("##ammo_popup", 220.0f))
-            {
-                constexpr const char* bar_positions[]{ "left", "top", "bottom" };
-                xui::combo("position##ammo", ov.m_ammo_bar.position.value, bar_positions, 3);
-                xui::checkbox("outline##ammo", ov.m_ammo_bar.outline_setting);
-                xui::checkbox("gradient##ammo", ov.m_ammo_bar.gradient);
-                xui::checkbox("show value##ammo", ov.m_ammo_bar.show_value);
-                xui::checkbox("glow##ammo", ov.m_ammo_bar.glow);
-                xui::color_picker("full color##ammo", ov.m_ammo_bar.full_color);
-                xui::color_picker("low color##ammo", ov.m_ammo_bar.low_color);
-                xui::color_picker("background##ammo", ov.m_ammo_bar.background_color);
-                xui::color_picker("outline color##ammo", ov.m_ammo_bar.outline_color);
-                xui::color_picker("text color##ammo", ov.m_ammo_bar.text_color);
-                xui::color_picker("glow color##ammo", ov.m_ammo_bar.glow_color);
-                xui::slider_float("glow strength##ammo", ov.m_ammo_bar.glow_strength, 0.1f, 1.0f, "%.2f");
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // Info Flags
-            xui::toggle("Info Flags", ov.m_info_flags.enabled);
-            if (xui::begin_popup("##flags_popup", 220.0f))
-            {
-                constexpr const char* flag_names[]{ "money", "armor", "kit", "scoped", "defusing", "flashed", "ping", "distance" };
-                xui::multicombo("flags##mc", ov.m_info_flags.flags, flag_names, settings::esp::player::overlay::info_flags::count);
-                xui::color_picker("money##flags", ov.m_info_flags.money_color);
-                xui::color_picker("armor##flags", ov.m_info_flags.armor_color);
-                xui::color_picker("kit##flags", ov.m_info_flags.kit_color);
-                xui::color_picker("scoped##flags", ov.m_info_flags.scoped_color);
-                xui::color_picker("defusing##flags", ov.m_info_flags.defusing_color);
-                xui::color_picker("flashed##flags", ov.m_info_flags.flashed_color);
-                xui::color_picker("distance##flags", ov.m_info_flags.distance_color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            // OOF Arrows
-            xui::toggle("OOF Arrows", ov.m_oof_arrow.enabled);
-            if (xui::begin_popup("##oof_popup", 220.0f))
-            {
-                xui::checkbox("glow##oof", ov.m_oof_arrow.glow);
-                xui::slider_float("width##oof", ov.m_oof_arrow.width, 4.0f, 40.0f, "%.0f");
-                xui::slider_float("height##oof", ov.m_oof_arrow.height, 4.0f, 40.0f, "%.0f");
-                xui::slider_float("radius x##oof", ov.m_oof_arrow.radius_x, 50.0f, 600.0f, "%.0f");
-                xui::slider_float("radius y##oof", ov.m_oof_arrow.radius_y, 50.0f, 600.0f, "%.0f");
-                xui::slider_float("glow strength##oof", ov.m_oof_arrow.glow_strength, 0.1f, 1.0f, "%.2f");
-                xui::color_picker("visible color##oof", ov.m_oof_arrow.visible_color);
-                xui::color_picker("occluded color##oof", ov.m_oof_arrow.occluded_color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            xui::toggle("Player Chams", chams.enabled);
-            if (chams.enabled && !chams.primary.enabled && !chams.secondary.enabled && !chams.overlay.enabled)
-            {
-                chams.primary.enabled.value = true;
-            }
-            if (xui::begin_popup("##player_chams_popup", 220.0f))
-            {
-                xui::checkbox("visible chams", chams.primary.enabled);
-                xui::color_picker("visible color", chams.primary.color);
-                xui::combo("visible material", chams.primary.material.value, detail::k_cham_visible_material_names, detail::k_cham_visible_material_count);
-
-                xui::layout::spacing(5.0f);
-
-                xui::checkbox("through wall", chams.secondary.enabled);
-                if (chams.secondary.enabled)
-                {
-                    xui::color_picker("wall color", chams.secondary.color);
-                    int wall_mat_idx = static_cast<int>(chams.secondary.material.value) - 11;
-                    if (wall_mat_idx < 0 || wall_mat_idx >= detail::k_cham_wall_material_count) wall_mat_idx = 2; // flat (iz)
-                    if (xui::combo("wall material", wall_mat_idx, detail::k_cham_wall_material_names, detail::k_cham_wall_material_count))
-                    {
-                        chams.secondary.material.value = static_cast<settings::esp::cham_ids>(wall_mat_idx + 11);
-                    }
-                }
-
-                xui::layout::spacing(5.0f);
-
-                xui::checkbox("overlay", chams.overlay.enabled);
-                if (chams.overlay.enabled)
-                {
-                    xui::color_picker("overlay color", chams.overlay.color);
-                    xui::combo("overlay material", chams.overlay.material.value, detail::k_cham_material_names, detail::k_cham_material_count);
-                }
-
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            xui::toggle("Visible Chams", chams.primary.enabled);
-            if (chams.primary.enabled)
-            {
-                chams.enabled.value = true;
-            }
-            if (xui::begin_popup("##visible_chams_popup", 220.0f))
-            {
-                xui::color_picker("visible color", chams.primary.color);
-                xui::combo("visible material", chams.primary.material.value, detail::k_cham_visible_material_names, detail::k_cham_visible_material_count);
-
-                xui::layout::spacing(5.0f);
-
-                xui::checkbox("through wall", chams.secondary.enabled);
-                if (chams.secondary.enabled)
-                {
-                    xui::color_picker("wall color", chams.secondary.color);
-                    int wall_mat_idx = static_cast<int>(chams.secondary.material.value) - 11;
-                    if (wall_mat_idx < 0 || wall_mat_idx >= detail::k_cham_wall_material_count) wall_mat_idx = 2; // flat (iz)
-                    if (xui::combo("wall material", wall_mat_idx, detail::k_cham_wall_material_names, detail::k_cham_wall_material_count))
-                    {
-                        chams.secondary.material.value = static_cast<settings::esp::cham_ids>(wall_mat_idx + 11);
-                    }
-                }
-
-                xui::layout::spacing(5.0f);
-
-                xui::checkbox("overlay", chams.overlay.enabled);
-                if (chams.overlay.enabled)
-                {
-                    xui::color_picker("overlay color", chams.overlay.color);
-                    xui::combo("overlay material", chams.overlay.material.value, detail::k_cham_material_names, detail::k_cham_material_count);
-                }
-
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-
-            xui::toggle("Player Glow", glow.enabled);
-            if (xui::begin_popup("##glow_popup", 220.0f))
-            {
-                xui::color_picker("color##glow", glow.color);
-                xui::end_popup();
-            }
-
-            xui::end_child();
-        }
-
-        // RIGHT COLUMN: CHAMS & WORLD
-        xui::layout::set_cursor(right_x - wx, body_y - wy);
-        if (xui::begin_child("##visuals_chams_world", col_w, body_h, true))
-        {
-            xui::section_header("WORLD");
-            xui::toggle("Dropped Items ESP", item.m_overlay.enabled);
-            xui::layout::spacing(3.0f);
-            xui::toggle("Projectile ESP", proj.m_overlay.enabled);
-            xui::layout::spacing(8.0f);
-            xui::toggle("Custom Skybox", scene.skybox.custom_skybox);
-            xui::layout::spacing(3.0f);
-            xui::toggle("World Lighting", scene.lighting);
-            xui::layout::spacing(3.0f);
-            xui::toggle("World Color", scene.world_setting);
-            if (xui::begin_popup("##world_color_popup", 220.0f))
-            {
-                xui::color_picker("color##world", scene.world_color);
-                xui::end_popup();
-            }
-            xui::layout::spacing(3.0f);
-            xui::toggle("Bloom Effect", scene.bloom);
-            xui::end_child();
         }
     }
 
-    void menu::draw_settings(float col_w) const
+    void menu::draw_user_popup()
     {
-        auto& m = settings::g_misc;
-        const auto wx = this->m_x;
-        const auto wy = this->m_y;
-        const auto right_x = this->m_body_x + col_w + tokens::gap;
-        xui::layout::set_cursor(this->m_body_x - wx, this->m_body_y - wy);
-        if (xui::begin_child("##settings_appearance", col_w, this->m_body_h, true))
+        const auto anim = xui::anim::lerp(xui::fnv1a("user_popup_open_anim"), this->m_user_popup_open ? 1.0f : 0.0f, 16.0f);
+        if (anim < 0.005f)
         {
-            xui::section_header("INTERFACE & THEME");
-            std::array<const char*, theme::presets.size()> names{};
-            for (std::size_t i = 0; i < names.size(); ++i) names[i] = theme::presets[i].name;
-            if (xui::combo("Color Palette", m.menu_palette.value, names.data(), static_cast<int>(names.size())))
-                const_cast<menu*>(this)->apply_theme_preset(m.menu_palette.value);
-
-            const auto row = xui::layout::item(xui::layout::item_width(), 28.0f);
-            auto& dl = xui::draw::current();
-            const auto step = row.w / static_cast<float>(names.size());
-            for (int i = 0; i < static_cast<int>(names.size()); ++i)
-            {
-                const auto cx = row.x + (i + 0.5f) * step;
-                const auto cy = row.y + row.h * 0.5f;
-                if (m.menu_palette.value == i) dl.circle(cx, cy, 8.0f, tokens::col_text, 1.2f);
-                dl.circle_filled(cx, cy, 5.5f, theme::presets[i].accent);
-                const xui::rect hit{ cx - step * 0.5f, row.y, step, row.h };
-                if (!xui::ctx().overlay_blocking() && xui::ctx().input.in_rect(hit) && xui::ctx().input.mouse_clicked)
-                    const_cast<menu*>(this)->apply_theme_preset(i);
-            }
-            xui::layout::separator();
-            xui::layout::spacing(10.0f);
-            xui::keybind("Menu Key", m.menu_key.value);
-            xui::end_child();
+            return;
         }
 
-        xui::layout::set_cursor(right_x - wx, this->m_body_y - wy);
-        if (xui::begin_child("##settings_system", col_w, this->m_body_h, true))
+        auto& top_dl = xdraw::get(xdraw::layer::top);
+        auto& input = xui::ctx().input;
+        auto& m = settings::g_misc;
+
+        const auto wx = this->m_x;
+        const auto wy = this->m_y;
+        const auto wh = this->m_h;
+        const auto sb_x = wx;
+        const auto sb_w = menu::k_sidebar_w + tokens::gap;
+        const auto footer_y = wy + wh - 64.0f;
+        const xui::rect profile_rect{ sb_x + 8.0f, footer_y + 8.0f, sb_w - 16.0f, 48.0f };
+
+        // Main popup geometry: perfectly aligned on top of the Steam profile button
+        const float main_w = profile_rect.w;
+        const float main_h = 136.0f;
+        const float main_x = profile_rect.x;
+        const float target_main_y = profile_rect.y - main_h - 6.0f;
+        const float main_y = target_main_y + (1.0f - anim) * 6.0f;
+        const xui::rect main_rect{ main_x, main_y, main_w, main_h };
+
+        // Sub-window geometry (Theme or Watermark)
+        const bool sub_open = (this->m_user_subtab == 1 || this->m_user_subtab == 2);
+        const auto sub_anim = xui::anim::lerp(xui::fnv1a("user_subpopup_anim"), (this->m_user_popup_open && sub_open) ? 1.0f : 0.0f, 16.0f);
+
+        const float sub_w = (this->m_user_subtab == 1) ? 230.0f : 240.0f;
+        const float sub_h = (this->m_user_subtab == 1) ? 385.0f : 375.0f;
+        const float sub_x = main_x + main_w + 6.0f;
+        const float target_sub_y = std::clamp(main_y + main_h - sub_h, wy + 10.0f, wy + wh - sub_h - 10.0f);
+        const float sub_y = target_sub_y + (1.0f - sub_anim) * 6.0f;
+        const xui::rect sub_rect{ sub_x, sub_y, sub_w, sub_h };
+
+        // Click outside detection: close popup if clicked outside profile_rect, main_rect, and sub_rect (if open)
+        if (input.mouse_clicked)
         {
-            xui::section_header("WATERMARK");
-            xui::toggle("Watermark", m.m_watermark.enabled);
-            if ( xui::begin_popup( "##wm_popup", 220.0f ) )
+            const bool in_profile = input.in_rect(profile_rect);
+            const bool in_main = input.in_rect(main_rect);
+            const bool in_sub = sub_open && input.in_rect(sub_rect);
+            if (!in_profile && !in_main && !in_sub)
             {
-                constexpr const char* wm_positions[] = { "Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right" };
-                xui::combo("Position##wm", m.m_watermark.position.value, wm_positions, 6);
-                xui::slider_float("Opacity##wm", m.m_watermark.opacity, 0.0f, 100.0f, "%.0f%%");
-                xui::end_popup( );
+                this->m_user_popup_open = false;
+                this->m_user_subtab = 0;
+                this->m_binding_menu_key = false;
             }
-            xui::toggle("Steam Username", m.m_watermark.show_user);
-            xui::toggle("FPS", m.m_watermark.show_fps);
-            xui::toggle("Ping", m.m_watermark.show_ping);
-            xui::toggle("Clock", m.m_watermark.show_time);
-            xui::toggle("Map", m.m_watermark.show_map);
-            xui::toggle("Tick Rate", m.m_watermark.show_tick);
-            xui::toggle("Velocity", m.m_watermark.show_velocity);
-            xui::end_child();
+        }
+
+        // Block interaction with elements behind the popup
+        if (input.in_rect(main_rect) || (sub_open && input.in_rect(sub_rect)))
+        {
+            xui::ctx().inside_overlay = xui::fnv1a("user_popup_overlay");
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // 1. DRAW MAIN POPUP (Theme >, Watermark >, Menu key KEY)
+        // ─────────────────────────────────────────────────────────────
+        const auto main_alpha = static_cast<std::uint8_t>(255.0f * anim);
+        const auto main_bg = tokens::col_card.alpha(static_cast<std::uint8_t>(225.0f * anim));
+        const auto main_border = tokens::col_border.alpha(static_cast<std::uint8_t>(180.0f * anim));
+
+        // Liquid glass blur + background + specular highlight
+        top_dl.rect_filled_blurred(main_x, main_y, main_w, main_h, xdraw::corner_radius{ 8.0f },
+            xdraw::color{ 50, 55, 65, static_cast<std::uint8_t>(170.0f * anim) });
+        top_dl.rect_filled(main_x, main_y, main_w, main_h, main_bg, xdraw::corner_radius{ 8.0f });
+        top_dl.rect_filled_gradient(main_x, main_y, main_w, 24.0f,
+            xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(18.0f * anim) },
+            xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(18.0f * anim) },
+            xdraw::color{ 255, 255, 255, 1 },
+            xdraw::color{ 255, 255, 255, 1 },
+            xdraw::corner_radius::top(8.0f));
+        top_dl.rect(main_x, main_y, main_w, main_h, main_border, xdraw::corner_radius{ 8.0f }, 1.0f);
+        top_dl.line(main_x + 8.0f, main_y, main_x + main_w - 8.0f, main_y,
+            xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(50.0f * anim) }, 1.0f);
+
+        float item_y = main_y + 8.0f;
+        const float item_h = 36.0f;
+
+        // --- ITEM 1: Theme > ---
+        {
+            const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
+            const bool hovered = input.in_rect(row_rect);
+            const bool selected = (this->m_user_subtab == 1);
+            const auto h_anim = xui::anim::lerp(xui::fnv1a("usr_theme_row"), (selected ? 1.0f : (hovered ? 0.5f : 0.0f)), 14.0f);
+
+            if (hovered && input.mouse_clicked)
+            {
+                this->m_user_subtab = (this->m_user_subtab == 1) ? 0 : 1;
+            }
+
+            if (h_anim > 0.01f)
+            {
+                top_dl.rect_filled(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
+                    tokens::col_accent.alpha(static_cast<std::uint8_t>(selected ? 36.0f * anim : 20.0f * h_anim * anim)),
+                    xdraw::corner_radius{ 6.0f });
+                if (selected)
+                {
+                    top_dl.rect(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
+                        tokens::col_accent.alpha(static_cast<std::uint8_t>(90.0f * anim)), xdraw::corner_radius{ 6.0f }, 1.0f);
+                }
+            }
+
+            // Theme palette icon
+            const auto ic_x = row_rect.x + 14.0f;
+            const auto ic_y = row_rect.y + item_h * 0.5f;
+            top_dl.circle_filled(ic_x, ic_y, 4.5f, tokens::col_accent.alpha(main_alpha));
+            top_dl.circle(ic_x, ic_y, 4.5f, tokens::col_border.alpha(main_alpha));
+
+            xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+            top_dl.text(row_rect.x + 28.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Theme",
+                selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text.alpha(main_alpha));
+
+            // Chevron >
+            const auto ch_x = row_rect.x + row_rect.w - 14.0f;
+            const auto ch_y = row_rect.y + item_h * 0.5f;
+            const auto ch_col = selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text_dim.alpha(main_alpha);
+            top_dl.line(ch_x - 3.0f, ch_y - 4.5f, ch_x + 1.5f, ch_y, ch_col, 1.3f);
+            top_dl.line(ch_x + 1.5f, ch_y, ch_x - 3.0f, ch_y + 4.5f, ch_col, 1.3f);
+            xdraw::pop_font();
+        }
+
+        item_y += item_h + 3.0f;
+
+        // --- ITEM 2: Watermark > ---
+        {
+            const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
+            const bool hovered = input.in_rect(row_rect);
+            const bool selected = (this->m_user_subtab == 2);
+            const auto h_anim = xui::anim::lerp(xui::fnv1a("usr_wm_row"), (selected ? 1.0f : (hovered ? 0.5f : 0.0f)), 14.0f);
+
+            if (hovered && input.mouse_clicked)
+            {
+                this->m_user_subtab = (this->m_user_subtab == 2) ? 0 : 2;
+            }
+
+            if (h_anim > 0.01f)
+            {
+                top_dl.rect_filled(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
+                    tokens::col_accent.alpha(static_cast<std::uint8_t>(selected ? 36.0f * anim : 20.0f * h_anim * anim)),
+                    xdraw::corner_radius{ 6.0f });
+                if (selected)
+                {
+                    top_dl.rect(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
+                        tokens::col_accent.alpha(static_cast<std::uint8_t>(90.0f * anim)), xdraw::corner_radius{ 6.0f }, 1.0f);
+                }
+            }
+
+            // Watermark monitor icon
+            const auto ic_x = row_rect.x + 14.0f;
+            const auto ic_y = row_rect.y + item_h * 0.5f;
+            const auto ic_col = selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text_dim.alpha(main_alpha);
+            top_dl.rect(ic_x - 5.0f, ic_y - 4.5f, 10.0f, 7.5f, ic_col, xdraw::corner_radius{ 1.0f }, 1.1f);
+            top_dl.line(ic_x - 2.5f, ic_y + 4.5f, ic_x + 2.5f, ic_y + 4.5f, ic_col, 1.1f);
+
+            xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+            top_dl.text(row_rect.x + 28.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Watermark",
+                selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text.alpha(main_alpha));
+
+            // Chevron >
+            const auto ch_x = row_rect.x + row_rect.w - 14.0f;
+            const auto ch_y = row_rect.y + item_h * 0.5f;
+            const auto ch_col = selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text_dim.alpha(main_alpha);
+            top_dl.line(ch_x - 3.0f, ch_y - 4.5f, ch_x + 1.5f, ch_y, ch_col, 1.3f);
+            top_dl.line(ch_x + 1.5f, ch_y, ch_x - 3.0f, ch_y + 4.5f, ch_col, 1.3f);
+            xdraw::pop_font();
+        }
+
+        item_y += item_h + 4.0f;
+
+        // Separator line
+        top_dl.line(main_x + 10.0f, item_y, main_x + main_w - 10.0f, item_y,
+            tokens::col_border.alpha(static_cast<std::uint8_t>(90.0f * anim)));
+
+        item_y += 5.0f;
+
+        // --- ITEM 3: Menu key KEY ---
+        {
+            const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
+            xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+            top_dl.text(row_rect.x + 10.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Menu key",
+                tokens::col_text.alpha(main_alpha));
+
+            const float kb_w = 72.0f;
+            const float kb_h = 24.0f;
+            const xui::rect kb_rect{ row_rect.x + row_rect.w - kb_w - 4.0f, row_rect.y + (item_h - kb_h) * 0.5f, kb_w, kb_h };
+            const bool kb_hovered = input.in_rect(kb_rect);
+
+            if (kb_hovered && input.mouse_clicked)
+            {
+                this->m_binding_menu_key = !this->m_binding_menu_key;
+            }
+
+            if (this->m_binding_menu_key)
+            {
+                if (input.mouse_clicked && !kb_hovered)
+                {
+                    m.menu_key.value = VK_LBUTTON;
+                    this->m_binding_menu_key = false;
+                }
+                else if (input.rmb_clicked)
+                {
+                    m.menu_key.value = VK_RBUTTON;
+                    this->m_binding_menu_key = false;
+                }
+                else
+                {
+                    for (const auto vk : input.key_presses())
+                    {
+                        if (vk == VK_ESCAPE)
+                            m.menu_key.value = 0;
+                        else
+                            m.menu_key.value = vk;
+                        this->m_binding_menu_key = false;
+                        break;
+                    }
+                }
+            }
+
+            const auto kb_bg = this->m_binding_menu_key
+                ? tokens::col_accent.alpha(static_cast<std::uint8_t>(40.0f * anim))
+                : (kb_hovered ? tokens::col_elevated.alpha(static_cast<std::uint8_t>(240.0f * anim))
+                              : tokens::col_elevated.alpha(static_cast<std::uint8_t>(180.0f * anim)));
+            const auto kb_border = this->m_binding_menu_key
+                ? tokens::col_accent.alpha(static_cast<std::uint8_t>(200.0f * anim))
+                : (kb_hovered ? tokens::col_accent.alpha(static_cast<std::uint8_t>(140.0f * anim))
+                              : tokens::col_border.alpha(static_cast<std::uint8_t>(160.0f * anim)));
+
+            top_dl.rect_filled(kb_rect.x, kb_rect.y, kb_rect.w, kb_rect.h, kb_bg, xdraw::corner_radius{ 5.0f });
+            top_dl.rect(kb_rect.x, kb_rect.y, kb_rect.w, kb_rect.h, kb_border, xdraw::corner_radius{ 5.0f }, 1.0f);
+
+            const char* key_label = this->m_binding_menu_key ? "..." : xui::vk_name(m.menu_key.value);
+            const auto [kw, kh] = xdraw::measure_text(key_label);
+            top_dl.text(kb_rect.x + (kb_w - kw) * 0.5f, kb_rect.y + (kb_h - kh) * 0.5f, key_label,
+                this->m_binding_menu_key ? tokens::col_accent.alpha(main_alpha) : tokens::col_text.alpha(main_alpha));
+            xdraw::pop_font();
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // 2. DRAW SUB-WINDOW (Theme or Watermark)
+        // ─────────────────────────────────────────────────────────────
+        if (sub_anim > 0.005f && sub_open)
+        {
+            const auto s_alpha = static_cast<std::uint8_t>(255.0f * sub_anim);
+            const auto s_bg = tokens::col_card.alpha(static_cast<std::uint8_t>(225.0f * sub_anim));
+            const auto s_border = tokens::col_border.alpha(static_cast<std::uint8_t>(185.0f * sub_anim));
+
+            top_dl.rect_filled_blurred(sub_x, sub_y, sub_w, sub_h, xdraw::corner_radius{ 8.0f },
+                xdraw::color{ 50, 55, 65, static_cast<std::uint8_t>(170.0f * sub_anim) });
+            top_dl.rect_filled(sub_x, sub_y, sub_w, sub_h, s_bg, xdraw::corner_radius{ 8.0f });
+            top_dl.rect_filled_gradient(sub_x, sub_y, sub_w, 24.0f,
+                xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(18.0f * sub_anim) },
+                xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(18.0f * sub_anim) },
+                xdraw::color{ 255, 255, 255, 1 },
+                xdraw::color{ 255, 255, 255, 1 },
+                xdraw::corner_radius::top(8.0f));
+            top_dl.rect(sub_x, sub_y, sub_w, sub_h, s_border, xdraw::corner_radius{ 8.0f }, 1.0f);
+            top_dl.line(sub_x + 8.0f, sub_y, sub_x + sub_w - 8.0f, sub_y,
+                xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(50.0f * sub_anim) }, 1.0f);
+
+            // Header: Title + Close Button
+            xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
+            const char* sub_title = (this->m_user_subtab == 1) ? "THEMES" : "WATERMARK";
+            top_dl.text(sub_x + 14.0f, sub_y + 11.0f, sub_title, tokens::col_text.alpha(s_alpha));
+            xdraw::pop_font();
+
+            // Close button 'X' in top right
+            const xui::rect close_btn{ sub_x + sub_w - 26.0f, sub_y + 8.0f, 18.0f, 18.0f };
+            const bool close_hovered = input.in_rect(close_btn);
+            if (close_hovered && input.mouse_clicked)
+            {
+                this->m_user_subtab = 0;
+            }
+            const auto close_col = close_hovered ? tokens::col_accent.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha);
+            top_dl.line(close_btn.x + 4.0f, close_btn.y + 4.0f, close_btn.x + close_btn.w - 4.0f, close_btn.y + close_btn.h - 4.0f, close_col, 1.3f);
+            top_dl.line(close_btn.x + close_btn.w - 4.0f, close_btn.y + 4.0f, close_btn.x + 4.0f, close_btn.y + close_btn.h - 4.0f, close_col, 1.3f);
+
+            top_dl.line(sub_x + 1.0f, sub_y + 32.0f, sub_x + sub_w - 1.0f, sub_y + 32.0f,
+                tokens::col_border.alpha(static_cast<std::uint8_t>(120.0f * sub_anim)));
+
+            if (this->m_user_subtab == 1)
+            {
+                // ────────────────────────────
+                // THEME PRESETS LIST
+                // ────────────────────────────
+                float t_y = sub_y + 38.0f;
+                const float t_row_h = 29.0f;
+                xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+
+                for (std::size_t i = 0; i < theme::presets.size(); ++i)
+                {
+                    const xui::rect t_rect{ sub_x + 6.0f, t_y, sub_w - 12.0f, t_row_h };
+                    const bool t_hovered = input.in_rect(t_rect);
+                    const bool t_active = (m.menu_palette.value == static_cast<int>(i));
+
+                    if (t_hovered && input.mouse_clicked)
+                    {
+                        this->apply_theme_preset(static_cast<int>(i));
+                    }
+
+                    if (t_active || t_hovered)
+                    {
+                        top_dl.rect_filled(t_rect.x, t_rect.y, t_rect.w, t_rect.h,
+                            t_active ? tokens::col_accent.alpha(static_cast<std::uint8_t>(32.0f * sub_anim))
+                                     : tokens::col_elevated.alpha(static_cast<std::uint8_t>(140.0f * sub_anim)),
+                            xdraw::corner_radius{ 5.0f });
+                        if (t_active)
+                        {
+                            top_dl.rect(t_rect.x, t_rect.y, t_rect.w, t_rect.h,
+                                tokens::col_accent.alpha(static_cast<std::uint8_t>(80.0f * sub_anim)), xdraw::corner_radius{ 5.0f }, 1.0f);
+                        }
+                    }
+
+                    // Swatch circle
+                    const auto sc_x = t_rect.x + 14.0f;
+                    const auto sc_y = t_rect.y + t_row_h * 0.5f;
+                    top_dl.circle_filled(sc_x, sc_y, 5.0f, theme::presets[i].accent.alpha(s_alpha));
+                    top_dl.circle(sc_x, sc_y, 5.0f, tokens::col_border.alpha(s_alpha));
+
+                    // Name
+                    top_dl.text(t_rect.x + 28.0f, t_rect.y + (t_row_h - 14.0f) * 0.5f,
+                        theme::presets[i].name,
+                        t_active ? tokens::col_accent.alpha(s_alpha) : tokens::col_text.alpha(s_alpha));
+
+                    // Active check dot
+                    if (t_active)
+                    {
+                        const auto dot_x = t_rect.x + t_rect.w - 14.0f;
+                        top_dl.circle_filled(dot_x, sc_y, 3.0f, tokens::col_accent.alpha(s_alpha));
+                    }
+
+                    t_y += t_row_h + 2.0f;
+                }
+                xdraw::pop_font();
+            }
+            else if (this->m_user_subtab == 2)
+            {
+                // ────────────────────────────
+                // WATERMARK CONTROLS
+                // ────────────────────────────
+                float w_y = sub_y + 38.0f;
+                const float w_row_h = 24.0f;
+                xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+
+                // Helper lambda for boolean toggle
+                auto draw_toggle_row = [&](const char* label, auto& setting_val) {
+                    const xui::rect t_rect{ sub_x + 10.0f, w_y, sub_w - 20.0f, w_row_h };
+                    const bool t_hovered = input.in_rect(t_rect);
+                    if (t_hovered && input.mouse_clicked)
+                    {
+                        setting_val.value = !setting_val.value;
+                    }
+
+                    top_dl.text(t_rect.x + 2.0f, t_rect.y + (w_row_h - 14.0f) * 0.5f, label,
+                        setting_val.value ? tokens::col_text.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha));
+
+                    // Switch widget on right
+                    const float sw_w = 26.0f;
+                    const float sw_h = 14.0f;
+                    const float sw_x = t_rect.x + t_rect.w - sw_w - 2.0f;
+                    const float sw_y = t_rect.y + (w_row_h - sw_h) * 0.5f;
+                    const auto sw_bg = setting_val.value
+                        ? tokens::col_accent.alpha(s_alpha)
+                        : tokens::col_elevated.alpha(static_cast<std::uint8_t>(200.0f * sub_anim));
+
+                    top_dl.rect_filled(sw_x, sw_y, sw_w, sw_h, sw_bg, xdraw::corner_radius{ sw_h * 0.5f });
+                    top_dl.rect(sw_x, sw_y, sw_w, sw_h, tokens::col_border.alpha(s_alpha), xdraw::corner_radius{ sw_h * 0.5f }, 1.0f);
+
+                    const float knob_r = 5.0f;
+                    const float knob_x = setting_val.value ? (sw_x + sw_w - knob_r - 2.0f) : (sw_x + knob_r + 2.0f);
+                    top_dl.circle_filled(knob_x, sw_y + sw_h * 0.5f, knob_r,
+                        setting_val.value ? tokens::col_dark.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha));
+
+                    w_y += w_row_h + 3.0f;
+                };
+
+                draw_toggle_row("Enabled", m.m_watermark.enabled);
+
+                // Position selector
+                {
+                    constexpr const char* wm_pos_names[] = { "Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right" };
+                    const xui::rect pos_rect{ sub_x + 10.0f, w_y, sub_w - 20.0f, 26.0f };
+                    top_dl.text(pos_rect.x + 2.0f, pos_rect.y + (26.0f - 14.0f) * 0.5f, "Position", tokens::col_text.alpha(s_alpha));
+
+                    const float sel_w = 114.0f;
+                    const float sel_h = 24.0f;
+                    const float sel_x = pos_rect.x + pos_rect.w - sel_w - 2.0f;
+                    const float sel_y = pos_rect.y + (26.0f - sel_h) * 0.5f;
+
+                    top_dl.rect_filled(sel_x, sel_y, sel_w, sel_h, tokens::col_elevated.alpha(static_cast<std::uint8_t>(200.0f * sub_anim)), xdraw::corner_radius{ 4.0f });
+                    top_dl.rect(sel_x, sel_y, sel_w, sel_h, tokens::col_border.alpha(s_alpha), xdraw::corner_radius{ 4.0f }, 1.0f);
+
+                    // Left arrow <
+                    const xui::rect left_arrow{ sel_x, sel_y, 18.0f, sel_h };
+                    const bool la_hovered = input.in_rect(left_arrow);
+                    if (la_hovered && input.mouse_clicked)
+                    {
+                        m.m_watermark.position.value = (m.m_watermark.position.value + 5) % 6;
+                    }
+                    const auto la_col = la_hovered ? tokens::col_accent.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha);
+                    top_dl.line(sel_x + 11.0f, sel_y + 7.0f, sel_x + 6.0f, sel_y + sel_h * 0.5f, la_col, 1.2f);
+                    top_dl.line(sel_x + 6.0f, sel_y + sel_h * 0.5f, sel_x + 11.0f, sel_y + sel_h - 7.0f, la_col, 1.2f);
+
+                    // Right arrow >
+                    const xui::rect right_arrow{ sel_x + sel_w - 18.0f, sel_y, 18.0f, sel_h };
+                    const bool ra_hovered = input.in_rect(right_arrow);
+                    if (ra_hovered && input.mouse_clicked)
+                    {
+                        m.m_watermark.position.value = (m.m_watermark.position.value + 1) % 6;
+                    }
+                    const auto ra_col = ra_hovered ? tokens::col_accent.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha);
+                    top_dl.line(sel_x + sel_w - 11.0f, sel_y + 7.0f, sel_x + sel_w - 6.0f, sel_y + sel_h * 0.5f, ra_col, 1.2f);
+                    top_dl.line(sel_x + sel_w - 6.0f, sel_y + sel_h * 0.5f, sel_x + sel_w - 11.0f, sel_y + sel_h - 7.0f, ra_col, 1.2f);
+
+                    // Current pos text
+                    const auto cur_pos = std::clamp(m.m_watermark.position.value, 0, 5);
+                    const char* cur_name = wm_pos_names[cur_pos];
+                    const auto [pw, ph] = xdraw::measure_text(cur_name);
+                    top_dl.text(sel_x + (sel_w - pw) * 0.5f, sel_y + (sel_h - ph) * 0.5f, cur_name, tokens::col_text.alpha(s_alpha));
+
+                    w_y += 30.0f;
+                }
+
+                // Opacity slider
+                {
+                    const xui::rect op_row{ sub_x + 10.0f, w_y, sub_w - 20.0f, 22.0f };
+                    top_dl.text(op_row.x + 2.0f, op_row.y + 2.0f, "Opacity", tokens::col_text.alpha(s_alpha));
+
+                    char op_buf[16];
+                    std::snprintf(op_buf, sizeof(op_buf), "%.0f%%", m.m_watermark.opacity.value);
+                    const auto [tw, th] = xdraw::measure_text(op_buf);
+                    top_dl.text(op_row.x + op_row.w - tw - 2.0f, op_row.y + 2.0f, op_buf, tokens::col_text_dim.alpha(s_alpha));
+
+                    w_y += 18.0f;
+
+                    const float track_w = sub_w - 24.0f;
+                    const float track_h = 4.0f;
+                    const float track_x = sub_x + 12.0f;
+                    const float track_y = w_y + 4.0f;
+                    const xui::rect track_rect{ track_x, track_y - 4.0f, track_w, 12.0f };
+
+                    static bool s_dragging_op = false;
+                    if (input.in_rect(track_rect) && input.mouse_clicked)
+                    {
+                        s_dragging_op = true;
+                    }
+                    if (!input.mouse_down)
+                    {
+                        s_dragging_op = false;
+                    }
+                    if (s_dragging_op)
+                    {
+                        const float fraction = std::clamp((input.mouse_x - track_x) / track_w, 0.0f, 1.0f);
+                        m.m_watermark.opacity.value = std::round(fraction * 100.0f);
+                    }
+
+                    const float fill_fraction = std::clamp(m.m_watermark.opacity.value / 100.0f, 0.0f, 1.0f);
+                    top_dl.rect_filled(track_x, track_y, track_w, track_h, tokens::col_border.alpha(s_alpha), xdraw::corner_radius{ 2.0f });
+                    top_dl.rect_filled(track_x, track_y, track_w * fill_fraction, track_h, tokens::col_accent.alpha(s_alpha), xdraw::corner_radius{ 2.0f });
+                    top_dl.circle_filled(track_x + track_w * fill_fraction, track_y + track_h * 0.5f, 5.0f, tokens::col_accent.alpha(s_alpha));
+                    top_dl.circle(track_x + track_w * fill_fraction, track_y + track_h * 0.5f, 5.0f, tokens::col_text.alpha(s_alpha));
+
+                    w_y += 16.0f;
+                }
+
+                top_dl.line(sub_x + 10.0f, w_y, sub_x + sub_w - 10.0f, w_y,
+                    tokens::col_border.alpha(static_cast<std::uint8_t>(90.0f * sub_anim)));
+                w_y += 6.0f;
+
+                draw_toggle_row("Steam Username", m.m_watermark.show_user);
+                draw_toggle_row("FPS", m.m_watermark.show_fps);
+                draw_toggle_row("Ping", m.m_watermark.show_ping);
+                draw_toggle_row("Clock", m.m_watermark.show_time);
+                draw_toggle_row("Map", m.m_watermark.show_map);
+                draw_toggle_row("Tick Rate", m.m_watermark.show_tick);
+                draw_toggle_row("Velocity", m.m_watermark.show_velocity);
+
+                xdraw::pop_font();
+            }
         }
     }
 

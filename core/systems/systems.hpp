@@ -27,6 +27,9 @@ namespace systems {
 		[[nodiscard]] static std::uintptr_t get_or_create_clone( std::uintptr_t src_mat, clone_type type = clone_type::translucent );
 		static void clear_clones( );
 		static void set_material_vec3( std::uintptr_t mat, const char* param_name, float x, float y, float z );
+		static void set_material_float( std::uintptr_t mat, const char* param_name, float value );
+		static void update_outline_glow( const settings::esp::outline_glow_config& cfg );
+		[[nodiscard]] static std::uintptr_t get_outline_glow( const settings::esp::outline_glow_config& cfg, bool ignorez );
 
 	private:
 		static inline std::array<std::uintptr_t, static_cast< std::size_t >( settings::esp::cham_ids::count )> m_loaded{};
@@ -190,6 +193,7 @@ namespace systems {
 		void on_add_entity( std::uintptr_t entity, std::uint32_t handle );
 		void on_remove_entity( std::uintptr_t entity, std::uint32_t handle );
 		void force_update( );
+		void reset( );
 
 		[[nodiscard]] bool exists( std::uintptr_t entity ) const;
 		[[nodiscard]] const char* get_schema_name( std::uintptr_t entity ) const;
@@ -289,6 +293,7 @@ namespace systems {
 
 		void update( std::uintptr_t view );
 		void update_matrix( );
+		void reset( );
 
 		[[nodiscard]] math::vector2 project( const math::vector3& world_pos );
 		[[nodiscard]] projection project_full( const math::vector3& world_pos ) const;

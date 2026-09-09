@@ -88,6 +88,8 @@ namespace rendering {
 		if ( !this->m_rtv || this->m_viewport.Width <= 0.0f || this->m_viewport.Height <= 0.0f )
 			return;
 
+		features::misc::g_motion_blur.on_present( swap_chain, this->m_device, this->m_context, this->m_rtv, this->m_viewport );
+
 		struct viewport_guard
 		{
 			ID3D11DeviceContext* context;
@@ -140,6 +142,8 @@ namespace rendering {
 
 	void context::on_resize_buffers( )
 	{
+		features::misc::g_motion_blur.on_resize_buffers( );
+
 		if ( this->m_rtv )
 		{
 			this->m_rtv->Release( );

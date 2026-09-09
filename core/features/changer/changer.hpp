@@ -168,6 +168,7 @@ namespace features::changer {
 	{
 	public:
 		void on_frame_stage_notify( );
+		void reset( );
 
 	private:
 		void cycle_weapon_owners( std::uintptr_t pawn );
@@ -184,6 +185,7 @@ namespace features::changer {
 	{
 	public:
 		void on_frame_stage_notify( );
+		void reset( );
 
 	private:
 		struct original_state
@@ -212,7 +214,6 @@ namespace features::changer {
 		void apply( std::uintptr_t pawn, std::uintptr_t item_view, int team, const econ_item_system::item_def& def, const settings::changer::applied_skin& skin, std::uint32_t account_id );
 		void restore( std::uintptr_t pawn, std::uintptr_t item_view, int team );
 		void refresh( std::uintptr_t pawn, std::uintptr_t item_view, int team ) const;
-		void reset( );
 
 		original_state m_original{};
 		std::array<attribute_state, 3> m_original_attributes{};
@@ -224,6 +225,7 @@ namespace features::changer {
 	{
 	public:
 		void on_frame_stage_notify( );
+		void reset( );
 
 	private:
 		bool apply( std::uintptr_t weapon, std::uintptr_t iv, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const settings::changer::applied_skin* skin, std::uint32_t account_id );
@@ -249,6 +251,7 @@ namespace features::changer {
 	{
 	public:
 		void on_frame_stage_notify( );
+		void reset( );
 
 	private:
 		struct original_state

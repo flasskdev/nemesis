@@ -423,6 +423,67 @@ namespace rendering {
 			e.has_value_pill = false;
 		}
 
+		static char slider_names[ 32 ][ 64 ];
+		for ( const auto entry : xui::slider_binds::all( ) )
+		{
+			if ( !entry )
+				continue;
+
+			auto is_rage_group{ false };
+			for ( auto i = 0u; i < settings::combat::ragebot::k_group_count; ++i )
+			{
+				const auto& g = settings::g_combat.m_ragebot.groups[ i ];
+				if ( entry->ptr == &g.hitchance.value || entry->ptr == &g.min_damage.value || entry->ptr == &g.max_fov.value || entry->ptr == &g.pointscale.value )
+				{
+					is_rage_group = true;
+					break;
+				}
+			}
+
+			if ( is_rage_group )
+			{
+				if ( !settings::g_combat.m_ragebot.enabled || !has_weapon )
+				{
+					continue;
+				}
+
+				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type );
+				if ( entry->ptr != &active_group->hitchance.value && entry->ptr != &active_group->min_damage.value && entry->ptr != &active_group->max_fov.value && entry->ptr != &active_group->pointscale.value )
+				{
+					continue;
+				}
+			}
+
+			for ( std::size_t i = 0; i < entry->count; ++i )
+			{
+				const auto& b = entry->binds[ i ];
+				if ( b.key == 0 || !b.active || count >= 32 )
+					continue;
+
+				auto& e = entries[ count++ ];
+
+				const auto hash_pos = entry->label.find( "##" );
+				auto& clean_name = slider_names[ count - 1 ];
+				const auto name_len = ( hash_pos != std::string::npos ) ? hash_pos : entry->label.size( );
+				const auto copy_len = std::min( name_len, sizeof( clean_name ) - 1 );
+				std::memcpy( clean_name, entry->label.data( ), copy_len );
+				clean_name[ copy_len ] = '\0';
+
+				e.name = clean_name;
+				e.mode = b.mode;
+
+				if ( entry->is_integral )
+				{
+					std::snprintf( e.value, sizeof( e.value ), "%d", static_cast< int >( std::roundf( b.value ) ) );
+				}
+				else
+				{
+					std::snprintf( e.value, sizeof( e.value ), "%.1f", b.value );
+				}
+				e.has_value_pill = true;
+			}
+		}
+
 		// Keep the header visible as a preview while the menu is open.
 		if ( count > 0 || g_menu.is_open( ) )
 			container_alpha.fade_in( 0.2f );
