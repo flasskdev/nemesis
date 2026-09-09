@@ -200,20 +200,32 @@ namespace diag {
 	{
 		g_module = module_handle;
 
-		wchar_t directory[ MAX_PATH ]{};
-		const DWORD path_length =
-			GetModuleFileNameW( module_handle, directory, MAX_PATH );
-		if ( !path_length || path_length >= MAX_PATH )
+		wchar_t temp_directory[ MAX_PATH ]{};
+		const DWORD temp_length = GetTempPathW( MAX_PATH, temp_directory );
+		if ( !temp_length || temp_length >= MAX_PATH )
 		{
+			OutputDebugStringA( "[nemesis] diagnostics: GetTempPathW failed or path too long\n" );
 			return;
 		}
 
-		for ( DWORD i = path_length; i > 0; --i )
+		wchar_t directory[ MAX_PATH ]{};
+		if ( _snwprintf_s(
+			directory, MAX_PATH, _TRUNCATE,
+			L"%lsnemesis-%lu\\", temp_directory, GetCurrentProcessId( ) ) < 0 )
 		{
-			if ( directory[ i - 1 ] == L'\\' || directory[ i - 1 ] == L'/' )
+			OutputDebugStringA( "[nemesis] diagnostics: directory path too long\n" );
+			return;
+		}
+
+		if ( !CreateDirectoryW( directory, nullptr ) )
+		{
+			const DWORD error = GetLastError( );
+			if ( error != ERROR_ALREADY_EXISTS )
 			{
-				directory[ i ] = L'\0';
-				break;
+				writef( level::error,
+					"diagnostics: CreateDirectoryW failed; win32_error=%lu; path=%ls",
+					error, directory );
+				return;
 			}
 		}
 
@@ -243,7 +255,15 @@ namespace diag {
 			nullptr );
 		if ( g_log_file == INVALID_HANDLE_VALUE )
 		{
+			const DWORD error = GetLastError( );
 			g_log_file = nullptr;
+			writef( level::error,
+				"diagnostics: CreateFileW failed; win32_error=%lu; path=%ls",
+				error, g_log_path );
+		}
+		else
+		{
+			writef( level::info, "diagnostics log path=%ls", g_log_path );
 		}
 
 		const auto* dos_header =
