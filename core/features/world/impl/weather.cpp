@@ -200,10 +200,10 @@ namespace features::world {
 			return;
 		}
 
-		const auto particle_manager = memory::read<std::uintptr_t>( addresses::globals::particle_manager );
-		if ( particle_manager )
+		const auto particle_manager = memory::safe_read<std::uintptr_t>( addresses::globals::particle_manager ).value_or( 0 );
+		if ( particle_manager && PATTERN( patterns::particle_destroy_effect ) )
 		{
-			memory::call<void>(PATTERN (patterns::particle_destroy_effect), particle_manager, this->m_effect_index, true, true );
+			memory::call<void>( PATTERN( patterns::particle_destroy_effect ), particle_manager, this->m_effect_index, true, true );
 		}
 
 		this->m_effect_index = invalid_effect_index;

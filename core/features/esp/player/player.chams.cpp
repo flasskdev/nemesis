@@ -20,19 +20,24 @@ namespace features::esp::player {
 
 		const auto is_local_attachment = [ & ]( std::uintptr_t view_pawn ) -> bool
 			{
-				const auto game_scene_node = memory::read<std::uintptr_t>( owner_entity + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
-				if ( !game_scene_node )
+				if ( !owner_entity || owner_entity < 0x10000 )
 				{
 					return false;
 				}
 
-				const auto parent_node = memory::read<std::uintptr_t>( game_scene_node + SCHEMA( "CGameSceneNode", "m_pParent"_hash ) );
-				if ( !parent_node )
+				const auto game_scene_node = memory::safe_read<std::uintptr_t>( owner_entity + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
+				if ( !game_scene_node || game_scene_node < 0x10000 )
 				{
 					return false;
 				}
 
-				const auto parent_owner = memory::read<std::uintptr_t>( parent_node + SCHEMA( "CGameSceneNode", "m_pOwner"_hash ) );
+				const auto parent_node = memory::safe_read<std::uintptr_t>( game_scene_node + SCHEMA( "CGameSceneNode", "m_pParent"_hash ) ).value_or( 0 );
+				if ( !parent_node || parent_node < 0x10000 )
+				{
+					return false;
+				}
+
+				const auto parent_owner = memory::safe_read<std::uintptr_t>( parent_node + SCHEMA( "CGameSceneNode", "m_pOwner"_hash ) ).value_or( 0 );
 				return parent_owner == view_pawn;
 			};
 
@@ -44,16 +49,18 @@ namespace features::esp::player {
 				const bool primary_is_outline = cfg.primary.enabled.value && settings::esp::is_outline_material( cfg.primary.material.value );
 				const bool primary_suppress_fill = primary_is_outline && !cfg.primary.filled.value;
 
+				const bool secondary_is_outline = cfg.secondary.enabled.value && settings::esp::is_outline_material( cfg.secondary.material.value );
+				const bool secondary_suppress_fill = secondary_is_outline && !cfg.secondary.filled.value;
+
 				const bool suppress_fill = overlay_suppress_fill || primary_suppress_fill;
 
-				const bool secondary_is_outline = cfg.secondary.enabled.value && settings::esp::is_outline_material( cfg.secondary.material.value );
-				if ( cfg.secondary.enabled.value && !suppress_fill )
+				if ( cfg.secondary.enabled.value )
 				{
 					if ( secondary_is_outline )
 					{
 						this->apply_overlay( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.secondary.color, cfg.secondary.material, &cfg.secondary.glow );
 					}
-					else
+					else if ( !secondary_suppress_fill && !suppress_fill )
 					{
 						this->apply_layer( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.secondary.color, cfg.secondary.material, &cfg.secondary.glow );
 					}
@@ -65,7 +72,8 @@ namespace features::esp::player {
 					this->apply_layer( primitive_buffer, original_fn, a1, target_scene_obj, scene_view, cfg.primary.color, cfg.primary.material, &cfg.primary.glow );
 				}
 
-				const bool needs_original_base = !has_primary_fill && !cfg.secondary.enabled.value &&
+				const bool has_secondary_fill = cfg.secondary.enabled.value && !secondary_is_outline && !suppress_fill;
+				const bool needs_original_base = !has_primary_fill && !has_secondary_fill &&
 					( cfg.overlay.enabled.value || ( primary_is_outline && !primary_suppress_fill ) || force_original );
 
 				if ( needs_original_base && !suppress_fill )
@@ -587,14 +595,17 @@ namespace features::esp::player {
 			return;
 		}
 
-		const auto flags = memory::read<std::uint64_t>( this->scene_object + 128 );
-		if ( flags & 0x4000000000000000ull )
+		const auto flags = memory::safe_read<std::uint64_t>( this->scene_object + 128 );
+		if ( !flags || ( *flags & 0x4000000000000000ull ) )
 		{
 			this->scene_object = 0;
 			return;
 		}
 
-		memory::call_vfunc<void>( addresses::globals::scene_system, 16, this->scene_object );
+		if ( addresses::globals::scene_system )
+		{
+			memory::call_vfunc<void>( addresses::globals::scene_system, 16, this->scene_object );
+		}
 		this->scene_object = 0;
 	}
 
@@ -844,6 +855,7 @@ namespace features::esp::player {
 		for ( auto i = prev_count; i < new_count; ++i )
 		{
 			detail::replace_primitive( after->at( i ), material, draw_color );
+			detail::mark_primitive_last( after->at( i ) );
 		}
 
 		this->add_overlay_material( material );
@@ -895,7 +907,11 @@ namespace features::esp::player {
 		}
 
 		if ( mat == systems::materials::find( settings::esp::cham_ids::outline_glow ) ||
-		     mat == systems::materials::find( settings::esp::cham_ids::outline_glow_ignorez ) )
+		     mat == systems::materials::find( settings::esp::cham_ids::outline_glow_ignorez ) ||
+		     mat == systems::materials::find( settings::esp::cham_ids::outlines ) ||
+		     mat == systems::materials::find( settings::esp::cham_ids::outlines_ignorez ) ||
+		     mat == systems::materials::find( settings::esp::cham_ids::glow ) ||
+		     mat == systems::materials::find( settings::esp::cham_ids::glow_ignorez ) )
 		{
 			return true;
 		}

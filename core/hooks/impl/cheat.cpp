@@ -942,6 +942,11 @@ namespace hooks {
 
 		settings::g_world.update_active( rendering::g_widgets.s_map_name );
 
+		features::esp::player::g_chams.bt( ).shutdown( );
+		features::esp::player::g_chams.os( ).shutdown( );
+		features::world::g_weather.release( );
+		systems::materials::clear_clones( );
+
 		features::world::g_scene.reset_skybox_state( );
 		features::misc::g_impacts.on_level_change( );
 		features::misc::g_scoreboard_weapons.on_level_change( );
@@ -955,6 +960,11 @@ namespace hooks {
 		settings::g_world.update_active( "" );
 
 		// Release feature-owned scene objects before Source 2 tears their parents down.
+		features::esp::player::g_chams.bt( ).shutdown( );
+		features::esp::player::g_chams.os( ).shutdown( );
+		features::world::g_weather.release( );
+		systems::materials::clear_clones( );
+
 		features::misc::g_dlight.on_level_shutdown( );
 		features::misc::g_vote_logs.reset( );
 		features::misc::g_camera.reset( );

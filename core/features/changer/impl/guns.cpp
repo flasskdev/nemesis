@@ -46,16 +46,20 @@ namespace features::changer {
 
 		for ( auto i = 0; i < weapons_size; ++i )
 		{
-			const auto handle = memory::read<std::uint32_t>( weapons_data + i * sizeof( std::uint32_t ) );
-			const auto weapon = systems::g_entities.lookup( handle );
+			const auto handle = memory::safe_read<std::uint32_t>( weapons_data + i * sizeof( std::uint32_t ) ).value_or( 0 );
+			if ( !handle )
+			{
+				continue;
+			}
 
-			if ( !weapon )
+			const auto weapon = systems::g_entities.lookup( handle );
+			if ( !weapon || weapon < 0x10000 )
 			{
 				continue;
 			}
 
 			const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
-			const auto current_def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+			const auto current_def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
 			const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
 
 			if ( !current_def || current_def->category != econ_item_system::item_category::gun )
@@ -77,7 +81,8 @@ namespace features::changer {
 				continue;
 			}
 
-			if ( !memory::read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ) )
+			const auto subclass_ptr = memory::safe_read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ).value_or( 0 );
+			if ( !subclass_ptr )
 			{
 				continue;
 			}
@@ -93,14 +98,14 @@ namespace features::changer {
 			if ( active_weapon )
 			{
 				const auto iv = active_weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
-				const auto def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+				const auto def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
 				const auto def = g_econ_item_system.find_def( static_cast< std::int16_t >( def_index ) );
 
 				if ( def && def->category == econ_item_system::item_category::gun )
 				{
-					const auto paint_kit_id = memory::read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
+					const auto paint_kit_id = memory::safe_read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) ).value_or( 0 );
 					const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
-					this->rebuild_paint( active_weapon, active_handle, active_handle, local.pawn, pk );
+					this->update_view_model( local.pawn, pk );
 				}
 			}
 		}
@@ -150,6 +155,17 @@ namespace features::changer {
 
 	void guns::rebuild_paint( std::uintptr_t weapon, std::uint32_t handle, std::uint32_t active_handle, std::uintptr_t pawn, const econ_item_system::paint_kit* pk )
 	{
+		if ( !weapon || weapon < 0x10000 )
+		{
+			return;
+		}
+
+		const auto subclass_ptr = memory::safe_read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ).value_or( 0 );
+		if ( !subclass_ptr )
+		{
+			return;
+		}
+
 		const auto is_legacy = pk && pk->legacy_model;
 		const auto mesh_group = is_legacy ? std::uint64_t{ 2 } : std::uint64_t{ 1 };
 
@@ -158,15 +174,27 @@ namespace features::changer {
 			this->update_view_model( pawn, pk );
 		}
 
-		const auto weapon_scene_node = memory::read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
-		if ( weapon_scene_node )
+		const auto weapon_scene_node = memory::safe_read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
+		if ( weapon_scene_node && PATTERN( patterns::weapon_set_mesh_group_mask ) )
 		{
 			memory::call<void>( PATTERN( patterns::weapon_set_mesh_group_mask ), weapon_scene_node, mesh_group );
 		}
 
-		memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
+		if ( PATTERN( patterns::weapon_update_composite_material ) )
+		{
+			const auto composite_list = memory::safe_read<std::uintptr_t>( weapon + 0x608 ).value_or( 0 );
+			if ( composite_list )
+			{
+				memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
+			}
+		}
+
 		memory::call_vfunc<void>( weapon, 10, 1 );
-		memory::call<void>( PATTERN( patterns::weapon_update_skin ), weapon, true );
+
+		if ( PATTERN( patterns::weapon_update_skin ) )
+		{
+			memory::call<void>( PATTERN( patterns::weapon_update_skin ), weapon, true );
+		}
 
 		if ( PATTERN( patterns::weapon_update_modules ) )
 		{
@@ -182,7 +210,7 @@ namespace features::changer {
 			return;
 		}
 
-		const auto view_model_scene_node = memory::read<std::uintptr_t>( view_model + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
+		const auto view_model_scene_node = memory::safe_read<std::uintptr_t>( view_model + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
 		if ( !view_model_scene_node )
 		{
 			return;
@@ -194,7 +222,7 @@ namespace features::changer {
 
 	std::uintptr_t guns::find_hud_model_weapon( std::uintptr_t pawn )
 	{
-		const auto arms_handle = memory::read<std::uint32_t>( pawn + SCHEMA( "C_CSPlayerPawn", "m_hHudModelArms"_hash ) );
+		const auto arms_handle = memory::safe_read<std::uint32_t>( pawn + SCHEMA( "C_CSPlayerPawn", "m_hHudModelArms"_hash ) ).value_or( 0 );
 		if ( !arms_handle )
 		{
 			return 0;
@@ -206,17 +234,17 @@ namespace features::changer {
 			return 0;
 		}
 
-		const auto arms_scene_node = memory::read<std::uintptr_t>( arms + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
+		const auto arms_scene_node = memory::safe_read<std::uintptr_t>( arms + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
 		if ( !arms_scene_node )
 		{
 			return 0;
 		}
 
-		auto child = memory::read<std::uintptr_t>( arms_scene_node + SCHEMA( "CGameSceneNode", "m_pChild"_hash ) );
+		auto child = memory::safe_read<std::uintptr_t>( arms_scene_node + SCHEMA( "CGameSceneNode", "m_pChild"_hash ) ).value_or( 0 );
 
 		while ( child && child > 0x10000 )
 		{
-			const auto owner = memory::read<std::uintptr_t>( child + SCHEMA( "CGameSceneNode", "m_pOwner"_hash ) );
+			const auto owner = memory::safe_read<std::uintptr_t>( child + SCHEMA( "CGameSceneNode", "m_pOwner"_hash ) ).value_or( 0 );
 			if ( owner && owner > 0x10000 )
 			{
 				const auto name = systems::g_entities.get_schema_name( owner );
@@ -226,7 +254,7 @@ namespace features::changer {
 				}
 			}
 
-			child = memory::read<std::uintptr_t>( child + SCHEMA( "CGameSceneNode", "m_pNextSibling"_hash ) );
+			child = memory::safe_read<std::uintptr_t>( child + SCHEMA( "CGameSceneNode", "m_pNextSibling"_hash ) ).value_or( 0 );
 		}
 
 		return 0;
