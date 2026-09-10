@@ -14,7 +14,7 @@ namespace features::esp {
 			{
 			public:
 				void update( );
-				void shutdown( );
+				void shutdown( bool destroy_objects = true );
 
 				[[nodiscard]] bool is_active( std::uintptr_t scene_object ) const;
 				[[nodiscard]] bool has_active( std::uintptr_t pawn ) const;
@@ -40,7 +40,7 @@ namespace features::esp {
 			public:
 				void push (std::uintptr_t pawn);
 				void update ();
-				void shutdown ();
+				void shutdown (bool destroy_objects = true);
 
 				[[nodiscard]] bool has_active (std::uintptr_t pawn) const;
 				[[nodiscard]] bool is_active (std::uintptr_t scene_object) const;

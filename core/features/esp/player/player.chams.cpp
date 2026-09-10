@@ -490,11 +490,14 @@ namespace features::esp::player {
 		}
 	}
 
-	void chams::backtrack::shutdown( )
+	void chams::backtrack::shutdown( bool destroy_objects )
 	{
-		for ( auto& [pawn, obj] : this->m_objects )
+		if ( destroy_objects )
 		{
-			obj.destroy( );
+			for ( auto& [pawn, obj] : this->m_objects )
+			{
+				obj.destroy( );
+			}
 		}
 
 		this->m_objects.clear( );
@@ -718,9 +721,11 @@ namespace features::esp::player {
 		}
 	}
 
-	void chams::onshot::shutdown () {
-		for (auto& [pawn, e] : this->m_entries)
-			e.destroy ();
+	void chams::onshot::shutdown (bool destroy_objects) {
+		if (destroy_objects) {
+			for (auto& [pawn, e] : this->m_entries)
+				e.destroy ();
+		}
 		this->m_entries.clear ();
 		this->m_pending.clear ();
 	}

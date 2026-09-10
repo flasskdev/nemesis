@@ -1,5 +1,6 @@
 #include <pch/pch.hpp>
 #include <core/systems/systems.hpp>
+#include <core/hooks/hooks.hpp>
 #include <core/features/features.hpp>
 
 #include "../rendering.hpp"
@@ -113,7 +114,7 @@ namespace rendering {
 		{
 			auto& dl = xdraw::get( xdraw::layer::bottom );
 
-			if ( this->m_ui_assets_ready && systems::g_local.get( ).is_valid( ) && systems::g_view.has_camera( ) )
+			if ( this->m_ui_assets_ready && !hooks::cheat::is_level_shutting_down( ) && systems::g_local.get( ).is_valid( ) && systems::g_view.has_camera( ) )
 			{
 				features::misc::g_impacts.on_render_early( dl );
 				features::combat::g_misc.antiaim( ).on_render( dl );

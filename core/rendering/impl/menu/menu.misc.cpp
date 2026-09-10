@@ -403,7 +403,7 @@ namespace rendering {
 					xui::end_popup( );
 				}
 				xui::layout::spacing( 3.0f );
-				xui::toggle( "Death Sound", impacts.death_sound );
+				xui::toggle( "Kill Sound", impacts.death_sound );
 				if ( xui::begin_popup( "##restore_deathsound", 250.0f ) )
 				{
 					xui::combo( "type##ds", impacts.death_sound_type.value, detail::sound_types, detail::k_sound_type_count );
@@ -424,7 +424,7 @@ namespace rendering {
 					xui::end_popup( );
 				}
 				xui::layout::spacing( 3.0f );
-				xui::toggle( "Death Effect", impacts.death_effect );
+				xui::toggle( "Kill Effect", impacts.death_effect );
 				if ( xui::begin_popup( "##restore_death_effect", 250.0f ) )
 				{
 					xui::color_picker( "color##de", impacts.death_effect_color );

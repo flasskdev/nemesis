@@ -54,9 +54,16 @@ namespace features::world {
 		this->update_particles( );
 	}
 
-	void weather::release( )
+	void weather::release( bool destroy_effect )
 	{
-		this->release_particles( );
+		if ( destroy_effect )
+		{
+			this->release_particles( );
+		}
+		this->m_effect_index = invalid_effect_index;
+		this->m_last_particle_type = -1;
+		this->m_last_round_start_time = 0.0f;
+		this->m_particle_loaded = false;
 	}
 
 	void weather::create_particle( )

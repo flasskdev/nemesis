@@ -492,13 +492,12 @@ namespace systems {
 	{
 	public:
 		void update( );
+		void reset( );
 
 		[[nodiscard]] math::vector3 origin( ) const { return this->m_origin; }
 		[[nodiscard]] bool valid( ) const { return this->m_valid; }
 
 	private:
-		void reset( );
-
 		math::vector3 m_origin{};
 		bool m_valid{};
 	};

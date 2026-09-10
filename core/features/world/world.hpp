@@ -6,7 +6,7 @@ namespace features::world {
     {
     public:
         void on_frame_stage_notify( );
-        void release( );
+        void release( bool destroy_effect = true );
 
     private:
         static constexpr std::uint32_t invalid_effect_index{ static_cast<std::uint32_t>( -1 ) };

@@ -551,9 +551,9 @@ namespace features::misc {
 		cmd->buttons.value_scroll = 0;
 	}
 
-	void camera::reset( )
+	void camera::reset( bool restore_view_angles )
 	{
-		if ( this->m_was_freecam_active && settings::g_misc.m_camera.freecam_block_input.value )
+		if ( restore_view_angles && this->m_was_freecam_active && settings::g_misc.m_camera.freecam_block_input.value )
 		{
 			systems::g_input.set_view_angles( this->m_saved_viewangles );
 		}

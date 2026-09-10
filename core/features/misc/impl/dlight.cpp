@@ -88,13 +88,24 @@ namespace features::misc {
 		this->m_logged_scene = false;
 	}
 
-	void dlight::on_level_shutdown( )
+	void dlight::on_level_shutdown( bool retire_engine_entry )
 	{
 		const std::lock_guard lock( this->m_mutex );
 
-		// Retire while the scene system is still alive. Keeping the engine entry
-		// across teardown leaves its queued scene object pointing at a dead parent.
-		this->retire_entry( );
+		if ( retire_engine_entry )
+		{
+			this->retire_entry( );
+			return;
+		}
+
+		// Late disconnect detection: the engine owns teardown of the old entry.
+		this->m_manager = 0;
+		this->m_entry = 0;
+		this->m_scene_object.store( 0, std::memory_order_release );
+		this->m_packed_color.store( 0, std::memory_order_relaxed );
+		this->m_scene_color_scale.store( 0.0f, std::memory_order_relaxed );
+		this->m_logged_submission = false;
+		this->m_logged_scene = false;
 	}
 
 	void dlight::on_frame_stage_notify( )

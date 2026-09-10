@@ -33,6 +33,9 @@ namespace hooks {
 	}
 
 	bool cheat::initialize () {
+		m_level_shutting_down.store( false, std::memory_order_release );
+		m_was_connected = false;
+		m_seen_disconnected = false;
 		if (!hooking::manager::create ({
 			{ &m_present, &present, xs ("present"), addresses::functions::present },
 			{ &m_resize_buffers, &resize_buffers, xs ("resize_buffers"), addresses::functions::resize_buffers }
@@ -143,6 +146,7 @@ namespace hooks {
 		m_get_inaccuracy.reset( );
 		m_get_interpolated_shoot_position.reset( );
 		m_level_initialization.reset( );
+		m_level_shutdown.reset( );
 		m_read_frame_input.reset( );
 		m_process_input_event.reset( );
 		m_render_decals.reset( );
@@ -245,27 +249,41 @@ namespace hooks {
 	void __fastcall cheat::frame_stage_notify( std::uintptr_t thisptr, int stage )
 	{
 		const auto local_player_controller = memory::safe_read<std::uintptr_t>( addresses::globals::local_player_controller ).value_or( 0 );
-		static bool was_connected{ false };
-
 		if ( !local_player_controller )
 		{
-			if ( was_connected )
+			m_seen_disconnected = true;
+			if ( m_was_connected )
 			{
-				was_connected = false;
-				do_level_shutdown( );
+				// The controller is already gone. Engine-owned scene/particle
+				// handles must be forgotten, not destroyed through stale managers.
+				do_level_shutdown( false );
 			}
+			m_was_connected = false;
 		}
-		else
+		else if ( !m_level_initialization.is_enabled( ) && m_seen_disconnected )
 		{
-			was_connected = true;
-			if ( systems::g_entities.is_empty( ) )
-			{
-				systems::g_entities.force_update( );
-			}
+			// Fallback for an unavailable level-init hook: require an observed
+			// disconnected -> connected edge before enabling map features again.
+			m_seen_disconnected = false;
+			m_level_shutting_down.store( false, std::memory_order_release );
 		}
 
-		systems::g_local.update( );
 		features::misc::g_auto_accept.run( );
+		if ( !local_player_controller || is_level_shutting_down( ) )
+		{
+			systems::g_local.reset( );
+			systems::g_view.reset( );
+			systems::g_frame_data.reset( );
+			m_frame_stage_notify.call<void>( thisptr, stage );
+			return;
+		}
+
+		m_was_connected = true;
+		if ( systems::g_entities.is_empty( ) )
+		{
+			systems::g_entities.force_update( );
+		}
+		systems::g_local.update( );
 
 		if ( systems::g_local.get( ).is_valid( ) && systems::g_view.has_camera( ) )
 		{
@@ -309,6 +327,12 @@ namespace hooks {
 
 		m_frame_stage_notify.call<void>( thisptr, stage );
 
+		// The original callback may itself trigger LevelShutdown.
+		if ( is_level_shutting_down( ) )
+		{
+			return;
+		}
+
 		// The current frame's world-to-projection matrix is published by the
 		// engine during render-start stage 12.
 		if ( stage == 12 )
@@ -333,6 +357,11 @@ namespace hooks {
 
 	void __fastcall cheat::create_move( std::uintptr_t thisptr, int slot, bool active )
 	{
+		if ( is_level_shutting_down( ) )
+		{
+			return m_create_move.call<void>( thisptr, slot, active );
+		}
+
 		const auto local = systems::g_local.get( );
 
 		if ( !local.pawn || !local.controller )
@@ -524,6 +553,13 @@ namespace hooks {
 	{
 		m_render_view.call<void>( thisptr );
 
+		if ( is_level_shutting_down( ) || !systems::g_local.get( ).is_valid( ) )
+		{
+			systems::g_view.reset( );
+			systems::g_frame_data.reset( );
+			return;
+		}
+
 		systems::g_view.update( thisptr + 0x10 );
 		systems::g_frame_data.update( );
 	}
@@ -631,6 +667,12 @@ namespace hooks {
 	{
 		diag::exception_scope exception_scope{ "chams: generate primitives" };
 
+		if ( is_level_shutting_down( ) )
+		{
+			m_generate_primitives.call<void>( thisptr, scene_object, scene_view, primitive_buffer );
+			return;
+		}
+
 		if ( scene_object )
 		{
 			if ( features::esp::player::g_chams.bt( ).is_active( scene_object ) )
@@ -685,8 +727,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::parse_report_hit( std::uintptr_t thisptr, std::uint8_t deleting )
 	{
-		// Capture the protobuf fields before the deleting destructor can free them.
-		features::misc::g_impacts.on_report_hit( thisptr );
+		// A report's deleting destructor can also run while the level is torn down.
+		if ( !is_level_shutting_down( ) && systems::g_local.get( ).is_valid( ) )
+		{
+			features::misc::g_impacts.on_report_hit( thisptr );
+		}
 
 		return m_parse_report_hit.call<std::uintptr_t>( thisptr, deleting );
 	}
@@ -957,6 +1002,9 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::level_initialization( std::uintptr_t a1, const char* new_map )
 	{
+		// If shutdown was missed, old map objects are no longer ours to delete.
+		do_level_shutdown( false );
+
 		if ( new_map && new_map[ 0 ] )
 		{
 			const char* leaf = std::strrchr( new_map, '/' );
@@ -966,36 +1014,53 @@ namespace hooks {
 		{
 			rendering::g_widgets.s_map_name.clear( );
 		}
-
 		settings::g_world.update_active( rendering::g_widgets.s_map_name );
 
-		features::esp::player::g_chams.bt( ).shutdown( );
-		features::esp::player::g_chams.os( ).shutdown( );
-		features::world::g_weather.release( );
-		systems::materials::clear_clones( );
-
-		features::world::g_scene.reset_skybox_state( );
-		features::misc::g_impacts.on_level_change( );
-		features::misc::g_scoreboard_weapons.on_level_change( );
-
-		return m_level_initialization.call<std::uintptr_t>( a1, new_map );
+		const auto result = m_level_initialization.call<std::uintptr_t>( a1, new_map );
+		m_was_connected = false;
+		m_seen_disconnected = false;
+		m_level_shutting_down.store( false, std::memory_order_release );
+		return result;
 	}
 
-	void cheat::do_level_shutdown( )
+	void cheat::do_level_shutdown( bool release_engine_resources )
 	{
+		// LevelShutdown and the controller-loss fallback share one cleanup state.
+		if ( m_level_shutting_down.exchange( true, std::memory_order_acq_rel ) )
+		{
+			return;
+		}
+		m_was_connected = false;
+
+		diag::exception_scope exception_scope{ "level shutdown: invalidate snapshots" };
+		diag::step( release_engine_resources
+			? "level shutdown: pre-engine cleanup"
+			: "level shutdown: cache-only cleanup" );
+
+		// Stop publishing the old level before entering engine destructors.
+		systems::g_local.reset( );
+		systems::g_view.reset( );
+		systems::g_frame_data.reset( );
+		systems::g_model_preview.reset( );
 		rendering::g_widgets.s_map_name.clear( );
 		settings::g_world.update_active( "" );
 
-		// Release feature-owned scene objects before Source 2 tears their parents down.
-		features::esp::player::g_chams.bt( ).shutdown( );
-		features::esp::player::g_chams.os( ).shutdown( );
-		features::world::g_weather.release( );
-		systems::materials::clear_clones( );
+		diag::set_exception_phase( "level shutdown: backtrack objects" );
+		features::esp::player::g_chams.bt( ).shutdown( release_engine_resources );
+		diag::set_exception_phase( "level shutdown: onshot objects" );
+		features::esp::player::g_chams.os( ).shutdown( release_engine_resources );
+		diag::set_exception_phase( "level shutdown: weather" );
+		features::world::g_weather.release( release_engine_resources );
+		diag::set_exception_phase( "level shutdown: dynamic light" );
+		features::misc::g_dlight.on_level_shutdown( release_engine_resources );
 
-		features::misc::g_dlight.on_level_shutdown( );
+		diag::set_exception_phase( "level shutdown: local caches" );
+		systems::materials::clear_clones( );
 		features::misc::g_vote_logs.reset( );
-		features::misc::g_camera.reset( );
-		features::misc::g_motion_blur.reset( );
+		// Do not restore view angles into input objects belonging to the old map.
+		features::misc::g_camera.reset( false );
+		// Motion-blur state is render-thread owned; its next Present resets it
+		// after observing the invalid local snapshot.
 		features::misc::g_impacts.on_level_change( );
 		features::misc::g_scoreboard_weapons.on_level_change( );
 		features::world::g_scene.reset_skybox_state( );
@@ -1004,23 +1069,16 @@ namespace hooks {
 		features::changer::g_knives.reset( );
 		features::changer::g_gloves.reset( );
 		features::changer::g_agents.reset( );
-
-		// clear cached entities and view state on level shutdown
 		systems::g_entities.reset( );
-		systems::g_view.reset( );
-
-		// clear all local player data on level shutdown
-		systems::g_local.reset( );
-
-		systems::g_model_preview.reset( );
 		features::combat::g_shared.lc( ).clear( );
-
 		detail::g_vm_anim.initialized = false;
+		diag::step( "level shutdown: cleanup complete" );
 	}
 
 	std::uintptr_t __fastcall cheat::level_shutdown( std::uintptr_t a1 )
 	{
-		do_level_shutdown( );
+		do_level_shutdown( true );
+		diag::exception_scope exception_scope{ "level shutdown: engine" };
 		return m_level_shutdown.call<std::uintptr_t>( a1 );
 	}
 

@@ -269,7 +269,7 @@ namespace features::misc {
 		void on_override_view( std::uintptr_t view_setup );
 		void on_create_move( systems::input::usercmd* cmd );
 		void update_fov_sensitivity( std::uintptr_t player_pawn ) const;
-		void reset( );
+		void reset( bool restore_view_angles = true );
 
 		[[nodiscard]] bool is_freecam_active( ) const noexcept { return this->m_was_freecam_active; }
 
@@ -352,7 +352,7 @@ namespace features::misc {
 	public:
 		void on_present( );
 		void on_frame_stage_notify( );
-		void on_level_shutdown( );
+		void on_level_shutdown( bool retire_engine_entry = true );
 		void apply_scene_color( std::uintptr_t object ) const;
 
 	private:

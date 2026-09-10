@@ -75,8 +75,17 @@ namespace features::misc {
 
 	void impacts::on_render_early( xdraw::draw_list& draw_list )
 	{
-		const auto global_vars = memory::read<std::uintptr_t>( addresses::globals::global_vars );
-		const auto current_time = memory::read<float>( global_vars + 0x30 );
+		const auto global_vars = memory::safe_read<std::uintptr_t>( addresses::globals::global_vars ).value_or( 0 );
+		if ( !global_vars )
+		{
+			return;
+		}
+		const auto time = memory::safe_read<float>( global_vars + 0x30 );
+		if ( !time || !std::isfinite( *time ) )
+		{
+			return;
+		}
+		const auto current_time = *time;
 
 		this->render_hit_effect( draw_list, current_time );
 		this->render_bullet_impact_overlays( draw_list, current_time );
@@ -111,8 +120,17 @@ namespace features::misc {
 
 	void impacts::on_render( xdraw::draw_list& draw_list )
 	{
-		const auto global_vars = memory::read<std::uintptr_t>( addresses::globals::global_vars );
-		const auto current_time = memory::read<float>( global_vars + 0x30 );
+		const auto global_vars = memory::safe_read<std::uintptr_t>( addresses::globals::global_vars ).value_or( 0 );
+		if ( !global_vars )
+		{
+			return;
+		}
+		const auto time = memory::safe_read<float>( global_vars + 0x30 );
+		if ( !time || !std::isfinite( *time ) )
+		{
+			return;
+		}
+		const auto current_time = *time;
 
 		this->check_misses( );
 
