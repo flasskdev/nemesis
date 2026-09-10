@@ -456,6 +456,14 @@ namespace features::combat {
         if (config.no_spread.value)
         {
             shared_ctx.inaccuracy = g_shared.get_inaccuracy(false);
+            if (shared_ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver)
+            {
+                // build_context() restores weapon prediction before returning.
+                // Pair the live inaccuracy above with spread and recoil from the
+                // same restored state, not spread from a speculative R8 shot.
+                shared_ctx.spread = g_shared.get_spread();
+                shared_ctx.recoil_index = memory::read<float>(shared_ctx.weapon + SCHEMA("C_CSWeaponBase", "m_flRecoilIndex"_hash));
+            }
             auto all_hits = scan_from_eye_candidates({}, shared_ctx.inaccuracy);
             const auto best = all_hits.empty() ? target{} : this->select_best(ctx, all_hits, shared_ctx.inaccuracy);
 
@@ -1819,9 +1827,17 @@ namespace features::combat {
 
         const auto punched_aim = math::vector3{ aim_angle.x - aim_punch.x, aim_angle.y - aim_punch.y, 0.0f };
         const auto facing_away = forward.dot((tgt.hit.record->origin - systems::g_prediction.pre().networked_origin).normalized()) < 0.707107f;
+        const auto revolver_no_spread = config.no_spread.value &&
+            shared_ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver;
 
         auto command_aim = punched_aim;
-        if (facing_away && settings::g_combat.m_antiaim.hide_shots.value)
+        if (revolver_no_spread)
+        {
+            // R8 fires after a continuous hold, not a new attack edge. Preserve
+            // the full correction in the base command as well as input history.
+            command_aim.z = aim_angle.z;
+        }
+        if (!revolver_no_spread && facing_away && settings::g_combat.m_antiaim.hide_shots.value)
         {
             command_aim.x = 179.9f;
             command_aim.y = std::remainderf(punched_aim.y + 180.0f, 360.0f);
@@ -1831,10 +1847,15 @@ namespace features::combat {
         {
             angles->set_x(command_aim.x);
             angles->set_y(command_aim.y);
+            if (revolver_no_spread)
+            {
+                angles->set_z(command_aim.z);
+            }
         }
 
         if (!config.silent.value)
         {
+            // Keep the visible camera upright; roll belongs to the shot only.
             systems::g_input.set_view_angles(punched_aim);
         }
     }
