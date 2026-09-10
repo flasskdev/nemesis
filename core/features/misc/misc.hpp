@@ -127,7 +127,8 @@ namespace features::misc {
 		void on_bullet_impact( std::uintptr_t event );
 		void on_base_fire_guns_get_inaccuracy( std::uintptr_t weapon, float inaccuracy );
 		void on_get_interpolated_shoot_position( std::uintptr_t weapon_services, float* out );
-		void on_boom( std::uintptr_t victim_pawn, int hitgroup, float damage, float hitchance, float inaccuracy, float spread, const math::vector3& aim_angle, const math::vector3& shoot_position, int tick, const std::array<systems::bones::data, 27>& skeleton, bool forced );
+		void on_boom( std::uintptr_t victim_pawn, int hitgroup, float damage, float hitchance, float inaccuracy, float spread, const math::vector3& aim_angle, const math::vector3& shoot_position, int tick, const std::array<systems::bones::data, 27>& skeleton, bool forced, std::uint32_t deferred_weapon = 0, int command_tick = 0 );
+		void observe_revolver_shot( );
 
 		[[nodiscard]] static std::vector<std::string> list_custom_sounds( );
 		[[nodiscard]] static std::string custom_sounds_directory_narrow( );
@@ -161,6 +162,16 @@ namespace features::misc {
 			bool forced{};
 			std::uint32_t weapon_type{};
 		};
+
+		struct prepared_revolver_shot
+		{
+			shot_record shot{};
+			int command_tick{};
+			std::uint32_t target_handle{};
+		};
+		std::vector<prepared_revolver_shot> m_prepared_revolver_shots{};
+		std::uint32_t m_revolver_weapon_handle{};
+		float m_revolver_observed_shot_time{};
 
 		struct hit_data
 		{

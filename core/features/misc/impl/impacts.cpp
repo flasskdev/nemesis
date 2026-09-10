@@ -112,6 +112,9 @@ namespace features::misc {
 		this->m_logs.clear( );
 		this->m_pending_hits.clear( );
 		this->m_pending_shots.clear( );
+		this->m_prepared_revolver_shots.clear( );
+		this->m_revolver_weapon_handle = 0;
+		this->m_revolver_observed_shot_time = 0.0f;
 		this->m_bullet_impacts.clear( );
 		this->m_buffered_impacts.clear( );
 		this->m_buffered_impact_time = -1.0f;
@@ -173,6 +176,8 @@ namespace features::misc {
 			return;
 		}
 
+		// Local-server events may precede the next CreateMove observation.
+		this->observe_revolver_shot( );
 		const auto data = this->parse_event( event );
 		if ( !data.victim_pawn )
 		{
@@ -290,6 +295,7 @@ namespace features::misc {
 			return;
 		}
 
+		this->observe_revolver_shot( );
 		const auto x = memory::call<float>(PATTERN (patterns::game_event_get_float), event, "x", 0.0f );
 		const auto y = memory::call<float>(PATTERN (patterns::game_event_get_float), event, "y", 0.0f );
 		const auto z = memory::call<float>(PATTERN (patterns::game_event_get_float), event, "z", 0.0f );
@@ -481,7 +487,7 @@ namespace features::misc {
 		}
 	}
 
-	void impacts::on_boom( std::uintptr_t victim_pawn, int hitgroup, float damage, float hitchance, float inaccuracy, float spread, const math::vector3& aim_angle, const math::vector3& shoot_position, int tick, const std::array<systems::bones::data, 27>& skeleton, bool forced )
+	void impacts::on_boom( std::uintptr_t victim_pawn, int hitgroup, float damage, float hitchance, float inaccuracy, float spread, const math::vector3& aim_angle, const math::vector3& shoot_position, int tick, const std::array<systems::bones::data, 27>& skeleton, bool forced, std::uint32_t deferred_weapon, int command_tick )
 	{
 		const auto global_vars = memory::read<std::uintptr_t>( addresses::globals::global_vars );
 		const auto current_time = memory::read<float>( global_vars + 0x30 );
@@ -492,7 +498,7 @@ namespace features::misc {
 		const auto current_tick = features::combat::g_shared.ctx( ).current_tick;
 		const auto bt_ticks = ( tick > 0 && current_tick >= tick ) ? ( current_tick - tick ) : 0;
 
-		this->m_pending_shots.push_back(
+		shot_record shot
 			{
 				.victim_pawn = victim_pawn,
 				.hitgroup = hitgroup,
@@ -513,12 +519,88 @@ namespace features::misc {
 				.target_velocity = target_velocity,
 				.forced = forced,
 				.weapon_type = features::combat::g_shared.ctx( ).weapon_type,
-			} );
+			};
 
+		if ( deferred_weapon )
+		{
+			const auto weapon = systems::g_entities.lookup( deferred_weapon );
+			if ( !weapon ) return;
+			if ( this->m_revolver_weapon_handle != deferred_weapon )
+			{
+				this->m_prepared_revolver_shots.clear( );
+				this->m_revolver_weapon_handle = deferred_weapon;
+				this->m_revolver_observed_shot_time = memory::read<float>( weapon + SCHEMA( "C_CSWeaponBase", "m_fLastShotTime"_hash ) );
+			}
+			const auto controller_handle = memory::read<std::uint32_t>( victim_pawn + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			const auto controller = systems::g_entities.lookup( controller_handle );
+			if ( !controller ) return;
+			const auto target_handle = memory::read<std::uint32_t>( controller + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( systems::g_entities.lookup( target_handle ) != victim_pawn ) return;
+			auto& prepared = this->m_prepared_revolver_shots;
+			if ( !prepared.empty( ) && command_tick < prepared.back( ).command_tick ) prepared.clear( );
+			if ( !prepared.empty( ) && command_tick == prepared.back( ).command_tick ) prepared.pop_back( );
+			prepared.push_back( { shot, command_tick, target_handle } );
+			if ( prepared.size( ) > 128 ) prepared.erase( prepared.begin( ) );
+			return;
+		}
+
+		this->m_pending_shots.push_back( shot );
 		if ( this->m_pending_shots.size( ) > 64 )
 		{
 			this->m_pending_shots.erase( this->m_pending_shots.begin( ) );
 		}
+	}
+
+	void impacts::observe_revolver_shot( )
+	{
+		std::unique_lock lock( this->m_mtx );
+		if ( !this->m_revolver_weapon_handle ) return;
+		const auto weapon = systems::g_entities.lookup( this->m_revolver_weapon_handle );
+		if ( !weapon )
+		{
+			this->m_prepared_revolver_shots.clear( );
+			this->m_revolver_weapon_handle = 0;
+			return;
+		}
+		const auto shot_time = memory::read<float>( weapon + SCHEMA( "C_CSWeaponBase", "m_fLastShotTime"_hash ) );
+		if ( !std::isfinite( shot_time ) || shot_time <= this->m_revolver_observed_shot_time ) return;
+		// A monotonic watermark prevents replay/correction from logging twice.
+		this->m_revolver_observed_shot_time = shot_time;
+		auto& prepared = this->m_prepared_revolver_shots;
+		auto best = prepared.size( );
+		auto best_delta = cstypes::tick_interval + 0.0001f;
+		for ( auto i = std::size_t{}; i < prepared.size( ); ++i )
+		{
+			// Commands simulate tickbase + 1. Allow one tick of observation
+			// boundary difference, but never attach an arbitrary old target.
+			const auto command_time = ( static_cast<float>( prepared[i].command_tick ) + 1.0f ) * cstypes::tick_interval;
+			const auto delta = std::fabs( shot_time - command_time );
+			if ( delta < best_delta )
+			{
+				best_delta = delta;
+				best = i;
+			}
+		}
+		if ( best == prepared.size( ) )
+		{
+			if ( settings::g_misc.m_impacts.console_log.value )
+				logging::console::print( xs( "[r8:unmatched] discharge at {:.6f}; no prepared command within one tick" ), shot_time );
+			std::erase_if( prepared, [shot_time]( const auto& entry )
+			{
+				return static_cast<float>( entry.command_tick ) * cstypes::tick_interval <= shot_time;
+			} );
+			return;
+		}
+		const auto confirmed = prepared[best];
+		prepared.erase( prepared.begin( ), prepared.begin( ) + best + 1 );
+		if ( systems::g_entities.lookup( confirmed.target_handle ) != confirmed.shot.victim_pawn ) return;
+		this->m_pending_shots.push_back( confirmed.shot );
+		if ( this->m_pending_shots.size( ) > 64 ) this->m_pending_shots.erase( this->m_pending_shots.begin( ) );
+		if ( settings::g_misc.m_impacts.console_log.value )
+			logging::console::print( xs( "[rage] R8 discharge at {:.6f}, command {}, damage {:.0f}, hc {:.0f}%" ),
+				shot_time, confirmed.command_tick, confirmed.shot.damage, confirmed.shot.hitchance * 100.0f );
+		lock.unlock( );
+		features::esp::player::g_chams.os( ).push( confirmed.shot.victim_pawn );
 	}
 
 	const char* impacts::classify_shot_deviation( const shot_record& shot ) const
