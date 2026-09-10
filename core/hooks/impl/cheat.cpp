@@ -86,7 +86,8 @@ namespace hooks {
 			{ &m_draw_flash_effect, &draw_flash_effect, xs ("draw_flash_effect"), PATTERN (patterns::draw_flash_effect) },
 			{ &m_set_info, &set_info, xs ("set_info"), PATTERN (patterns::set_info) },
 			{ &m_calculate_viewmodel, &calculate_viewmodel, xs ("calculate_viewmodel"), PATTERN (patterns::calculate_viewmodel) },
-			{ &m_spec_cmds_handler, &spec_cmds_handler, xs ("spec_cmds_handler"), PATTERN (patterns::spec_cmds_handler) }
+			{ &m_spec_cmds_handler, &spec_cmds_handler, xs ("spec_cmds_handler"), PATTERN (patterns::spec_cmds_handler) },
+			{ &m_collect_attached_entities, &collect_attached_entities, xs ("collect_attached_entities"), PATTERN (patterns::collect_attached_entities) }
 		};
 
 		auto unavailable_hooks = 0u;
@@ -157,6 +158,7 @@ namespace hooks {
 		m_set_info.reset( );
 		m_calculate_viewmodel.reset( );
 		m_spec_cmds_handler.reset( );
+		m_collect_attached_entities.reset( );
 	}
 
 	HRESULT __fastcall cheat::present( IDXGISwapChain* thisptr, UINT sync_interval, UINT flags )
@@ -1490,6 +1492,23 @@ namespace hooks {
 			using set_observer_target_fn = void( __fastcall* )( std::uintptr_t, std::uintptr_t );
 			reinterpret_cast<set_observer_target_fn>( vtable[ 35 ] )( observer_services, target_pawn );
 		}
+	}
+
+	int __fastcall cheat::collect_attached_entities( std::uintptr_t entity, std::uintptr_t out_vec )
+	{
+		if ( !entity )
+		{
+			return out_vec ? memory::safe_read<int>( out_vec ).value_or( 0 ) : 0;
+		}
+
+		const auto scene_node = memory::safe_read<std::uintptr_t>(
+			entity + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
+		if ( !scene_node )
+		{
+			return out_vec ? memory::safe_read<int>( out_vec ).value_or( 0 ) : 0;
+		}
+
+		return m_collect_attached_entities.call<int>( entity, out_vec );
 	}
 
 } // namespace hooks

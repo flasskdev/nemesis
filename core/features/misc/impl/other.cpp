@@ -142,11 +142,6 @@ namespace features::misc {
 				memory::call<void>(set, iv, "kill eater", count_val);
 			}
 
-			if (PATTERN(patterns::weapon_update_modules))
-			{
-				memory::call<void>(PATTERN(patterns::weapon_update_modules), active_weapon);
-			}
-
 			config::registry::save_active();
 		}
 

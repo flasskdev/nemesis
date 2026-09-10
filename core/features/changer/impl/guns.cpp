@@ -196,10 +196,7 @@ namespace features::changer {
 			memory::call<void>( PATTERN( patterns::weapon_update_skin ), weapon, true );
 		}
 
-		if ( PATTERN( patterns::weapon_update_modules ) )
-		{
-			memory::call<void>( PATTERN( patterns::weapon_update_modules ), weapon );
-		}
+
 	}
 
 	void guns::update_view_model( std::uintptr_t pawn, const econ_item_system::paint_kit* pk )

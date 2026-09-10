@@ -182,10 +182,6 @@ namespace features::changer {
 					const auto paint_kit_id = memory::read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
 					const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
 					this->update_view_model( local.pawn, pk );
-					if ( PATTERN( patterns::weapon_update_modules ) )
-					{
-						memory::call<void>( PATTERN( patterns::weapon_update_modules ), active_weapon );
-					}
 				}
 			}
 		}
@@ -313,11 +309,6 @@ namespace features::changer {
 		memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
 		memory::call_vfunc<void>( weapon, 10, 1 );
 		memory::call<void>( PATTERN( patterns::weapon_update_skin ), weapon, true );
-
-		if ( PATTERN( patterns::weapon_update_modules ) )
-		{
-			memory::call<void>( PATTERN( patterns::weapon_update_modules ), weapon );
-		}
 	}
 
 	void knives::update_view_model( std::uintptr_t pawn, const econ_item_system::paint_kit* pk )

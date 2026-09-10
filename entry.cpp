@@ -154,6 +154,23 @@ namespace {
 			return EXCEPTION_CONTINUE_SEARCH;
 		}
 
+		// Safety catch: client.dll collect_attached_entities null dereference of m_pGameSceneNode (access violation reading 0x40)
+		if ( info->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+			info->ExceptionRecord->NumberParameters > 1 &&
+			info->ExceptionRecord->ExceptionInformation[ 1 ] == 0x40 &&
+			info->ContextRecord &&
+			info->ContextRecord->Rax == 0 )
+		{
+			const auto* ip = reinterpret_cast<const std::uint8_t*>( info->ExceptionRecord->ExceptionAddress );
+			if ( ip && !IsBadReadPtr( ip, 4 ) &&
+				ip[ 0 ] == 0x48 && ip[ 1 ] == 0x8B && ip[ 2 ] == 0x48 && ip[ 3 ] == 0x40 )
+			{
+				info->ContextRecord->Rcx = 0;
+				info->ContextRecord->Rip += 4;
+				return EXCEPTION_CONTINUE_EXECUTION;
+			}
+		}
+
 		// The host or Steam may replace the single process-wide last-chance
 		// filter after injection. Re-arm it at first chance and preserve the
 		// displaced handler so the host still receives the crash after us.

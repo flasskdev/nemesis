@@ -720,10 +720,10 @@ namespace patterns {
 		::protection::addresses::address_type::pattern,
 		"client.dll:4055534157488DAC2400FEFFFF4881EC00030000440FB6FA488BD9");
 
-	const ::protection::addresses::address_t& weapon_update_modules = ADDRESS_IMPL(
-		::protection::addresses::hash("client.dll:48895C2408574883EC30488BD9E8????????BA01000000488BCB"),
+	const ::protection::addresses::address_t& collect_attached_entities = ADDRESS_IMPL(
+		::protection::addresses::hash("client.dll:40534883EC20488B81????????488BDA488B48404885C9"),
 		::protection::addresses::address_type::pattern,
-		"client.dll:48895C2408574883EC30488BD9E8????????BA01000000488BCB");
+		"client.dll:40534883EC20488B81????????488BDA488B48404885C9");
 
 	const ::protection::addresses::address_t& econ_item_view_set_attribute = ADDRESS_IMPL(
 		::protection::addresses::hash("client.dll:40534883EC20488BD94881C108020000"),

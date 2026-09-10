@@ -152,7 +152,7 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& weapon_update_composite_material;
 	extern const ::protection::addresses::address_t& weapon_update_mesh;
 	extern const ::protection::addresses::address_t& weapon_update_skin;
-	extern const ::protection::addresses::address_t& weapon_update_modules;
+	extern const ::protection::addresses::address_t& collect_attached_entities;
 	extern const ::protection::addresses::address_t& econ_item_view_set_attribute;
 	extern const ::protection::addresses::address_t& econ_item_view_remove_attribute;
 	extern const ::protection::addresses::address_t& econ_item_view_invalidate_description;
