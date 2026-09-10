@@ -426,7 +426,7 @@ namespace features::combat {
 		[[nodiscard]] std::vector<candidate> gather_candidates( const systems::local::snapshot& local, float max_distance_sq = 0.0f ) const;
 
 		// Returns whether a target exists from the current shoot position.
-		bool run_gun( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire = true );
+		bool run_gun( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire = true, bool prepare_only = false );
 		void run_taser( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
 		void run_knife( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
 		void auto_revolver( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
@@ -442,7 +442,7 @@ namespace features::combat {
 		[[nodiscard]] knife_info get_knife_info( const systems::local::snapshot& local ) const;
 		[[nodiscard]] std::vector<scan_hit> scan_knife( const math::vector3& eye, const aim_context& ctx, const knife_info& info, std::vector<candidate>& candidates, const systems::local::snapshot& local ) const;
 
-		void fire_gun( systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local );
+		void fire_gun( systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local, bool prepare_only = false );
 		void fire_melee( systems::input::usercmd* cmd, const target& tgt, const systems::local::snapshot& local );
 
 		[[nodiscard]] std::vector<math::vector3> generate_multipoints( const systems::hitboxes::entry& hitbox, const math::vector3& center, const math::quaternion& bone_rot, float pointscale, const math::vector3& shoot_pos, float inaccuracy ) const;
@@ -480,8 +480,10 @@ namespace features::combat {
 			this->m_revolver_last_shot_time = 0.0f;
 			this->m_revolver_probe_valid = false;
 			this->m_revolver_probe_would_fire = false;
+			this->m_revolver_command_prepared = false;
 		}
 
+		bool m_revolver_command_prepared{};
 		bool m_revolver_cocking{};
 		bool m_revolver_attack_held{};
 		std::uintptr_t m_revolver_weapon{};

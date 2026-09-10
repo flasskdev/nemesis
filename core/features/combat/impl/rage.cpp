@@ -59,6 +59,8 @@ namespace features::combat {
             return;
         }
 
+        // Observe restored weapon state before speculative prediction.
+        features::misc::g_impacts.observe_revolver_shot();
         auto aim_ctx = this->build_context(cmd, local);
 
         if (is_knife)
@@ -381,7 +383,7 @@ namespace features::combat {
         return out;
     }
 
-    bool rage::run_gun(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire)
+    bool rage::run_gun(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire, bool prepare_only)
     {
         if (!settings::g_combat.m_ragebot.enabled)
         {
@@ -469,8 +471,8 @@ namespace features::combat {
 
             if (best.valid && allow_fire)
             {
-                this->fire_gun(cmd, best, false, best.hit.source_eye.position, local);
-                if (duckpeek_active && this->m_firing_this_tick)
+                this->fire_gun(cmd, best, false, best.hit.source_eye.position, local, prepare_only);
+                if (!prepare_only && duckpeek_active && this->m_firing_this_tick)
                 {
                     this->m_duckpeek_reduck = true;
                     this->m_duckpeek_reduck_ticks = 10;
@@ -534,8 +536,8 @@ namespace features::combat {
         // If a viable shot is available from current eye position right now: FIRE!
         if (shot_viable && allow_fire)
         {
-            this->fire_gun(cmd, best, !accurate && force, best.hit.source_eye.position, local);
-            if (duckpeek_active && this->m_firing_this_tick)
+            this->fire_gun(cmd, best, !accurate && force, best.hit.source_eye.position, local, prepare_only);
+            if (!prepare_only && duckpeek_active && this->m_firing_this_tick)
             {
                 this->m_duckpeek_reduck = true;
                 this->m_duckpeek_reduck_ticks = 10;
@@ -757,8 +759,24 @@ namespace features::combat {
                 this->m_revolver_probe_valid, this->m_revolver_probe_would_fire,
                 this->m_revolver_attack_held, this->m_revolver_cocking);
         }
+        if (this->m_revolver_last_clip >= 0 && this->m_revolver_attack_held &&
+            std::isfinite(observed_shot_time) && observed_shot_time > this->m_revolver_last_shot_time)
+        {
+            this->m_firing_this_tick = true;
+            g_shared.last_shoot_tick() = memory::read<int>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash));
+            if (settings::g_combat.m_duckpeek.enabled.value && ctx.on_ground)
+            {
+                this->m_duckpeek_reduck = true;
+                this->m_duckpeek_reduck_ticks = 10;
+                this->m_release_duck_for_shot = false;
+            }
+        }
         this->m_revolver_last_clip = observed_clip;
-        this->m_revolver_last_shot_time = observed_shot_time;
+        if (std::isfinite(observed_shot_time))
+        {
+            this->m_revolver_last_shot_time = std::max(this->m_revolver_last_shot_time, observed_shot_time);
+        }
+        this->m_revolver_command_prepared = false;
         // Previous-probe values describe the preceding command only, not a
         // server acknowledgement or an exact match to a delayed weapon event.
         this->m_revolver_probe_valid = false;
@@ -791,7 +809,7 @@ namespace features::combat {
         {
             set_primary(false);
             this->m_revolver_cocking = false;
-            this->m_firing_this_tick = false;
+            // Cancelling this command must not erase an observed previous shot.
         };
 
         if (!settings::g_combat.m_ragebot.enabled || !need_auto_cock)
@@ -908,41 +926,19 @@ namespace features::combat {
                 history_size, config.no_spread.value);
         }
 
-        if (!simulated)
-        {
-            cancel();
-            sync_buttons();
-            static bool reported = false;
-            if (!reported)
-            {
-                logging::console::print(xs("[rage] R8 automatic fire disabled for this command: weapon prediction unavailable"));
-                reported = true;
-            }
-            return;
-        }
-
-        if (!would_fire)
-        {
-            // Keep a continuous hold while cocking. No shot log, quickpeek return,
-            // nospread shot stamp, or last_shoot_tick is generated on these commands.
-            this->m_revolver_cocking = true;
-            sync_buttons();
-            return;
-        }
-
-        // This is a firing command. Revalidate the target and prepare its angles,
-        // seed and history through the regular fire_gun/nospread path. Never
-        // reinstate attack after fire_gun rejects the target or spread correction.
+        // The probe is diagnostic only: the engine can discharge R8 while
+        // would_fire remains false. Every held command must carry corrected aim.
+        // Preparation copies a candidate snapshot but creates no hit/miss record.
         set_primary(false);
-        this->m_revolver_cocking = false;
-        this->run_gun(cmd, ctx, local);
-        if (!this->m_firing_this_tick)
+        this->run_gun(cmd, ctx, local, true, true);
+        if (!this->m_revolver_command_prepared)
         {
             cancel();
         }
         else
         {
             set_primary(true);
+            this->m_revolver_cocking = !this->m_firing_this_tick;
         }
         sync_buttons();
     }
@@ -1720,16 +1716,33 @@ namespace features::combat {
         return results;
     }
 
-    void rage::fire_gun(systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local)
+    void rage::fire_gun(systems::input::usercmd* cmd, const target& tgt, bool was_forced, const math::vector3& shoot_eye, const systems::local::snapshot& local, bool prepare_only)
     {
         if (!tgt.hit.record || !tgt.hit.record->valid)
         {
             return;
         }
 
-        this->m_firing_this_tick = true;
+        if (!prepare_only)
+        {
+            this->m_firing_this_tick = true;
+        }
 
         const auto base = cmd->csgo_user_cmd.mutable_base();
+        if (!base || !base->mutable_viewangles())
+        {
+            return;
+        }
+        if (prepare_only)
+        {
+            const auto count = cmd->csgo_user_cmd.input_history_size();
+            if (count <= 0) return;
+            for (auto i = 0; i < count; ++i)
+            {
+                const auto entry = cmd->csgo_user_cmd.mutable_input_history(i);
+                if (!entry || !entry->mutable_view_angles()) return;
+            }
+        }
         const auto tick_base = memory::read<int>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash));
         const auto& shared_ctx = g_shared.ctx();
         const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
@@ -1752,18 +1765,19 @@ namespace features::combat {
         if (config.no_spread.value)
         {
             const auto corrected = g_shared.find_spread_correction(aim_angle, stamp_tick);
-            if (corrected.x == 0.0f && corrected.y == 0.0f && corrected.z == 0.0f)
+            if ((corrected.x == 0.0f && corrected.y == 0.0f && corrected.z == 0.0f) ||
+                !std::isfinite(corrected.x) || !std::isfinite(corrected.y) || !std::isfinite(corrected.z))
             {
-                this->m_firing_this_tick = false;
+                if (!prepare_only) this->m_firing_this_tick = false;
                 return;
             }
 
             aim_angle = corrected;
         }
 
-        g_shared.last_shoot_tick() = tick_base;
+        if (!prepare_only) g_shared.last_shoot_tick() = tick_base;
 
-        if (settings::g_misc.m_impacts.console_log.value)
+        if (!prepare_only && settings::g_misc.m_impacts.console_log.value)
         {
             const auto hitgroup_name = systems::g_hitboxes.hitgroup_to_name(tgt.hit.hitgroup);
             const auto bt_delta = g_shared.ctx().current_tick - tgt.hit.record->tick;
@@ -1781,8 +1795,11 @@ namespace features::combat {
             );
         }
 
-        features::misc::g_impacts.on_boom(tgt.hit.pawn, tgt.hit.hitgroup, tgt.hit.damage, tgt.hitchance, shared_ctx.inaccuracy, shared_ctx.spread, aim_angle, shoot_eye, tgt.hit.record->tick, g_shared.lc().get_skeleton(*tgt.hit.record), was_forced);
-        features::esp::player::g_chams.os().push(tgt.hit.pawn);
+        if (!prepare_only)
+        {
+            features::misc::g_impacts.on_boom(tgt.hit.pawn, tgt.hit.hitgroup, tgt.hit.damage, tgt.hitchance, shared_ctx.inaccuracy, shared_ctx.spread, aim_angle, shoot_eye, tgt.hit.record->tick, g_shared.lc().get_skeleton(*tgt.hit.record), was_forced);
+            features::esp::player::g_chams.os().push(tgt.hit.pawn);
+        }
 
         const auto record_time = cstypes::tick_fraction::from_value(tgt.hit.record->simulation_time / cstypes::tick_interval);
         const auto history_size = cmd->csgo_user_cmd.input_history_size();
@@ -1889,6 +1906,17 @@ namespace features::combat {
         {
             // Keep the visible camera upright; roll belongs to the shot only.
             systems::g_input.set_view_angles(punched_aim);
+        }
+
+        if (prepare_only)
+        {
+            const auto handle = memory::read<std::uint32_t>(shared_ctx.weapon_services + SCHEMA("CPlayer_WeaponServices", "m_hActiveWeapon"_hash));
+            if (!handle || systems::g_entities.lookup(handle) != shared_ctx.weapon) return;
+            // Copy the pose while valid; do not retain lag-record pointers.
+            // Miss classification uses the desired bullet direction, not roll.
+            const auto intended_aim = math::helpers::calculate_angle(shoot_eye, tgt.hit.position);
+            features::misc::g_impacts.on_boom(tgt.hit.pawn, tgt.hit.hitgroup, tgt.hit.damage, tgt.hitchance, shared_ctx.inaccuracy, shared_ctx.spread, intended_aim, shoot_eye, tgt.hit.record->tick, g_shared.lc().get_skeleton(*tgt.hit.record), was_forced, handle, tick_base);
+            this->m_revolver_command_prepared = true;
         }
     }
 
