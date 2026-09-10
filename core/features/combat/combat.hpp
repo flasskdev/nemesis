@@ -476,11 +476,19 @@ namespace features::combat {
 			this->m_revolver_cocking = false;
 			this->m_revolver_attack_held = false;
 			this->m_revolver_weapon = 0;
+			this->m_revolver_last_clip = -1;
+			this->m_revolver_last_shot_time = 0.0f;
+			this->m_revolver_probe_valid = false;
+			this->m_revolver_probe_would_fire = false;
 		}
 
 		bool m_revolver_cocking{};
 		bool m_revolver_attack_held{};
 		std::uintptr_t m_revolver_weapon{};
+		int m_revolver_last_clip{ -1 };
+		float m_revolver_last_shot_time{};
+		bool m_revolver_probe_valid{};
+		bool m_revolver_probe_would_fire{};
 		std::atomic<penetration_crosshair_state> m_penetration_crosshair_state{ penetration_crosshair_state::unavailable };
 
 		std::vector<shared::lagcomp::record> m_extrapolated_records{};

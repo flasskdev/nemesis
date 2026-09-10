@@ -743,6 +743,27 @@ namespace features::combat {
             this->m_revolver_weapon = shared_ctx.weapon;
         }
 
+        // Observe restored/live state before any speculative simulation. This
+        // diagnostic does not depend on fire_gun() creating a pending shot.
+        const auto observed_clip = memory::read<int>(shared_ctx.weapon + SCHEMA("C_BasePlayerWeapon", "m_iClip1"_hash));
+        const auto observed_shot_time = memory::read<float>(shared_ctx.weapon + SCHEMA("C_CSWeaponBase", "m_fLastShotTime"_hash));
+        if (settings::g_misc.m_impacts.console_log.value && this->m_revolver_last_clip >= 0 &&
+            (observed_clip < this->m_revolver_last_clip || observed_shot_time > this->m_revolver_last_shot_time))
+        {
+            logging::console::print(
+                xs("[r8:observed] clip {} -> {}, last_shot {:.6f} -> {:.6f}, previous_probe valid={} would_fire={}, held={}, cocking={}"),
+                this->m_revolver_last_clip, observed_clip,
+                this->m_revolver_last_shot_time, observed_shot_time,
+                this->m_revolver_probe_valid, this->m_revolver_probe_would_fire,
+                this->m_revolver_attack_held, this->m_revolver_cocking);
+        }
+        this->m_revolver_last_clip = observed_clip;
+        this->m_revolver_last_shot_time = observed_shot_time;
+        // Previous-probe values describe the preceding command only, not a
+        // server acknowledgement or an exact match to a delayed weapon event.
+        this->m_revolver_probe_valid = false;
+        this->m_revolver_probe_would_fire = false;
+
         const auto was_held = this->m_revolver_attack_held;
         constexpr auto attack = cstypes::command_buttons::in_attack;
         const auto history_size = cmd->csgo_user_cmd.input_history_size();
@@ -875,6 +896,17 @@ namespace features::combat {
             const auto last_shot_after = memory::read<float>(shared_ctx.weapon + last_shot_offset);
             would_fire = clip_after < clip_before || last_shot_after > last_shot_before;
         });
+        this->m_revolver_probe_valid = simulated;
+        this->m_revolver_probe_would_fire = would_fire;
+        if (settings::g_misc.m_impacts.console_log.value &&
+            (!this->m_revolver_cocking || would_fire || !simulated))
+        {
+            logging::console::print(
+                xs("[r8:probe] tick={} simulated={} would_fire={} clip={} last_shot={:.6f} history={} nospread={}"),
+                memory::read<int>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash)),
+                simulated, would_fire, clip_before, last_shot_before,
+                history_size, config.no_spread.value);
+        }
 
         if (!simulated)
         {
