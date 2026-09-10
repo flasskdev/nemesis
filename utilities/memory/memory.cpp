@@ -1,6 +1,9 @@
 #include <pch/pch.hpp>
 #include "memory.hpp"
 #include <utilities/logging/logging.hpp>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 
 namespace memory {
 
@@ -449,6 +452,43 @@ done_scanning:
 		}
 
 		return result;
+	}
+
+
+	std::uintptr_t resolve_pattern_cached( std::string_view pattern )
+	{
+		// PATTERN keeps its per-call-site fast path. This shared cache is only
+		// consulted on a call site's first invocation or during startup warmup.
+		static std::mutex cache_mutex;
+		static std::unordered_map<std::string, std::uintptr_t> cache;
+
+		if ( pattern.empty( ) )
+		{
+			return 0;
+		}
+
+		const std::string key{ pattern };
+		{
+			std::lock_guard lock( cache_mutex );
+			const auto found = cache.find( key );
+			if ( found != cache.end( ) )
+			{
+				return found->second;
+			}
+		}
+
+		// Do not hold the cache lock across the resolver: it can emit logs
+		// through code that resolves other addresses. Concurrent cold misses
+		// may scan twice, but cannot block each other through this mutex.
+		const auto result = resolve_pattern( pattern );
+		if ( !result )
+		{
+			// A module may not be loaded yet. Do not poison the shared cache.
+			return 0;
+		}
+
+		std::lock_guard lock( cache_mutex );
+		return cache.emplace( key, result ).first->second;
 	}
 
 	std::uintptr_t get_module_export (std::uintptr_t module_base, std::uint16_t ordinal) {

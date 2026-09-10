@@ -16,15 +16,19 @@ namespace features::combat {
 
         this->update_penetration_crosshair(local);
 
+        this->m_should_stop = false;
+        this->m_firing_this_tick = false;
+
         if (!ctx.valid)
         {
-            this->m_revolver_cock_ticks = 0;
-            this->m_revolver_cocking_started = false;
+            this->reset_revolver();
             return;
         }
 
-        this->m_should_stop = false;
-        this->m_firing_this_tick = false;
+        if (ctx.item_def_idx != cstypes::item_definition_index::weapon_r8_revolver)
+        {
+            this->reset_revolver();
+        }
 
         if (!settings::g_combat.m_duckpeek.enabled.value)
         {
@@ -79,8 +83,6 @@ namespace features::combat {
         }
         else
         {
-            this->m_revolver_cock_ticks = 0;
-            this->m_revolver_cocking_started = false;
             if (!g_shared.can_shoot(cmd, local.controller))
             {
                 return;
@@ -379,11 +381,11 @@ namespace features::combat {
         return out;
     }
 
-    void rage::run_gun(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire)
+    bool rage::run_gun(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire)
     {
         if (!settings::g_combat.m_ragebot.enabled)
         {
-            return;
+            return false;
         }
 
         auto& shared_ctx = g_shared.ctx();
@@ -399,7 +401,7 @@ namespace features::combat {
 
         if (candidates.empty())
         {
-            return;
+            return false;
         }
 
         auto eye_candidates = g_shared.sh().get_candidates();
@@ -460,13 +462,13 @@ namespace features::combat {
             if (best.valid && allow_fire)
             {
                 this->fire_gun(cmd, best, false, best.hit.source_eye.position, local);
-                if (duckpeek_active)
+                if (duckpeek_active && this->m_firing_this_tick)
                 {
                     this->m_duckpeek_reduck = true;
                     this->m_duckpeek_reduck_ticks = 10;
                     this->m_release_duck_for_shot = false;
                 }
-                return;
+                return best.valid;
             }
 
             if (duckpeek_active && is_ducking && !this->m_duckpeek_reduck)
@@ -492,7 +494,7 @@ namespace features::combat {
             {
                 this->m_release_duck_for_shot = false;
             }
-            return;
+            return best.valid;
         }
 
         const auto primary_eye = eye_candidates.entries[0].position;
@@ -525,13 +527,13 @@ namespace features::combat {
         if (shot_viable && allow_fire)
         {
             this->fire_gun(cmd, best, !accurate && force, best.hit.source_eye.position, local);
-            if (duckpeek_active)
+            if (duckpeek_active && this->m_firing_this_tick)
             {
                 this->m_duckpeek_reduck = true;
                 this->m_duckpeek_reduck_ticks = 10;
                 this->m_release_duck_for_shot = false;
             }
-            return;
+            return best.valid;
         }
 
         // Target not shootable right now from current crouching height.
@@ -565,7 +567,7 @@ namespace features::combat {
                         cmd->buttons.value_changed |= cstypes::command_buttons::in_second_attack;
                         cmd->buttons.value_scroll |= cstypes::command_buttons::in_second_attack;
                     }
-                    return;
+                    return best.valid;
                 }
             }
             this->m_release_duck_for_shot = false;
@@ -592,6 +594,7 @@ namespace features::combat {
                 this->m_should_stop = best.valid;
             }
         }
+        return best.valid;
     }
 
     void rage::run_taser(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local)
@@ -722,91 +725,186 @@ namespace features::combat {
 
     void rage::auto_revolver(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local)
     {
-        if (!settings::g_combat.m_ragebot.enabled)
-        {
-            this->m_revolver_cock_ticks = 0;
-            this->m_revolver_cocking_started = false;
-            return;
-        }
-
-        // The R8 physically requires a cock cycle before its primary fire.
-        // When auto_revolver OR nospread is active, we handle cocking
-        // automatically. Without either, the player handles cocking manually
-        // and ragebot only aims on the fire tick.
         const auto& shared_ctx = g_shared.ctx();
         const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
         const auto need_auto_cock = settings::g_combat.m_autos.revolver.value || config.no_spread.value;
 
-        if (!need_auto_cock)
+        if (this->m_revolver_weapon != shared_ctx.weapon)
         {
-            this->m_revolver_cock_ticks = 0;
-            this->m_revolver_cocking_started = false;
-            if (!g_shared.can_shoot(cmd, local.controller))
+            this->reset_revolver();
+            this->m_revolver_weapon = shared_ctx.weapon;
+        }
+
+        const auto was_held = this->m_revolver_attack_held;
+        constexpr auto attack = cstypes::command_buttons::in_attack;
+        const auto history_size = cmd->csgo_user_cmd.input_history_size();
+
+        // Compare against the preceding command, not the speculative probe below.
+        // A held primary attack is not a fresh press/scroll on every command.
+        const auto set_primary = [&](bool pressed)
+        {
+            cmd->buttons.value &= ~attack;
+            cmd->buttons.value_changed &= ~attack;
+            cmd->buttons.value_scroll &= ~attack;
+            if (pressed)
             {
+                cmd->buttons.value |= attack;
+            }
+            if (pressed != was_held)
+            {
+                cmd->buttons.value_changed |= attack;
+            }
+            cmd->csgo_user_cmd.set_attack1_start_history_index(pressed ? history_size - 1 : -1);
+            this->m_revolver_attack_held = pressed;
+        };
+
+        const auto cancel = [&]
+        {
+            set_primary(false);
+            this->m_revolver_cocking = false;
+            this->m_firing_this_tick = false;
+        };
+
+        if (!settings::g_combat.m_ragebot.enabled || !need_auto_cock)
+        {
+            if (was_held)
+            {
+                cancel();
+                this->reset_revolver();
                 return;
             }
-            this->run_gun(cmd, ctx, local);
-            return;
-        }
-
-        // Only gate can_shoot at the START of a new cock cycle so we don't
-        // start cocking during the post-fire cooldown.
-        if (this->m_revolver_cock_ticks == 0 && !g_shared.can_shoot(cmd, local.controller))
-        {
-            return;
-        }
-
-        // Read the engine's actual postpone-fire state for the R8.
-        // m_nPostponeFireReadyTicks is 0 when idle, set to ~15 when the
-        // engine starts the cock cycle, then counts down each tick.
-        // We must wait for it to go positive (engine started cocking) and
-        // THEN back to 0 (cock complete, weapon fires).
-        const auto postpone_ticks = memory::read<int>(shared_ctx.weapon + SCHEMA("C_CSWeaponBase", "m_nPostponeFireReadyTicks"_hash));
-
-        // Track whether the engine has actually started the cock cycle.
-        // postpone_ticks > 0 means the engine acknowledged our in_attack
-        // and is counting down to fire.
-        if (postpone_ticks > 0)
-        {
-            this->m_revolver_cocking_started = true;
-        }
-
-        // Weapon is ready to fire: the engine started cocking (we saw
-        // postpone > 0) and the countdown has now reached 0.
-        if (this->m_revolver_cocking_started && postpone_ticks <= 0)
-        {
-            this->m_revolver_cock_ticks = 0;
-            this->m_revolver_cocking_started = false;
-            this->run_gun(cmd, ctx, local);
-
-            // Ensure in_attack is set so the engine processes the fire.
-            cmd->buttons.value |= cstypes::command_buttons::in_attack;
-            cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
-            cmd->buttons.value_scroll |= cstypes::command_buttons::in_attack;
-
-            const auto history_index = cmd->csgo_user_cmd.input_history_size() - 1;
-            if (history_index >= 0)
+            this->reset_revolver();
+            if (settings::g_combat.m_ragebot.enabled && g_shared.can_shoot(cmd, local.controller))
             {
-                cmd->csgo_user_cmd.set_attack1_start_history_index(history_index);
+                this->run_gun(cmd, ctx, local);
             }
             return;
         }
 
-        // Still cocking — run target selection for autostop but don't fire.
-        this->run_gun(cmd, ctx, local, false);
-
-        // Hold attack to keep the cock cycle going.
-        cmd->buttons.value |= cstypes::command_buttons::in_attack;
-        cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
-        cmd->buttons.value_scroll |= cstypes::command_buttons::in_attack;
-
-        const auto history_index = cmd->csgo_user_cmd.input_history_size() - 1;
-        if (history_index >= 0)
+        // Secondary fire stays under manual control and must not compete with
+        // the automatic primary-fire controller.
+        if (cmd->buttons.value & cstypes::command_buttons::in_second_attack)
         {
-            cmd->csgo_user_cmd.set_attack1_start_history_index(history_index);
+            cancel();
+            return;
         }
 
-        ++this->m_revolver_cock_ticks;
+        // Check ammunition/reload on EVERY command, including an active cock cycle.
+        // The engine prediction below handles attack timing and post-shot cooldown.
+        if (history_size <= 0 || !g_shared.can_shoot(cmd, local.controller, false))
+        {
+            cancel();
+            return;
+        }
+
+        // run_gun(false) must report a target from the current eye position.
+        // Autostop/duckpeek plans alone must never authorize holding primary attack.
+        if (!this->run_gun(cmd, ctx, local, false))
+        {
+            cancel();
+            return;
+        }
+
+        set_primary(true);
+
+        // Prediction reads the protobuf representation too. Keep it consistent
+        // with cmd->buttons before probing PostThink_Weapon. This uses the same
+        // allocation/layout conventions as systems::input::apply().
+        const auto base = cmd->csgo_user_cmd.mutable_base();
+        if (!base)
+        {
+            cancel();
+            return;
+        }
+        auto buttons = const_cast<proto::in_button_state_pb*>(base->buttons_pb());
+        if (!buttons)
+        {
+            const auto allocate = PATTERN(patterns::button_state_alloc);
+            if (!allocate)
+            {
+                cancel();
+                return;
+            }
+            const auto raw_base = reinterpret_cast<std::uintptr_t>(base) - proto::message_impl_offset;
+            const auto arena_bits = memory::read<std::uintptr_t>(raw_base + 0x08);
+            auto arena = arena_bits & ~0x3ull;
+            if (arena_bits & 1)
+            {
+                arena = memory::read<std::uintptr_t>(arena);
+            }
+            const auto raw_buttons = memory::call<void*>(allocate, arena);
+            if (!raw_buttons)
+            {
+                cancel();
+                return;
+            }
+            base->m_buttons_pb = reinterpret_cast<proto::in_button_state_pb*>(raw_buttons);
+            buttons = proto::impl_ptr<proto::in_button_state_pb>(raw_buttons);
+        }
+
+        const auto sync_buttons = [&]
+        {
+            base->m_has_bits.set(0x2u);
+            buttons->set_buttonstate1(cmd->buttons.value);
+            buttons->set_buttonstate2(cmd->buttons.value_changed);
+            buttons->set_buttonstate3(cmd->buttons.value_scroll);
+        };
+        sync_buttons();
+
+        // Do not guess whether PostponeFireReadyTicks is an idle sentinel,
+        // a countdown, or an absolute tick. Probe the real weapon simulation:
+        // a decreasing clip or advancing last-shot time means THIS command
+        // would discharge the R8. The timestamp also covers infinite-ammo servers.
+        // prediction::simulate restores both fields and the tickbase afterwards.
+        const auto clip_offset = SCHEMA("C_BasePlayerWeapon", "m_iClip1"_hash);
+        const auto last_shot_offset = SCHEMA("C_CSWeaponBase", "m_fLastShotTime"_hash);
+        const auto clip_before = memory::read<int>(shared_ctx.weapon + clip_offset);
+        const auto last_shot_before = memory::read<float>(shared_ctx.weapon + last_shot_offset);
+        auto would_fire = false;
+        const auto simulated = systems::g_prediction.simulate(cmd, local, [&]
+        {
+            const auto clip_after = memory::read<int>(shared_ctx.weapon + clip_offset);
+            const auto last_shot_after = memory::read<float>(shared_ctx.weapon + last_shot_offset);
+            would_fire = clip_after < clip_before || last_shot_after > last_shot_before;
+        });
+
+        if (!simulated)
+        {
+            cancel();
+            sync_buttons();
+            static bool reported = false;
+            if (!reported)
+            {
+                logging::console::print(xs("[rage] R8 automatic fire disabled for this command: weapon prediction unavailable"));
+                reported = true;
+            }
+            return;
+        }
+
+        if (!would_fire)
+        {
+            // Keep a continuous hold while cocking. No shot log, quickpeek return,
+            // nospread shot stamp, or last_shoot_tick is generated on these commands.
+            this->m_revolver_cocking = true;
+            sync_buttons();
+            return;
+        }
+
+        // This is a firing command. Revalidate the target and prepare its angles,
+        // seed and history through the regular fire_gun/nospread path. Never
+        // reinstate attack after fire_gun rejects the target or spread correction.
+        set_primary(false);
+        this->m_revolver_cocking = false;
+        this->run_gun(cmd, ctx, local);
+        if (!this->m_firing_this_tick)
+        {
+            cancel();
+        }
+        else
+        {
+            set_primary(true);
+        }
+        sync_buttons();
     }
 
     std::vector<rage::scan_hit> rage::scan_players(const math::vector3& eye, float inaccuracy, const aim_context& ctx, std::vector<candidate>& candidates, const systems::local::snapshot& local) const
@@ -1601,24 +1699,18 @@ namespace features::combat {
             math::helpers::calculate_angle(shoot_eye, tgt.hit.position) :
             tgt.hit.aim_angle;
 
+        auto stamp_tick = tick_base;
+        auto stamp_frac = 0.0f;
+        if (!tgt.hit.source_eye.is_uninterpolated)
+        {
+            stamp_frac = tgt.hit.source_eye.player_frac + tgt.hit.source_eye.lerp_ticks_frac;
+            const auto carry = static_cast<int>(std::floor(stamp_frac));
+            stamp_frac -= static_cast<float>(carry);
+            stamp_tick = tgt.hit.source_eye.player_tick + tgt.hit.source_eye.lerp_ticks_int + carry;
+        }
+
         if (config.no_spread.value)
         {
-            auto stamp_tick = tick_base;
-            auto stamp_frac{ 0.0f };
-
-            if (!tgt.hit.source_eye.is_uninterpolated)
-            {
-                auto tick_add = [](int t, float f, int tick_delta, float frac_delta)
-                    {
-                        f += frac_delta;
-                        auto carry = static_cast<int>(std::floor(f));
-                        f -= static_cast<float>(carry);
-                        return std::pair{ t + tick_delta + carry, f };
-                    };
-
-                std::tie(stamp_tick, stamp_frac) = tick_add(tgt.hit.source_eye.player_tick, tgt.hit.source_eye.player_frac, tgt.hit.source_eye.lerp_ticks_int, tgt.hit.source_eye.lerp_ticks_frac);
-            }
-
             const auto corrected = g_shared.find_spread_correction(aim_angle, stamp_tick);
             if (corrected.x == 0.0f && corrected.y == 0.0f && corrected.z == 0.0f)
             {
@@ -1677,17 +1769,10 @@ namespace features::combat {
             entry->set_render_tick_count(record_time.tick + 1);
             entry->set_render_tick_fraction(0.0f);
 
-            if (!tgt.hit.source_eye.is_uninterpolated)
+            // The no-spread seed and the transmitted player tick must agree,
+            // including the uninterpolated shoot-position fallback.
+            if (config.no_spread.value || !tgt.hit.source_eye.is_uninterpolated)
             {
-                auto tick_add = [](int t, float f, int tick_delta, float frac_delta)
-                    {
-                        f += frac_delta;
-                        auto carry = static_cast<int>(std::floor(f));
-                        f -= static_cast<float>(carry);
-                        return std::pair{ t + tick_delta + carry, f };
-                    };
-
-                const auto [stamp_tick, stamp_frac] = tick_add(tgt.hit.source_eye.player_tick, tgt.hit.source_eye.player_frac, tgt.hit.source_eye.lerp_ticks_int, tgt.hit.source_eye.lerp_ticks_frac);
                 entry->set_player_tick_count(stamp_tick);
                 entry->set_player_tick_fraction(stamp_frac);
             }

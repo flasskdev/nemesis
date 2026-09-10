@@ -22,6 +22,17 @@ namespace features::combat {
 			return;
 		}
 
+		// Rage runs first in create_move. Do not re-add a cancelled R8 primary
+		// attack or overwrite its no-spread angles/history in the legit pass.
+		if ( settings::g_combat.m_ragebot.enabled &&
+			ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver &&
+			!( cmd->buttons.value & cstypes::command_buttons::in_second_attack ) &&
+			( settings::g_combat.m_autos.revolver.value ||
+			  settings::g_combat.m_ragebot.get_group( ctx.weapon_type ).no_spread.value ) )
+		{
+			return;
+		}
+
 		if ( ctx.weapon_type < cstypes::weapon_type::pistol || ctx.weapon_type > cstypes::weapon_type::lmg )
 		{
 			return;

@@ -2,6 +2,7 @@
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <core/features/features.hpp>
+#include <protection/game_addresses.hpp>
 
 #include "../systems.hpp"
 
@@ -9,6 +10,44 @@ namespace systems {
 
 	bool events::initialize( )
 	{
+		// Resolve hot-path function addresses on the existing initialization
+		// thread, before listeners can receive the first shot/hurt event.
+		// This only resolves addresses; it does not call game/audio functions.
+		const protection::addresses::address_t* const hot_patterns[] =
+		{
+			&patterns::game_event_get_controller,
+			&patterns::game_event_get_float,
+			&patterns::game_event_get_int,
+			&patterns::game_event_get_pawn,
+			&patterns::game_event_get_string,
+			&patterns::base_fire_guns_get_inaccuracy,
+			&patterns::find_hud_element,
+			&patterns::set_voice_data,
+			&patterns::print_hud_chat,
+			&patterns::play_sound,
+			&patterns::init_particle_path_buffer,
+			&patterns::resource_system_precache,
+			&patterns::particle_create_effect,
+			&patterns::particle_set_control_point,
+			&patterns::particle_set_entity_binding
+		};
+
+		const auto warmup_started = std::chrono::steady_clock::now( );
+		std::size_t resolved{};
+		for ( const auto* pattern : hot_patterns )
+		{
+			if ( memory::resolve_pattern_cached( pattern->data.data ) )
+			{
+				++resolved;
+			}
+		}
+
+		const auto warmup_ms = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now( ) - warmup_started ).count( );
+		diag::writef( diag::level::info,
+			"event signature warmup: %zu/%zu resolved in %.2f ms",
+			resolved, sizeof( hot_patterns ) / sizeof( hot_patterns[ 0 ] ), warmup_ms );
+
 		if ( !register_listener( xs( "bullet_impact" ), [ ]( void* event ) { features::misc::g_impacts.on_bullet_impact( reinterpret_cast< std::uintptr_t >( event ) ); } ) )
 		{
 			return false;

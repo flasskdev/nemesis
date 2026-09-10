@@ -98,7 +98,7 @@ namespace protection::addresses {
 #ifndef PATTERN
 #define PATTERN(entry) \
     ([]() -> std::uintptr_t { \
-        static const auto val = memory::resolve_pattern((entry).data.data); \
+        static const auto val = memory::resolve_pattern_cached((entry).data.data); \
         return val; \
     }())
 #endif

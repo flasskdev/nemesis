@@ -42,6 +42,7 @@ namespace memory {
 	[[nodiscard]] std::uintptr_t get_module_interface( std::string_view interface_name );
 	[[nodiscard]] std::uintptr_t get_module_export_with_base (std::uintptr_t module_base, std::string_view export_name);
 	[[nodiscard]] std::uintptr_t resolve_pattern( std::string_view pattern );
+	[[nodiscard]] std::uintptr_t resolve_pattern_cached( std::string_view pattern );
 
 	[[nodiscard]] std::uintptr_t get_module_export( std::uintptr_t module_base, std::uint16_t ordinal );
 	[[nodiscard]] std::uintptr_t get_module_size( std::uintptr_t module_base );

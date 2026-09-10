@@ -337,7 +337,7 @@ namespace features::combat {
 
 		[[nodiscard]] bool should_stop( ) const noexcept { return this->m_should_stop; }
 		[[nodiscard]] bool is_firing_this_tick( ) const noexcept { return this->m_firing_this_tick; }
-		[[nodiscard]] bool is_cocking_revolver( ) const noexcept { return this->m_revolver_cock_ticks > 0; }
+		[[nodiscard]] bool is_cocking_revolver( ) const noexcept { return this->m_revolver_cocking; }
 		[[nodiscard]] bool should_release_duck_for_shot( ) const noexcept { return this->m_release_duck_for_shot; }
 		[[nodiscard]] bool duckpeek_wants_reduck( ) const noexcept { return this->m_duckpeek_reduck; }
 		void clear_duckpeek_reduck( ) noexcept { this->m_duckpeek_reduck = false; this->m_duckpeek_reduck_ticks = 0; }
@@ -425,7 +425,8 @@ namespace features::combat {
 		[[nodiscard]] std::optional<stop_prediction> predict_stop( const aim_context& ctx, const math::vector3& current_eye, const systems::local::snapshot& local ) const;
 		[[nodiscard]] std::vector<candidate> gather_candidates( const systems::local::snapshot& local, float max_distance_sq = 0.0f ) const;
 
-		void run_gun( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire = true );
+		// Returns whether a target exists from the current shoot position.
+		bool run_gun( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local, bool allow_fire = true );
 		void run_taser( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
 		void run_knife( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
 		void auto_revolver( systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local );
@@ -470,8 +471,16 @@ namespace features::combat {
 		std::uint8_t m_knife_attack{};
 		bool m_zeus_fired{};
 
-		int m_revolver_cock_ticks{};
-		bool m_revolver_cocking_started{};
+		void reset_revolver( ) noexcept
+		{
+			this->m_revolver_cocking = false;
+			this->m_revolver_attack_held = false;
+			this->m_revolver_weapon = 0;
+		}
+
+		bool m_revolver_cocking{};
+		bool m_revolver_attack_held{};
+		std::uintptr_t m_revolver_weapon{};
 		std::atomic<penetration_crosshair_state> m_penetration_crosshair_state{ penetration_crosshair_state::unavailable };
 
 		std::vector<shared::lagcomp::record> m_extrapolated_records{};
