@@ -1,7 +1,6 @@
 #include <pch/pch.hpp>
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
-#include <utilities/logging/logging.hpp>
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
 
@@ -57,34 +56,6 @@ namespace systems {
 		if ( !register_listener( xs( "player_hurt" ), [ ]( void* event ) { features::misc::g_impacts.on_player_hurt( reinterpret_cast< std::uintptr_t >( event ) ); } ) )
 		{
 			return false;
-		}
-
-		// Independent of pending rage shots: a missed R8 prediction must not
-		// also make the actual weapon_fire event invisible to diagnostics.
-		if ( !register_listener( xs( "weapon_fire" ), [ ]( void* raw_event )
-			{
-				if ( !raw_event || !settings::g_misc.m_impacts.console_log.value )
-				{
-					return;
-				}
-				const auto event = reinterpret_cast<std::uintptr_t>( raw_event );
-				const auto userid_key = cstypes::event_hash{ 0, "userid" };
-				const auto controller = memory::call<std::uintptr_t>( PATTERN( patterns::game_event_get_controller ), event, &userid_key );
-				const auto local = systems::g_local.get( );
-				if ( !local.controller || controller != local.controller )
-				{
-					return;
-				}
-				const auto weapon = memory::call<const char*>( PATTERN( patterns::game_event_get_string ), event, "weapon", "" );
-				if ( weapon && ( std::strcmp( weapon, "revolver" ) == 0 || std::strcmp( weapon, "weapon_revolver" ) == 0 ) )
-				{
-					logging::console::print( xs( "[r8:event] weapon_fire received (independent of rage hit/miss records)" ) );
-				}
-			} ) )
-		{
-			// Optional diagnostics must not prevent the remaining listeners from
-			// being registered if this event is unavailable.
-			logging::console::print( xs( "[r8:event] weapon_fire listener unavailable" ) );
 		}
 
 		if ( !register_listener( xs( "round_start" ), [ ]( void* event ) { features::misc::g_other.on_round_start( ); } ) )
