@@ -313,20 +313,12 @@ namespace rendering {
 					continue;
 				}
 
-				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type );
+				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type, ctx.item_def_idx );
 				auto is_active{ false };
 
-				for ( auto i = 0u; i < settings::combat::ragebot::k_group_count; ++i )
+				if ( setting == &active_group->min_damage_override || setting == &active_group->hitchance_override || setting == &active_group->force_shot || setting == &active_group->force_shot_air || setting == &active_group->body_aim )
 				{
-					const auto& g = settings::g_combat.m_ragebot.groups[ i ];
-					if ( &g == active_group )
-					{
-						if ( setting == &g.min_damage_override || setting == &g.hitchance_override || setting == &g.force_shot || setting == &g.force_shot_air || setting == &g.body_aim )
-						{
-							is_active = true;
-						}
-						break;
-					}
+					is_active = true;
 				}
 
 				if ( !is_active )
@@ -374,25 +366,17 @@ namespace rendering {
 					continue;
 				}
 
-				const auto* active_group = &settings::g_combat.m_legitbot.get_group( ctx.weapon_type );
+				const auto* active_group = &settings::g_combat.m_legitbot.get_group( ctx.weapon_type, ctx.item_def_idx );
 				auto is_active{ false };
 
-				for ( auto i = 0u; i < settings::combat::legitbot::k_group_count; ++i )
+				if ( setting == &active_group->aimbot || setting == &active_group->rcs || setting == &active_group->standalone_rcs || setting == &active_group->triggerbot || setting == &active_group->autowall || setting == &active_group->visualize_fov || setting == &active_group->trigger_head_only || setting == &active_group->give_me_your_seed )
 				{
-					if ( &settings::g_combat.m_legitbot.groups[ i ] == active_group )
-					{
-						const auto& g = settings::g_combat.m_legitbot.groups[ i ];
-						if ( setting == &g.aimbot || setting == &g.rcs || setting == &g.standalone_rcs || setting == &g.triggerbot || setting == &g.autowall || setting == &g.visualize_fov || setting == &g.trigger_head_only || setting == &g.give_me_your_seed )
-						{
-							is_active = true;
-						}
+					is_active = true;
+				}
 
-						if ( is_active && setting == &active_group->give_me_your_seed && !active_group->triggerbot.value )
-						{
-							is_active = false;
-						}
-						break;
-					}
+				if ( is_active && setting == &active_group->give_me_your_seed && !active_group->triggerbot.value )
+				{
+					is_active = false;
 				}
 
 				if ( !is_active )
@@ -447,7 +431,7 @@ namespace rendering {
 					continue;
 				}
 
-				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type );
+				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type, ctx.item_def_idx );
 				if ( entry->ptr != &active_group->hitchance.value && entry->ptr != &active_group->min_damage.value && entry->ptr != &active_group->max_fov.value && entry->ptr != &active_group->pointscale.value )
 				{
 					continue;

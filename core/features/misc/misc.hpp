@@ -413,6 +413,8 @@ namespace features::misc {
 		std::uintptr_t m_name_changer_controller{};
 		std::string m_original_name{};
 		std::string m_last_sent_name{};
+		std::uint64_t m_original_steam_id{};
+		bool m_avatar_overridden{};
 		float m_last_spawntime{};
 		float m_last_spam_time{};
 	};
@@ -522,6 +524,7 @@ namespace features::misc {
 		void send_player_weapons (
 			std::uintptr_t controller,
 			std::span<const systems::entities::cached> items);
+		void send_profile_override (std::uintptr_t controller);
 		[[nodiscard]] bool send_clear (std::uint64_t steamid);
 		void clear_all ();
 

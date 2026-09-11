@@ -1,5 +1,6 @@
 #pragma once
 
+#include <utilities/cstypes.hpp>
 #include <utilities/math/math.hpp>
 #include <external/config.hpp>
 #include <utilities/skin_options.hpp>
@@ -65,6 +66,27 @@ namespace settings {
 					this->hitboxes.reg(s, "hitboxes");
 				}
 
+				void copy_values_from(const weapon_group& other)
+				{
+					this->silent.value = other.silent.value;
+					this->no_spread.value = other.no_spread.value;
+					this->body_aim.value = other.body_aim.value;
+					this->force_shot_air.value = other.force_shot_air.value;
+					this->force_shot.value = other.force_shot.value;
+					this->autostop.value = other.autostop.value;
+					this->max_fov.value = other.max_fov.value;
+					this->hitchance.value = other.hitchance.value;
+					this->min_damage.value = other.min_damage.value;
+					this->min_damage_override.value = other.min_damage_override.value;
+					this->min_damage_override_value.value = other.min_damage_override_value.value;
+					this->hitchance_override.value = other.hitchance_override.value;
+					this->hitchance_override_value.value = other.hitchance_override_value.value;
+					this->pointscale.value = other.pointscale.value;
+					this->dynamic_pointscale.value = other.dynamic_pointscale.value;
+					this->debug_multipoints.value = other.debug_multipoints.value;
+					this->hitboxes = other.hitboxes;
+				}
+
 				void set_default_binds()
 				{
 					this->force_shot_air.bind = { .key = VK_XBUTTON1, .mode = xui::bind_mode::hold_on };
@@ -73,31 +95,107 @@ namespace settings {
 				}
 			};
 
+			struct individual_weapon
+			{
+				weapon_group cfg{};
+				xui::setting override_group{ false, {}, "override", "" };
+
+				void init(std::string_view cat)
+				{
+					const auto s = std::string(cat);
+					this->override_group.category = s;
+					this->cfg.init(s);
+				}
+			};
+
+			static constexpr auto k_weapon_count{ cstypes::weapons::k_total_weapons };
 			std::array<weapon_group, k_group_count> groups{};
+			std::array<individual_weapon, k_weapon_count> weapons{};
 
 			ragebot()
 			{
-				constexpr const char* weapon_names[]{ "pistol", "smg", "rifle", "shotgun", "sniper", "lmg" };
-
 				for (std::uint32_t i = 0; i < k_group_count; ++i)
 				{
-					this->groups[i].init(std::string("ragebot - ") + weapon_names[i]);
+					this->groups[i].init(std::string("ragebot - ") + cstypes::weapons::k_groups[i].config_name);
 				}
 
 				this->groups[0].set_default_binds();
 				this->groups[4].set_default_binds();
+
+				for (std::size_t i = 0; i < k_weapon_count; ++i)
+				{
+					this->weapons[i].init(std::string("ragebot - ") + cstypes::weapons::k_weapons[i].config_name);
+				}
 			}
 
-			weapon_group& get_group(std::uint32_t weapon_type)
+			[[nodiscard]] bool is_weapon_overridden(std::uint16_t item_def_idx) const
 			{
-				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[idx < k_group_count ? idx : 2];
+				const auto idx = cstypes::weapons::get_weapon_index(item_def_idx);
+				return idx >= 0 && this->weapons[idx].override_group.value;
 			}
 
-			const weapon_group& get_group(std::uint32_t weapon_type) const
+			[[nodiscard]] bool is_group_overridden(std::size_t group_idx) const
 			{
+				if (group_idx >= k_group_count) return false;
+				const auto& g = cstypes::weapons::k_groups[group_idx];
+				for (std::size_t i = 0; i < g.count; ++i)
+				{
+					if (this->weapons[g.start_idx + i].override_group.value)
+						return true;
+				}
+				return false;
+			}
+
+			weapon_group& get_group(std::uint32_t weapon_type, std::uint16_t item_def_idx = 0)
+			{
+				const auto w_idx = cstypes::weapons::get_weapon_index(item_def_idx);
+				if (w_idx >= 0 && this->weapons[w_idx].override_group.value)
+				{
+					return this->weapons[w_idx].cfg;
+				}
+
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[idx < k_group_count ? idx : 2];
+				const auto safe_idx = idx < k_group_count ? idx : 2;
+
+				if (this->is_group_overridden(safe_idx))
+				{
+					static weapon_group s_disabled_group{};
+					static bool s_inited = false;
+					if (!s_inited)
+					{
+						s_disabled_group.silent.value = false;
+						s_disabled_group.autostop.value = false;
+						s_inited = true;
+					}
+					return s_disabled_group;
+				}
+
+				return this->groups[safe_idx];
+			}
+
+			const weapon_group& get_group(std::uint32_t weapon_type, std::uint16_t item_def_idx = 0) const
+			{
+				const auto w_idx = cstypes::weapons::get_weapon_index(item_def_idx);
+				if (w_idx >= 0 && this->weapons[w_idx].override_group.value)
+				{
+					return this->weapons[w_idx].cfg;
+				}
+
+				const auto idx = weapon_type - cstypes::weapon_type::pistol;
+				const auto safe_idx = idx < k_group_count ? idx : 2;
+
+				if (this->is_group_overridden(safe_idx))
+				{
+					static const weapon_group s_disabled_group = []() {
+						weapon_group wg{};
+						wg.silent.value = false;
+						wg.autostop.value = false;
+						return wg;
+					}();
+					return s_disabled_group;
+				}
+
+				return this->groups[safe_idx];
 			}
 		} m_ragebot{};
 
@@ -130,6 +228,14 @@ namespace settings {
 				xui::setting autowall{ true,{}, "autowall", "legitbot" };
 				config::val<int> min_damage{ 101 };
 
+				xui::setting smoke_check{ false,{}, "smoke check", "legitbot" };
+				xui::setting scope_check{ false,{}, "scope check", "legitbot" };
+				xui::setting flash_check{ false,{}, "flash check", "legitbot" };
+				xui::setting ground_check{ false,{}, "ground check", "legitbot" };
+				// Approximate smoke geometry, not the engine's voxel visibility.
+				config::val<float> smoke_radius{ 160.0f };
+				config::val<float> smoke_lifetime{ 20.0f };
+
 				xui::setting visualize_fov{ true,{}, "visualize fov", "legitbot" };
 				config::col fov_color{ { 255, 255, 255, 150 } };
 
@@ -145,6 +251,10 @@ namespace settings {
 					this->give_me_your_seed.category = s;
 					this->autowall.category = s;
 					this->visualize_fov.category = s;
+					this->smoke_check.category = s;
+					this->scope_check.category = s;
+					this->flash_check.category = s;
+					this->ground_check.category = s;
 
 					this->fov.reg(s, "fov");
 					this->smooth.reg(s, "smooth");
@@ -158,32 +268,139 @@ namespace settings {
 					this->trigger_hitchance.reg(s, "trigger hitchance");
 					this->min_damage.reg(s, "min damage");
 					this->fov_color.reg(s, "fov color");
+					this->smoke_radius.reg(s, "smoke radius");
+					this->smoke_lifetime.reg(s, "smoke lifetime");
+				}
+				void copy_values_from(const weapon_group& other)
+				{
+					this->aimbot.value = other.aimbot.value;
+					this->fov.value = other.fov.value;
+					this->smooth.value = other.smooth.value;
+					this->hitboxes = other.hitboxes;
+					this->rcs.value = other.rcs.value;
+					this->rcs_min.value = other.rcs_min.value;
+					this->rcs_max.value = other.rcs_max.value;
+					this->standalone_rcs.value = other.standalone_rcs.value;
+					this->standalone_rcs_strength.value = other.standalone_rcs_strength.value;
+					this->standalone_rcs_min.value = other.standalone_rcs_min.value;
+					this->standalone_rcs_max.value = other.standalone_rcs_max.value;
+					this->triggerbot.value = other.triggerbot.value;
+					this->trigger_delay.value = other.trigger_delay.value;
+					this->trigger_hitchance.value = other.trigger_hitchance.value;
+					this->trigger_head_only.value = other.trigger_head_only.value;
+					this->give_me_your_seed.value = other.give_me_your_seed.value;
+					this->autowall.value = other.autowall.value;
+					this->min_damage.value = other.min_damage.value;
+					this->smoke_check.value = other.smoke_check.value;
+					this->scope_check.value = other.scope_check.value;
+					this->flash_check.value = other.flash_check.value;
+					this->ground_check.value = other.ground_check.value;
+					this->smoke_radius.value = other.smoke_radius.value;
+					this->smoke_lifetime.value = other.smoke_lifetime.value;
+					this->visualize_fov.value = other.visualize_fov.value;
+					this->fov_color = other.fov_color;
 				}
 			};
 
+			struct individual_weapon
+			{
+				weapon_group cfg{};
+				xui::setting override_group{ false, {}, "override", "" };
+
+				void init(std::string_view cat)
+				{
+					const auto s = std::string(cat);
+					this->override_group.category = s;
+					this->cfg.init(s);
+				}
+			};
+
+			static constexpr auto k_weapon_count{ cstypes::weapons::k_total_weapons };
 			xui::setting enabled{ false,{}, "enabled", "legitbot" };
 			std::array<weapon_group, k_group_count> groups{};
+			std::array<individual_weapon, k_weapon_count> weapons{};
 
 			legitbot()
 			{
-				constexpr const char* weapon_names[]{ "pistol", "smg", "rifle", "shotgun", "sniper", "lmg" };
-
 				for (auto i = 0u; i < k_group_count; ++i)
 				{
-					this->groups[i].init(std::string("legitbot - ") + weapon_names[i]);
+					this->groups[i].init(std::string("legitbot - ") + cstypes::weapons::k_groups[i].config_name);
+				}
+
+				for (std::size_t i = 0; i < k_weapon_count; ++i)
+				{
+					this->weapons[i].init(std::string("legitbot - ") + cstypes::weapons::k_weapons[i].config_name);
 				}
 			}
 
-			weapon_group& get_group(std::uint32_t weapon_type)
+			[[nodiscard]] bool is_weapon_overridden(std::uint16_t item_def_idx) const
 			{
-				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[idx < k_group_count ? idx : 2];
+				const auto idx = cstypes::weapons::get_weapon_index(item_def_idx);
+				return idx >= 0 && this->weapons[idx].override_group.value;
 			}
 
-			const weapon_group& get_group(std::uint32_t weapon_type) const
+			[[nodiscard]] bool is_group_overridden(std::size_t group_idx) const
 			{
+				if (group_idx >= k_group_count) return false;
+				const auto& g = cstypes::weapons::k_groups[group_idx];
+				for (std::size_t i = 0; i < g.count; ++i)
+				{
+					if (this->weapons[g.start_idx + i].override_group.value)
+						return true;
+				}
+				return false;
+			}
+
+			weapon_group& get_group(std::uint32_t weapon_type, std::uint16_t item_def_idx = 0)
+			{
+				const auto w_idx = cstypes::weapons::get_weapon_index(item_def_idx);
+				if (w_idx >= 0 && this->weapons[w_idx].override_group.value)
+				{
+					return this->weapons[w_idx].cfg;
+				}
+
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[idx < k_group_count ? idx : 2];
+				const auto safe_idx = idx < k_group_count ? idx : 2;
+
+				if (this->is_group_overridden(safe_idx))
+				{
+					static weapon_group s_disabled_group{};
+					static bool s_inited = false;
+					if (!s_inited)
+					{
+						s_disabled_group.aimbot.value = false;
+						s_disabled_group.triggerbot.value = false;
+						s_inited = true;
+					}
+					return s_disabled_group;
+				}
+
+				return this->groups[safe_idx];
+			}
+
+			const weapon_group& get_group(std::uint32_t weapon_type, std::uint16_t item_def_idx = 0) const
+			{
+				const auto w_idx = cstypes::weapons::get_weapon_index(item_def_idx);
+				if (w_idx >= 0 && this->weapons[w_idx].override_group.value)
+				{
+					return this->weapons[w_idx].cfg;
+				}
+
+				const auto idx = weapon_type - cstypes::weapon_type::pistol;
+				const auto safe_idx = idx < k_group_count ? idx : 2;
+
+				if (this->is_group_overridden(safe_idx))
+				{
+					static const weapon_group s_disabled_group = []() {
+						weapon_group wg{};
+						wg.aimbot.value = false;
+						wg.triggerbot.value = false;
+						return wg;
+					}();
+					return s_disabled_group;
+				}
+
+				return this->groups[safe_idx];
 			}
 		} m_legitbot{};
 
@@ -1244,7 +1461,9 @@ namespace settings {
 		{
 			xui::setting clantag{ false,{}, "clantag", "name changer" };
 			xui::setting override_name{ false,{}, "override name", "name changer" };
+			xui::setting override_avatar{ false,{}, "override avatar", "name changer" };
 			config::str name{ "Player", "name changer", "name" };
+			config::str avatar_steam_id{ "", "name changer", "avatar steam id" };
 		} m_name_changer{};
 
 		struct projectile_trajectory
@@ -1468,6 +1687,7 @@ namespace settings {
 		xui::setting auto_accept{ false,{}, "auto accept", "misc" };
 		config::val<int> menu_key{ VK_INSERT, "misc", "menu key" };
 		config::val<int> menu_palette{ 0, "interface", "color palette" };
+		xui::setting tooltips{ true, {}, "tooltips", "interface" };
 
 		struct watermark_cfg
 		{
@@ -1546,7 +1766,7 @@ namespace settings {
 
 		struct test_strafer
 		{
-			xui::setting enabled{ false,{}, "astrafer", "movement" };
+			xui::setting enabled{ false,{}, "air strafer", "movement" };
 		} m_test_strafer{};
 
 		struct velocity_debug

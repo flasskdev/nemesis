@@ -2,14 +2,14 @@
 #include <core/settings.hpp>
 
 #include "../../rendering.hpp"
+#include "menu.weapons.hpp"
 
 namespace rendering {
 
 	namespace detail {
 
 		constexpr const char* hitbox_names_legit[ ]{ "head", "chest", "stomach", "arms", "legs" };
-		constexpr const char* weapon_group_items_legit[]{ "Pistol", "SMG", "Rifle", "Shotgun", "Sniper", "LMG" };
-		inline int weapon_group_idx_legit{ 2 };
+		inline menu_weapons::weapon_selection weapon_sel_legit{ 2, -1 };
 
 	} // namespace detail
 
@@ -17,7 +17,13 @@ namespace rendering {
 	{
 		auto& s = settings::g_combat;
 		auto& lb = s.m_legitbot;
-		auto& wg = lb.groups[ std::clamp( detail::weapon_group_idx_legit, 0, 5 ) ];
+
+		const auto is_custom_wep = (detail::weapon_sel_legit.weapon_flat_idx >= 0 &&
+			detail::weapon_sel_legit.weapon_flat_idx < static_cast<int>(cstypes::weapons::k_total_weapons));
+
+		auto& wg = is_custom_wep
+			? lb.weapons[detail::weapon_sel_legit.weapon_flat_idx].cfg
+			: lb.groups[std::clamp(detail::weapon_sel_legit.group_idx, 0, 5)];
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
@@ -44,7 +50,22 @@ namespace rendering {
 		{
 			xui::toggle( "Enable Legitbot", lb.enabled );
 			xui::layout::spacing( 3.0f );
-			xui::combo( "Weapon Group", detail::weapon_group_idx_legit, detail::weapon_group_items_legit, 6 );
+			menu_weapons::draw_selector( "##lb_weapon_select", detail::weapon_sel_legit, true );
+			if ( is_custom_wep )
+			{
+				auto& ow = lb.weapons[ detail::weapon_sel_legit.weapon_flat_idx ];
+				xui::layout::spacing( 2.0f );
+				xui::toggle( "Custom Weapon Settings", ow.override_group );
+				if ( !ow.override_group.value )
+				{
+					xui::layout::spacing( 2.0f );
+					if ( xui::button( "Copy Group Settings##lb" ) )
+					{
+						ow.cfg.copy_values_from( lb.groups[ std::clamp( detail::weapon_sel_legit.group_idx, 0, 5 ) ] );
+						ow.override_group.value = true;
+					}
+				}
+			}
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Aimbot", wg.aimbot );
 			xui::layout::spacing( 3.0f );
@@ -81,7 +102,18 @@ namespace rendering {
 		if ( xui::begin_child( "##legitbot_trigger_accuracy", col_w, body_h - k_header_h, true ) )
 		{
 
+			xui::toggle( "Check Smoke", wg.smoke_check );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Check Scope", wg.scope_check );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Flash Check", wg.flash_check );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Only On Ground", wg.ground_check );
+			xui::layout::spacing( 8.0f );
+
 			xui::toggle( "Triggerbot", wg.triggerbot );
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Trigger Head Only", wg.trigger_head_only );
 			xui::layout::spacing( 3.0f );
 			xui::slider_int( "Reaction Delay", wg.trigger_delay, 0, 250, "%d ms" );
 			xui::layout::spacing( 3.0f );

@@ -516,6 +516,15 @@ namespace features::combat {
 		[[nodiscard]] bool has_target( ) const noexcept { return this->m_target.has_target( ); }
 
 	private:
+		void reset_trigger();
+		[[nodiscard]] bool local_checks_pass(const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local) const;
+		void refresh_smokes(const settings::combat::legitbot::weapon_group& config);
+		[[nodiscard]] bool smoke_blocks(const math::vector3& start, const math::vector3& end, const settings::combat::legitbot::weapon_group& config) const;
+
+		std::vector<math::vector3> m_smoke_centers{};
+		bool m_smoke_data_ready{};
+		std::uintptr_t m_last_weapon{};
+
 		float m_current_smooth_fov = 0.0f;
 		float m_target_smooth_fov = 0.0f;
 
@@ -560,7 +569,7 @@ namespace features::combat {
 		void update_standalone_rcs( const math::vector3& view_angles, const math::vector3& aim_punch, int amount, int rand_min, int rand_max, bool apply, const systems::local::snapshot& local );
 		[[nodiscard]] float compute_rcs_factor( int rand_min, int rand_max ) const;
 
-		void draw_fov( xdraw::draw_list& draw_list, const math::vector3& view_angles, const math::vector3& aim_punch, float fov_degrees, const config::col& color, bool rcs_active ) const;
+		void draw_fov( xdraw::draw_list& draw_list, const math::vector3& view_angles, const math::vector3& aim_punch, float fov_degrees, const xdraw::color& color, bool rcs_active ) const;
 
 		[[nodiscard]] static int hitgroup_to_cfg( int hitgroup );
 

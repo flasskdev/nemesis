@@ -97,7 +97,7 @@ namespace features::combat {
     {
         this->draw_penetration_crosshair(draw_list);
 
-        const auto& config = settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type, g_shared.ctx().item_def_idx);
         if (!config.debug_multipoints.value)
         {
             return;
@@ -373,7 +373,7 @@ namespace features::combat {
 
             if (shared_ctx.weapon_type >= cstypes::weapon_type::pistol && shared_ctx.weapon_type <= cstypes::weapon_type::lmg)
             {
-                const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
+                const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
                 c.min_damage = this->get_min_damage(config, health, config.min_damage_override.value);
             }
 
@@ -391,7 +391,7 @@ namespace features::combat {
         }
 
         auto& shared_ctx = g_shared.ctx();
-        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
         const auto autostop_enabled = config.autostop.value;
 
         auto candidates = this->gather_candidates(local);
@@ -736,7 +736,7 @@ namespace features::combat {
     void rage::auto_revolver(systems::input::usercmd* cmd, const aim_context& ctx, const systems::local::snapshot& local)
     {
         const auto& shared_ctx = g_shared.ctx();
-        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
         const auto need_auto_cock = settings::g_combat.m_autos.revolver.value || config.no_spread.value;
 
         if (this->m_revolver_weapon != shared_ctx.weapon)
@@ -1010,7 +1010,7 @@ namespace features::combat {
             return {};
 
         const auto& shared_ctx = g_shared.ctx();
-        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
 
         const auto game_scene_node = memory::read<std::uintptr_t>(cand.pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
         const auto hitbox_set = systems::g_hitboxes.query(game_scene_node);
@@ -1318,7 +1318,7 @@ namespace features::combat {
         std::vector<evaluated_hit> evaluated;
         evaluated.reserve(hits.size());
 
-        const auto& config = settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type, g_shared.ctx().item_def_idx);
         const auto needed_hc = config.hitchance_override.value ?
             static_cast<float>(config.hitchance_override_value) / 100.0f :
             static_cast<float>(config.hitchance) / 100.0f;
@@ -1745,7 +1745,7 @@ namespace features::combat {
         }
         const auto tick_base = memory::read<int>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash));
         const auto& shared_ctx = g_shared.ctx();
-        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
         const auto aim_punch = g_shared.get_aim_punch(local.pawn);
 
         auto aim_angle = config.no_spread.value ?
@@ -2030,7 +2030,7 @@ namespace features::combat {
         const auto capsule_b = center + bone_rot.rotate_vector(hitbox.maxs - hb_mid);
 
         // Keep points inside the part of the hitbox reachable by the full spread cone.
-        const auto& config = settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type);
+        const auto& config = settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type, g_shared.ctx().item_def_idx);
         if (config.dynamic_pointscale.value && hitbox.radius > 0.001f)
         {
             const auto cone = std::max(inaccuracy + g_shared.ctx().spread, 0.0f);

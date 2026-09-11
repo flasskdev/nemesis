@@ -4,6 +4,7 @@
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
 #include <core/settings.hpp>
+#include <utilities/steam/steam.hpp>
 #include <protection/game_addresses.hpp>
 namespace features::changer {
 
@@ -32,7 +33,11 @@ namespace features::changer {
 			return;
 		}
 
-		const auto steam_id = memory::read<std::uintptr_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+		auto steam_id = steam::user::get_steam_id( );
+		if ( !steam_id && local.controller )
+		{
+			steam_id = memory::read<std::uint64_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+		}
 		const auto account_id = static_cast< std::uint32_t >( steam_id & 0xffffffff );
 		const auto active_handle = memory::read<std::uint32_t>( weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
 		const auto active_weapon = systems::g_entities.lookup( active_handle );

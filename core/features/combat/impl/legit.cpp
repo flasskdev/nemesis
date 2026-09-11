@@ -6,25 +6,184 @@
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
+#include <core/features/combat/legit_checks.hpp>
 
 namespace features::combat {
 
-    // Статические переменные для плавного FOV
+    // Статические переменные для плавного FOV и зума
     static float g_current_fov = 0.0f;
     static float g_target_fov = 0.0f;
     static int g_last_weapon_type = -1;
+    static int g_last_item_def_idx = -1;
+    static float g_current_zoom_mult = 1.0f;
+
+    // Плавная интерполяция отрисовки FOV (размер, зум, цвет, появление/исчезновение)
+    static float g_render_fov = 0.0f;
+    static float g_render_zoom_mult = 1.0f;
+    static float g_render_alpha = 0.0f;
+    static xdraw::color g_render_color{ 255, 255, 255, 255 };
+    static bool g_render_rcs = false;
+
+    void legit::reset_trigger()
+    {
+        this->m_trigger_release_time = 0.0f;
+        this->m_trigger_pending_pawn = 0;
+        this->m_trigger_delay_start = 0.0f;
+    }
+
+    bool legit::local_checks_pass(const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local) const
+    {
+        if (!local.is_alive || !local.pawn || !local.controller)
+        {
+            return false;
+        }
+
+        // Read the actual scoped state. Never synthesize IN_ATTACK2.
+        if (config.scope_check.value)
+        {
+            const auto offset = SCHEMA("C_CSPlayerPawn", "m_bIsScoped"_hash);
+            if (!offset)
+                return false;
+            const auto scoped = memory::safe_read<bool>(local.pawn + offset);
+            if (!scoped || !*scoped)
+                return false;
+        }
+
+        // Same flash-state field used by this project's player ESP.
+        // This does not use the modified rendering alpha from removals.
+        if (config.flash_check.value)
+        {
+            const auto offset = SCHEMA("C_CSPlayerPawnBase", "m_flFlashBangTime"_hash);
+            if (!offset)
+                return false;
+            const auto flash = memory::safe_read<float>(local.pawn + offset);
+            if (!flash || !std::isfinite(*flash) || *flash > 0.0f)
+                return false;
+        }
+
+        if (config.ground_check.value)
+        {
+            const auto offset = SCHEMA("C_BaseEntity", "m_fFlags"_hash);
+            if (!offset)
+                return false;
+            const auto flags = memory::safe_read<std::uint32_t>(local.pawn + offset);
+            if (!flags || (*flags & cstypes::entity_flags::on_ground) == 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    void legit::refresh_smokes(const settings::combat::legitbot::weapon_group& config)
+    {
+        this->m_smoke_centers.clear();
+        this->m_smoke_data_ready = false;
+        if (!config.smoke_check.value)
+            return;
+
+        const auto effect_offset = SCHEMA("C_SmokeGrenadeProjectile", "m_bDidSmokeEffect"_hash);
+        const auto tick_offset = SCHEMA("C_SmokeGrenadeProjectile", "m_nSmokeEffectTickBegin"_hash);
+        const auto scene_offset = SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash);
+        const auto origin_offset = SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash);
+        const auto detonation_offset = SCHEMA("C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash);
+        if (!effect_offset || !tick_offset || !scene_offset || !origin_offset)
+            return;
+
+        constexpr double k_smoke_lifetime = 20.5; // Время жизни дыма в CS2
+        const auto current_tick = g_shared.ctx().current_tick;
+
+        for (const auto& projectile : systems::g_entities.get_by_type(systems::entities::type::projectile))
+        {
+            if (projectile.schema_hash != "C_SmokeGrenadeProjectile"_hash)
+                continue;
+            if (!projectile.ptr)
+                continue;
+
+            const auto active = memory::safe_read<bool>(projectile.ptr + effect_offset);
+            const auto start_tick = memory::safe_read<int>(projectile.ptr + tick_offset);
+            if (!active || !start_tick)
+                continue;
+            if (!*active && *start_tick <= 0)
+                continue;
+            if (*start_tick <= 0)
+                continue;
+
+            const auto age = (static_cast<double>(current_tick) - static_cast<double>(*start_tick)) * cstypes::tick_interval;
+            if (!std::isfinite(age) || age < 0.0 || age >= k_smoke_lifetime)
+                continue;
+
+            std::optional<math::vector3> center{};
+            if (detonation_offset)
+                center = memory::safe_read<math::vector3>(projectile.ptr + detonation_offset);
+            if (!center)
+            {
+                const auto scene = memory::safe_read<std::uintptr_t>(projectile.ptr + scene_offset);
+                if (!scene || !*scene)
+                    continue;
+                center = memory::safe_read<math::vector3>(*scene + origin_offset);
+            }
+            if (!center || !std::isfinite(center->x) || !std::isfinite(center->y) || !std::isfinite(center->z))
+                continue;
+
+            this->m_smoke_centers.push_back(*center);
+        }
+        this->m_smoke_data_ready = true;
+    }
+
+    bool legit::smoke_blocks(const math::vector3& start, const math::vector3& end, const settings::combat::legitbot::weapon_group& config) const
+    {
+        if (!config.smoke_check.value)
+            return false;
+        if (!this->m_smoke_data_ready || this->m_smoke_centers.empty())
+            return false;
+
+        constexpr float k_smoke_radius = 155.0f; // Стандартный радиус облака дыма в CS2
+
+        // Проверяем всю дистанцию между стрелком и целью
+        for (const auto& center : this->m_smoke_centers)
+        {
+            // Пересечение линии видимости со сферой смока на всей траектории
+            if (legit_checks::segment_intersects_sphere(
+                {start.x, start.y, start.z}, {end.x, end.y, end.z},
+                {center.x, center.y, center.z}, k_smoke_radius))
+                return true;
+
+            // Нахождение стрелка внутри облака
+            if ((start - center).length_sqr() <= k_smoke_radius * k_smoke_radius)
+                return true;
+
+            // Нахождение цели внутри облака
+            if ((end - center).length_sqr() <= k_smoke_radius * k_smoke_radius)
+                return true;
+        }
+        return false;
+    }
 
     void legit::on_create_move(systems::input::usercmd* cmd)
     {
-        if (!settings::g_combat.m_legitbot.enabled.value)
+        this->m_target = {};
+        if (!cmd || !settings::g_combat.m_legitbot.enabled.value)
         {
+            this->reset_trigger();
+            this->m_last_weapon = 0;
             return;
         }
 
         auto& ctx = g_shared.ctx();
         if (!ctx.valid)
         {
+            this->reset_trigger();
+            this->m_last_weapon = 0;
             return;
+        }
+
+        if (this->m_last_weapon != ctx.weapon)
+        {
+            this->reset_trigger();
+            this->m_remainder_x = 0.0f;
+            this->m_remainder_y = 0.0f;
+            this->m_old_punch = {};
+            this->m_last_weapon = ctx.weapon;
         }
 
         // Rage runs first in create_move. Do not re-add a cancelled R8 primary
@@ -33,13 +192,19 @@ namespace features::combat {
             ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver &&
             !(cmd->buttons.value & cstypes::command_buttons::in_second_attack) &&
             (settings::g_combat.m_autos.revolver.value ||
-                settings::g_combat.m_ragebot.get_group(ctx.weapon_type).no_spread.value))
+                settings::g_combat.m_ragebot.get_group(ctx.weapon_type, ctx.item_def_idx).no_spread.value))
         {
+            this->reset_trigger();
             return;
         }
 
         const auto view_angles = systems::g_input.get_view_angles();
         const auto local = systems::g_local.get();
+        if (!local.is_alive || !local.pawn || !local.controller)
+        {
+            this->reset_trigger();
+            return;
+        }
         const auto aim_punch = g_shared.get_aim_punch(local.pawn);
 
         this->m_cached_view_angles = view_angles;
@@ -50,7 +215,19 @@ namespace features::combat {
 
         if (is_valid_weapon)
         {
-            const auto& config = settings::g_combat.m_legitbot.get_group(ctx.weapon_type);
+            const auto& config = settings::g_combat.m_legitbot.get_group(ctx.weapon_type, ctx.item_def_idx);
+
+            if (!config.triggerbot.value)
+                this->reset_trigger();
+
+            if (!this->local_checks_pass(config, local))
+            {
+                this->reset_trigger();
+                this->m_old_punch = aim_punch;
+                this->m_remainder_x = 0.0f;
+                this->m_remainder_y = 0.0f;
+                return;
+            }
 
             if (config.standalone_rcs.value)
             {
@@ -61,9 +238,16 @@ namespace features::combat {
 
             if (!g_shared.can_shoot(cmd, local.controller, false))
             {
+                this->reset_trigger();
                 return;
             }
 
+            this->refresh_smokes(config);
+            static bool reported_smoke_failure = false;
+            const bool smoke_failure = config.smoke_check.value && !this->m_smoke_data_ready;
+            if (smoke_failure && !reported_smoke_failure)
+                logging::console::print_raw("[legit] Smoke snapshot unavailable: automatic targeting is blocked. Check schemas, entity reads and lifetime settings.\n");
+            reported_smoke_failure = smoke_failure;
             auto shoot_position = g_shared.get_interpolated_shoot_position(local.pawn, false);
             ctx.spread = g_shared.get_spread();
             ctx.inaccuracy = g_shared.get_inaccuracy(true);
@@ -84,26 +268,24 @@ namespace features::combat {
             }
 
             // --- ЛОГИКА ПЛАВНОГО FOV ---
-
-            // ИСПРАВЛЕНИЕ: Всегда получаем актуальный FOV из конфига, чтобы изменения в меню применялись сразу
             float new_target_fov = static_cast<float>(config.fov.value);
 
-            // Если сменился тип оружия, сбрасываем или инициируем интерполяцию
-            if (g_last_weapon_type != static_cast<int>(ctx.weapon_type))
+            const int cur_weapon_type = static_cast<int>(ctx.weapon_type);
+            const int cur_item_def = static_cast<int>(ctx.item_def_idx);
+
+            // Если сменился тип оружия или конкретная пушка, инициируем плавный переход
+            if (g_last_weapon_type != cur_weapon_type || g_last_item_def_idx != cur_item_def)
             {
-                // Если это первая инициализация или переход от невалидного оружия, 
-                // устанавливаем текущий FOV равным новому целевому, чтобы не было скачка
-                if (g_last_weapon_type == -1 || g_last_weapon_type == -2)
+                if (g_last_weapon_type == -1)
                 {
                     g_current_fov = new_target_fov;
                 }
-
                 g_target_fov = new_target_fov;
-                g_last_weapon_type = static_cast<int>(ctx.weapon_type);
+                g_last_weapon_type = cur_weapon_type;
+                g_last_item_def_idx = cur_item_def;
             }
             else
             {
-                // Если оружие то же самое, просто обновляем цель на случай изменения настроек
                 g_target_fov = new_target_fov;
             }
 
@@ -112,34 +294,83 @@ namespace features::combat {
             g_current_fov += (g_target_fov - g_current_fov) * interpolation_speed;
 
             // --- ЛОГИКА ЗУМА (ПРИЦЕЛИВАНИЯ) ---
-            float zoom_multiplier = 1.0f;
+            float target_zoom_mult = 1.0f;
 
             // Проверяем, находится ли игрок в прицеле
-            const int fov_start = memory::read<int>(local.pawn + SCHEMA("C_CSPlayerPawn", "m_iFOVStart"_hash));
+            const auto scoped_offset = SCHEMA("C_CSPlayerPawn", "m_bIsScoped"_hash);
+            const bool is_scoped = scoped_offset ? memory::read<bool>(local.pawn + scoped_offset) : false;
 
-            if (fov_start > 0 && fov_start < 90)
+            if (is_scoped)
             {
-                // Определяем уровень зума.
-                if (fov_start <= 25)
+                int zoom_level = 1;
+
+                // Способ 1: Чтение m_zoomLevel из C_CSWeaponBaseGun
+                if (ctx.weapon)
                 {
-                    // Второй уровень зума -> множитель 2.5
-                    zoom_multiplier = 2.5f;
+                    const auto zoom_offset = SCHEMA("C_CSWeaponBaseGun", "m_zoomLevel"_hash);
+                    if (zoom_offset)
+                    {
+                        const auto level = memory::read<int>(ctx.weapon + zoom_offset);
+                        if (level >= 2)
+                        {
+                            zoom_level = 2;
+                        }
+                    }
+                }
+
+                // Способ 2: Проверка угла обзора через CPlayer_CameraServices (m_iFOV)
+                if (zoom_level < 2)
+                {
+                    const auto cam_services_offset = SCHEMA("C_BasePlayerPawn", "m_pCameraServices"_hash);
+                    if (cam_services_offset)
+                    {
+                        const auto cam_services = memory::read<std::uintptr_t>(local.pawn + cam_services_offset);
+                        if (cam_services)
+                        {
+                            const auto fov_offset = SCHEMA("CPlayer_CameraServices", "m_iFOV"_hash);
+                            if (fov_offset)
+                            {
+                                const auto cur_fov = memory::read<std::uint32_t>(cam_services + fov_offset);
+                                if (cur_fov > 0 && cur_fov <= 25)
+                                {
+                                    zoom_level = 2;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (zoom_level >= 2)
+                {
+                    // Второй уровень зума -> целевой множитель 2.2x
+                    target_zoom_mult = 2.2f;
                 }
                 else
                 {
-                    // Первый уровень зума -> множитель 1.5
-                    zoom_multiplier = 1.5f;
+                    // Первый уровень зума -> целевой множитель 1.5x
+                    target_zoom_mult = 1.5f;
                 }
             }
 
-            // Применяем множитель зума к текущему плавному FOV
-            const float effective_fov = g_current_fov * zoom_multiplier;
+            // Плавная интерполяция множителя зума (плавный переход за несколько тиков)
+            const float zoom_interp_speed = 0.15f;
+            if (std::fabsf(target_zoom_mult - g_current_zoom_mult) < 0.001f)
+            {
+                g_current_zoom_mult = target_zoom_mult;
+            }
+            else
+            {
+                g_current_zoom_mult += (target_zoom_mult - g_current_zoom_mult) * zoom_interp_speed;
+            }
+
+            // Применяем плавный множитель зума к текущему плавному FOV
+            const float effective_fov = g_current_fov * g_current_zoom_mult;
 
             if (config.aimbot.value)
             {
                 // Создаем временную копию конфига с эффективным FOV
                 auto temp_config = config;
-                temp_config.fov.value = static_cast<int>(effective_fov);
+                temp_config.fov.value = effective_fov;
 
                 this->m_target = this->find_target(shoot_position, detection_angles, temp_config, local);
                 if (this->m_target.has_target())
@@ -150,6 +381,7 @@ namespace features::combat {
 
             if (!g_shared.can_shoot(cmd, local.controller))
             {
+                this->reset_trigger();
                 return;
             }
 
@@ -157,18 +389,20 @@ namespace features::combat {
             {
                 // Создаем временную копию конфига с эффективным FOV
                 auto temp_config = config;
-                temp_config.fov.value = static_cast<int>(effective_fov);
+                temp_config.fov.value = effective_fov;
 
                 this->apply_triggerbot(cmd, shoot_position, view_angles, aim_punch, temp_config, local);
             }
         }
         else
         {
+            this->reset_trigger();
             // Если оружие не поддерживается (например, нож), устанавливаем целевой FOV в 0
             if (g_last_weapon_type != -2) // -2 означает "неподдерживаемое оружие"
             {
                 g_target_fov = 0.0f;
                 g_last_weapon_type = -2;
+                g_last_item_def_idx = -1;
             }
 
             // Плавная интерполяция текущего FOV к 0
@@ -179,46 +413,142 @@ namespace features::combat {
 
     void legit::on_render(xdraw::draw_list& draw_list)
     {
-        if (!settings::g_combat.m_legitbot.enabled.value)
-        {
-            return;
-        }
-
+        const auto dt = std::clamp(xdraw::delta_time(), 0.001f, 0.1f);
+        const auto local = systems::g_local.get();
         const auto& ctx = g_shared.ctx();
-        if (!ctx.valid)
-        {
-            return;
-        }
 
-        // ИСПРАВЛЕНИЕ БАГА: Проверяем, является ли оружие поддерживаемым.
-        const bool is_valid_weapon = (ctx.weapon_type >= cstypes::weapon_type::pistol && ctx.weapon_type <= cstypes::weapon_type::lmg);
+        bool should_show = false;
+        float desired_fov = 0.0f;
+        float desired_zoom_mult = 1.0f;
+        xdraw::color desired_color{ 255, 255, 255, 255 };
+        bool desired_rcs = false;
 
-        if (is_valid_weapon)
+        if (settings::g_combat.m_legitbot.enabled.value &&
+            local.is_alive && local.pawn && local.controller &&
+            ctx.valid)
         {
-            const auto& config = settings::g_combat.m_legitbot.get_group(ctx.weapon_type);
-            if (config.visualize_fov.value)
+            const bool is_valid_weapon = (ctx.weapon_type >= cstypes::weapon_type::pistol && ctx.weapon_type <= cstypes::weapon_type::lmg);
+            if (is_valid_weapon)
             {
-                // --- ЛОГИКА ЗУМА ДЛЯ ОТРИСОВКИ ---
-                const auto local = systems::g_local.get();
-                float zoom_multiplier = 1.0f;
-
-                const int fov_start = memory::read<int>(local.pawn + SCHEMA("C_CSPlayerPawn", "m_iFOVStart"_hash));
-                if (fov_start > 0 && fov_start < 90)
+                const auto& config = settings::g_combat.m_legitbot.get_group(ctx.weapon_type, ctx.item_def_idx);
+                if (config.visualize_fov.value && config.fov.value > 0.001f)
                 {
-                    if (fov_start <= 25)
+                    should_show = true;
+                    desired_fov = static_cast<float>(config.fov.value);
+                    const auto& fc = config.fov_color.value;
+                    desired_color = xdraw::color{ fc.r, fc.g, fc.b, fc.a };
+                    desired_rcs = config.rcs.value;
+
+                    // Зум скопа
+                    const auto scoped_offset = SCHEMA("C_CSPlayerPawn", "m_bIsScoped"_hash);
+                    const bool is_scoped = (local.pawn && scoped_offset) ? memory::read<bool>(local.pawn + scoped_offset) : false;
+
+                    if (is_scoped)
                     {
-                        zoom_multiplier = 2.5f;
-                    }
-                    else
-                    {
-                        zoom_multiplier = 1.5f;
+                        int zoom_level = 1;
+                        if (ctx.weapon)
+                        {
+                            const auto zoom_offset = SCHEMA("C_CSWeaponBaseGun", "m_zoomLevel"_hash);
+                            if (zoom_offset)
+                            {
+                                const auto level = memory::read<int>(ctx.weapon + zoom_offset);
+                                if (level >= 2)
+                                {
+                                    zoom_level = 2;
+                                }
+                            }
+                        }
+
+                        if (zoom_level < 2 && local.pawn)
+                        {
+                            const auto cam_services_offset = SCHEMA("C_BasePlayerPawn", "m_pCameraServices"_hash);
+                            if (cam_services_offset)
+                            {
+                                const auto cam_services = memory::read<std::uintptr_t>(local.pawn + cam_services_offset);
+                                if (cam_services)
+                                {
+                                    const auto fov_offset = SCHEMA("CPlayer_CameraServices", "m_iFOV"_hash);
+                                    if (fov_offset)
+                                    {
+                                        const auto cur_fov = memory::read<std::uint32_t>(cam_services + fov_offset);
+                                        if (cur_fov > 0 && cur_fov <= 25)
+                                        {
+                                            zoom_level = 2;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (zoom_level >= 2)
+                        {
+                            desired_zoom_mult = 2.2f;
+                        }
+                        else
+                        {
+                            desired_zoom_mult = 1.5f;
+                        }
                     }
                 }
+            }
+        }
 
-                const float effective_fov = g_current_fov * zoom_multiplier;
+        // Плавная интерполяция прозрачности и значений FOV
+        if (should_show)
+        {
+            // Плавное появление круга FOV по альфе
+            const float alpha_in_speed = 12.0f;
+            g_render_alpha += (1.0f - g_render_alpha) * std::min(alpha_in_speed * dt, 1.0f);
 
-                // Используем интерполированный FOV для отрисовки
-                this->draw_fov(draw_list, this->m_cached_view_angles, this->m_cached_aim_punch, effective_fov, config.fov_color, config.rcs.value);
+            // Если только что появилось из 0, задаем начальный FOV, чтобы плавно проявлялся по прозрачности
+            if (g_render_fov <= 0.01f)
+            {
+                g_render_fov = desired_fov;
+                g_render_zoom_mult = desired_zoom_mult;
+                g_render_color = desired_color;
+            }
+            else
+            {
+                // Плавное изменение радиуса при переключении на другое оружие
+                const float fov_lerp_speed = 10.0f;
+                g_render_fov += (desired_fov - g_render_fov) * std::min(fov_lerp_speed * dt, 1.0f);
+
+                // Плавное изменение множителя зума
+                const float zoom_lerp_speed = 8.0f;
+                g_render_zoom_mult += (desired_zoom_mult - g_render_zoom_mult) * std::min(zoom_lerp_speed * dt, 1.0f);
+
+                // Плавный переход цвета
+                const float col_lerp_speed = 10.0f;
+                g_render_color.r = static_cast<std::uint8_t>(g_render_color.r + (desired_color.r - g_render_color.r) * std::min(col_lerp_speed * dt, 1.0f));
+                g_render_color.g = static_cast<std::uint8_t>(g_render_color.g + (desired_color.g - g_render_color.g) * std::min(col_lerp_speed * dt, 1.0f));
+                g_render_color.b = static_cast<std::uint8_t>(g_render_color.b + (desired_color.b - g_render_color.b) * std::min(col_lerp_speed * dt, 1.0f));
+                g_render_color.a = desired_color.a;
+            }
+            g_render_rcs = desired_rcs;
+        }
+        else
+        {
+            // Плавное исчезновение круга FOV (fade out)
+            const float alpha_out_speed = 12.0f;
+            g_render_alpha += (0.0f - g_render_alpha) * std::min(alpha_out_speed * dt, 1.0f);
+            if (g_render_alpha < 0.005f)
+            {
+                g_render_alpha = 0.0f;
+                g_render_fov = 0.0f;
+                g_render_zoom_mult = 1.0f;
+            }
+        }
+
+        // Отрисовка если альфа больше порога
+        if (g_render_alpha > 0.002f)
+        {
+            const float effective_fov = g_render_fov * g_render_zoom_mult;
+            if (effective_fov > 0.05f)
+            {
+                xdraw::color draw_col = g_render_color;
+                draw_col.a = static_cast<std::uint8_t>(static_cast<float>(draw_col.a) * g_render_alpha);
+
+                this->draw_fov(draw_list, this->m_cached_view_angles, this->m_cached_aim_punch, effective_fov, draw_col, g_render_rcs);
             }
         }
     }
@@ -228,14 +558,24 @@ namespace features::combat {
         const auto local = systems::g_local.get();
         if (!local.is_alive || !local.pawn || !local.controller)
         {
-            this->m_trigger_release_time = 0.0f;
-            this->m_trigger_pending_pawn = 0;
-            this->m_trigger_delay_start = 0.0f;
+            this->reset_trigger();
+            this->m_target = {};
+            this->m_last_weapon = 0;
+            this->m_smoke_centers.clear();
+            this->m_smoke_data_ready = false;
+            this->m_remainder_x = 0.0f;
+            this->m_remainder_y = 0.0f;
+            this->m_old_punch = {};
 
-            // Сбрасываем FOV при смерти
+            // Сбрасываем FOV и множители зума при смерти
             g_current_fov = 0.0f;
             g_target_fov = 0.0f;
             g_last_weapon_type = -1;
+            g_last_item_def_idx = -1;
+            g_current_zoom_mult = 1.0f;
+            g_render_fov = 0.0f;
+            g_render_zoom_mult = 1.0f;
+            g_render_alpha = 0.0f;
         }
     }
 
@@ -386,6 +726,11 @@ namespace features::combat {
                 continue;
             }
 
+            if (this->smoke_blocks(shoot_position, bone.position, config))
+            {
+                continue;
+            }
+
             shared::penetration::result pen{};
             if (!g_shared.pen().run(shoot_position, bone.position, pen_ctx, local.pawn, local.team, pen))
             {
@@ -491,19 +836,21 @@ namespace features::combat {
         const auto& ctx = g_shared.ctx();
         const auto seed_mode = config.give_me_your_seed.value;
 
-        if (this->m_trigger_release_time > 0.0f)
+        if (!this->local_checks_pass(config, local))
         {
-            if (ctx.current_time >= this->m_trigger_release_time)
-            {
-                this->m_trigger_release_time = 0.0f;
-                this->m_trigger_pending_pawn = 0;
-                return;
-            }
-
-            cmd->buttons.value |= cstypes::command_buttons::in_attack;
-            cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
+            this->reset_trigger();
             return;
         }
+
+        const auto continuing_hold = this->m_trigger_release_time > 0.0f;
+        if (continuing_hold && (ctx.current_time >= this->m_trigger_release_time ||
+            ctx.current_time < this->m_trigger_delay_start))
+        {
+            this->reset_trigger();
+            return;
+        }
+        // Do not set IN_ATTACK here. A held shot must pass target, smoke,
+        // head-only, penetration and hitchance checks again below.
 
         auto corrected_angles = view_angles;
         if (config.rcs.value && aim_punch.length_sqr() > 0.0001f)
@@ -526,6 +873,10 @@ namespace features::combat {
             math::vector3 forward{}, left{}, up{};
             math::helpers::angle_vectors_left(corrected_angles, &forward, &left, &up);
             bullet_dir = (forward + left * spread.x + up * spread.y).normalized();
+        }
+        else
+        {
+            math::helpers::angle_vectors_left(corrected_angles, &bullet_dir, nullptr, nullptr);
         }
 
         auto hit_pawn{ 0ull };
@@ -580,6 +931,11 @@ namespace features::combat {
             const auto pawn_handle = memory::read<std::uint32_t>(p.ptr + SCHEMA("CBasePlayerController", "m_hPawn"_hash));
             const auto pawn = systems::g_entities.lookup(pawn_handle);
             if (!pawn || pawn == local.pawn)
+            {
+                continue;
+            }
+
+            if (continuing_hold && pawn != this->m_trigger_pending_pawn)
             {
                 continue;
             }
@@ -651,6 +1007,10 @@ namespace features::combat {
                         }
 
                         const auto hit_point = shoot_position + bullet_dir * ctx.range * fraction;
+                        if (this->smoke_blocks(shoot_position, hit_point, config))
+                        {
+                            continue;
+                        }
                         const auto pen_ctx = g_shared.pen().prepare_target(pawn, rec);
                         shared::penetration::result candidate_pen{};
 
@@ -698,7 +1058,17 @@ namespace features::combat {
                             continue;
                         }
 
+                        if (config.trigger_head_only.value && systems::g_hitboxes.hitgroup_from_hitbox(entry.index) != 1)
+                        {
+                            continue;
+                        }
                         const auto center = bone.rotation.rotate_vector((entry.mins + entry.maxs) * 0.5f) + bone.position;
+                        const auto shot_end = shoot_position + bullet_dir * (center - shoot_position).length();
+                        if (this->smoke_blocks(shoot_position, center, config) ||
+                            this->smoke_blocks(shoot_position, shot_end, config))
+                        {
+                            continue;
+                        }
                         const auto aim = math::helpers::calculate_angle(shoot_position, center);
                         const auto fov = math::helpers::angle_distance(corrected_angles, aim);
 
@@ -755,19 +1125,19 @@ namespace features::combat {
 
         if (!found)
         {
-            this->m_trigger_pending_pawn = 0;
+            this->reset_trigger();
             return;
         }
 
         if (config.trigger_head_only.value && pen.hitgroup != 1)
         {
-            this->m_trigger_pending_pawn = 0;
+            this->reset_trigger();
             return;
         }
 
         if (pen.penetrated && pen.damage < static_cast<float>(config.min_damage.value))
         {
-            this->m_trigger_pending_pawn = 0;
+            this->reset_trigger();
             return;
         }
 
@@ -787,7 +1157,11 @@ namespace features::combat {
                 }
             }
 
-            if (best_hb && best_hb->bone >= 0 && best_hb->bone < 28)
+            if (!best_hb || best_hb->bone < 0 || best_hb->bone >= 28)
+            {
+                this->reset_trigger();
+                return;
+            }
             {
                 hit_record->apply();
                 const auto hc = g_shared.calculate_hitchance(shoot_position, corrected_angles, *best_hb, skeleton[best_hb->bone], ctx.inaccuracy, ctx.spread);
@@ -796,13 +1170,17 @@ namespace features::combat {
                 const auto min_hc = static_cast<float>(config.trigger_hitchance.value) / 100.0f;
                 if (hc < min_hc && !g_shared.is_max_accuracy(ctx.inaccuracy))
                 {
-                    this->m_trigger_pending_pawn = 0;
+                    this->reset_trigger();
                     return;
                 }
             }
+        }
 
-            const auto delay_ms = static_cast<float>(config.trigger_delay.value);
-            if (this->m_trigger_pending_pawn != hit_pawn)
+        // Reaction delay applies to ordinary and seed-predicted shots alike.
+        if (!continuing_hold)
+        {
+            const auto delay_ms = static_cast<float>(std::clamp(config.trigger_delay.value, 0, 250));
+            if (this->m_trigger_pending_pawn != hit_pawn || ctx.current_time < this->m_trigger_delay_start)
             {
                 this->m_trigger_pending_pawn = hit_pawn;
                 this->m_trigger_delay_start = ctx.current_time;
@@ -868,7 +1246,11 @@ namespace features::combat {
             cmd->csgo_user_cmd.set_attack1_start_history_index(input_history_size - 1);
         }
 
-        this->m_trigger_release_time = ctx.current_time + random::hold_duration();
+        if (!continuing_hold)
+        {
+            this->m_trigger_pending_pawn = hit_pawn;
+            this->m_trigger_release_time = ctx.current_time + random::hold_duration();
+        }
     }
 
     void legit::apply_rcs(math::vector3& aim_angle, const math::vector3& aim_punch, int rand_min, int rand_max) const
@@ -924,7 +1306,7 @@ namespace features::combat {
         return min_scale + (max_scale - min_scale) * t;
     }
 
-    void legit::draw_fov(xdraw::draw_list& draw_list, const math::vector3& view_angles, const math::vector3& aim_punch, float fov_degrees, const config::col& color, bool rcs_active) const
+    void legit::draw_fov(xdraw::draw_list& draw_list, const math::vector3& view_angles, const math::vector3& aim_punch, float fov_degrees, const xdraw::color& color, bool rcs_active) const
     {
         const auto [screen_w, screen_h] = xdraw::viewport_size();
         const auto sw = static_cast<float>(screen_w);
@@ -973,9 +1355,8 @@ namespace features::combat {
 
         const auto cx = sw * 0.5f + offset_x;
         const auto cy = sh * 0.5f + offset_y;
-        const auto& c = color.value;
 
-        draw_list.circle(cx, cy, radius, xdraw::color{ c.r, c.g, c.b, c.a }, 1.5f, 64);
+        draw_list.circle(cx, cy, radius, color, 1.5f, 64);
     }
 
     int legit::hitgroup_to_cfg(int hitgroup)

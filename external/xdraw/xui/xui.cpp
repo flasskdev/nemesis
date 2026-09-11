@@ -1675,6 +1675,24 @@ namespace xui {
 		};
 
 		inline state g_tooltip{};
+		inline bool g_enabled{ true };
+
+		void set_enabled( bool enabled ) noexcept
+		{
+			g_enabled = enabled;
+			if ( !enabled )
+			{
+				g_tooltip.current_hovered_id = 0;
+				g_tooltip.active_id = 0;
+				g_tooltip.target_alpha = 0.0f;
+				g_tooltip.alpha = 0.0f;
+			}
+		}
+
+		bool is_enabled( ) noexcept
+		{
+			return g_enabled;
+		}
 
 		inline std::string normalize_label( std::string_view label )
 		{
@@ -1709,13 +1727,17 @@ namespace xui {
 
 		inline bool is_ambiguous( std::string_view norm ) noexcept
 		{
-			return norm == "enable" || norm == "color" || norm == "type" || norm == "style" ||
+			return norm == "enable" || norm == "enabled" || norm == "color" || norm == "type" || norm == "style" ||
 			       norm == "mode" || norm == "thickness" || norm == "intensity" || norm == "softness" ||
 			       norm == "opacity" || norm == "inner spread" || norm == "pulse speed" || norm == "glow" ||
 			       norm == "speed" || norm == "density" || norm == "duration" || norm == "passes" ||
 			       norm == "jump steps" || norm == "preview" || norm == "fill" || norm == "outline" ||
 			       norm == "material" || norm == "filled" || norm == "only when scoped" || norm == "position" ||
-			       norm == "value" || norm == "strength" || norm == "display" || norm == "flags";
+			       norm == "value" || norm == "strength" || norm == "display" || norm == "flags" ||
+			       norm == "min" || norm == "max" || norm == "delay" || norm == "text" || norm == "samples" ||
+			       norm == "smoothness" || norm == "primary" || norm == "secondary" || norm == "radius" ||
+			       norm == "width" || norm == "height" || norm == "size" || norm == "fade" || norm == "sound" ||
+			       norm == "volume" || norm == "group";
 		}
 
 		inline std::string get_fallback_description( std::string_view label )
@@ -1769,6 +1791,40 @@ namespace xui {
 				return "Adjusts visual particle and effect density";
 			if ( norm.find( "indicator" ) != std::string::npos )
 				return "Renders on-screen visual indicator";
+			if ( norm.find( "delay" ) != std::string::npos )
+				return "Adjusts timing delay in milliseconds or seconds";
+			if ( norm.find( "smooth" ) != std::string::npos )
+				return "Adjusts movement smoothing factor";
+			if ( norm.find( "strength" ) != std::string::npos )
+				return "Adjusts effect or feature strength multiplier";
+			if ( norm.find( "damage" ) != std::string::npos )
+				return "Adjusts minimum damage threshold";
+			if ( norm.find( "hitchance" ) != std::string::npos || norm.find( "chance" ) != std::string::npos )
+				return "Adjusts required hit probability percentage";
+			if ( norm.find( "smoke" ) != std::string::npos )
+				return "Smoke grenade visibility check";
+			if ( norm.find( "scope" ) != std::string::npos )
+				return "Weapon sniper scope check or overlay";
+			if ( norm.find( "flash" ) != std::string::npos )
+				return "Flashbang blindness check or alpha cap";
+			if ( norm.find( "seed" ) != std::string::npos )
+				return "Pattern seed or spread prediction calculation";
+			if ( norm.find( "hitbox" ) != std::string::npos )
+				return "Configures target body hitboxes";
+			if ( norm.find( "recoil" ) != std::string::npos || norm.find( "rcs" ) != std::string::npos )
+				return "Compensates for weapon recoil and spray pattern";
+			if ( norm.find( "chams" ) != std::string::npos )
+				return "Custom player or model material chams";
+			if ( norm.find( "blur" ) != std::string::npos )
+				return "Directional motion or camera blur effect";
+			if ( norm.find( "wind" ) != std::string::npos )
+				return "Simulates ambient air currents for weather particles";
+			if ( norm.find( "wet" ) != std::string::npos )
+				return "Simulates surface wetness and glossy puddles";
+			if ( norm.find( "aspect" ) != std::string::npos )
+				return "Overrides display aspect ratio";
+			if ( norm.find( "key" ) != std::string::npos || norm.find( "bind" ) != std::string::npos )
+				return "Assigns activation keybind toggle";
 
 			return "Configure " + std::string( label ) + " setting";
 		}
@@ -1817,14 +1873,25 @@ namespace xui {
 			{ "aimbot", "Smoothly assists crosshair tracking toward nearest enemy hitbox" },
 			{ "smoothness", "Crosshair movement smoothing to simulate natural human aim" },
 			{ "draw fov", "Draws visible circular overlay indicating aimbot acquisition radius" },
+			{ "visualize fov", "Draws visible circular overlay indicating aimbot acquisition radius" },
 			{ "recoil control (rcs)", "Compensates for weapon recoil and spray patterns while shooting" },
+			{ "check smoke", "Prevents aimbot or triggerbot from locking on or firing through smoke grenades" },
+			{ "smoke check", "Prevents aimbot or triggerbot from locking on or firing through smoke grenades" },
+			{ "smoke check (approx.)", "Prevents aimbot or triggerbot from locking on or firing through smoke grenades" },
+			{ "check scope", "Restricts sniper aimbot assistance to when you are zoomed in scope" },
+			{ "scope check", "Restricts sniper aimbot assistance to when you are zoomed in scope" },
+			{ "scope check (no auto-scope)", "Restricts sniper aimbot assistance to when you are zoomed in scope" },
+			{ "flash check", "Disables aimbot and triggerbot assistance while you are blinded by flashbangs" },
+			{ "only on ground", "Restricts aimbot assistance to when player is standing on the ground (no air-aim)" },
+			{ "ground check", "Restricts aimbot assistance to when player is standing on the ground" },
 			{ "triggerbot", "Automatically fires when an enemy crosses your crosshair" },
+			{ "trigger head only", "Only triggers automated firing when aiming specifically at enemy head" },
 			{ "reaction delay", "Human reaction delay in milliseconds before triggerbot fires" },
 			{ "seed prediction", "Predicts weapon seed spread to land accurate first shots" },
 			{ "standalone rcs", "Compensates for weapon recoil independently without aimbot active" },
 			{ "autowall", "Allows firing through wallbangable obstacles if damage threshold is met" },
 
-			// Player ESP
+			// Player ESP & Visuals
 			{ "enable esp", "Enables player ESP overlays and visuals" },
 			{ "box", "Displays a 2D bounding box around the player silhouette" },
 			{ "box esp", "Displays a 2D bounding box around the player silhouette" },
@@ -1848,6 +1915,13 @@ namespace xui {
 			{ "chams", "Replaces standard player textures with custom colored materials" },
 			{ "player chams", "Replaces player model textures with custom colored materials" },
 			{ "visible chams", "Material and color applied to visible, non-occluded player models" },
+			{ "through wall", "Renders occluded chams through walls when player is hidden behind obstacles" },
+			{ "occluded chams", "Renders occluded chams through walls when player is hidden behind obstacles" },
+			{ "backtrack chams", "Renders ghost chams models at historical lag compensation tick positions" },
+			{ "onshot chams", "Renders frozen ghost chams model at the exact position an enemy fired a shot" },
+			{ "weapon chams", "Applies custom colored shader materials to your first-person viewmodel weapon" },
+			{ "arms chams", "Applies custom colored shader materials to your first-person viewmodel hands and arms" },
+			{ "glow settings", "Configures advanced bloom, thickness, and animation parameters for outline glow chams" },
 			{ "flags", "Displays tactical status tags: armor, helmet, flashed, scoped, defusing" },
 			{ "info flags", "Displays tactical status tags: armor, helmet, flashed, scoped, defusing" },
 			{ "corner length", "Length of corner brackets when cornered box style is active" },
@@ -1868,10 +1942,14 @@ namespace xui {
 			{ "bomb timer", "Displays C4 countdown timer until detonation and defusal progress" },
 			{ "defusing", "Displays bomb defusal progress bar and remaining time" },
 			{ "defuser", "Shows whether bomb defuser has a defuse kit equipped" },
+			{ "ambience", "Opens the map ambience and atmospheric environment visualizer modal" },
 			{ "nightmode", "Darkens map ambient lighting for high-contrast night atmosphere" },
+			{ "override sunlight", "Overrides map sunlight and ambient illumination with custom color and brightness" },
+			{ "override sky", "Overrides skybox texture dome and atmospheric lighting colors" },
 			{ "skybox", "Selects custom high-definition skybox texture" },
 			{ "skybox material", "Selects custom high-definition skybox texture" },
 			{ "custom skybox", "Selects custom high-definition skybox texture" },
+			{ "custom colors", "Enables custom color tints for sky dome, atmospheric clouds, and sunlight" },
 			{ "skybox color", "Custom color tint applied to the sky dome" },
 			{ "sky color", "Custom color tint applied to the sky dome" },
 			{ "sun color", "Custom color tint applied to map sunlight" },
@@ -1894,20 +1972,29 @@ namespace xui {
 			{ "dynamic light", "Emits dynamic light source from your player illuminating dark areas" },
 			{ "bloom", "Soft glow effect around bright lights and reflective surfaces" },
 			{ "bloom effect", "Soft glow effect around bright lights and reflective surfaces" },
+			{ "override bloom", "Overrides post-processing bloom glow intensity around lights and reflections" },
 			{ "gamma", "Adjusts display brightness and color gamma response" },
+			{ "override gamma", "Overrides display brightness and color gamma response curve" },
 			{ "chromatic aberration", "Color fringing dispersion effect around screen edges" },
 			{ "flash alpha", "Caps maximum flashbang blindness screen opacity percentage" },
 			{ "fog", "Adds dense atmospheric distance fog across the map" },
+			{ "override fog", "Adds custom dense atmospheric distance fog across the map" },
 			{ "anisotropy", "Directional light scattering through atmospheric distance fog" },
 			{ "draw distance", "Maximum rendering distance for atmospheric distance fog" },
 			{ "depth of field", "Applies cinematic camera focus depth blur to distant backgrounds" },
+			{ "override dof", "Enables cinematic camera focus depth blur for foreground and distant backgrounds" },
 			{ "near blurry", "Near camera blur start distance for depth of field" },
 			{ "near crisp", "Near camera sharp focal plane distance for depth of field" },
 			{ "far crisp", "Far camera sharp focal plane distance for depth of field" },
 			{ "far blurry", "Far camera blur start distance for depth of field" },
 			{ "wetness", "Simulates glossy rain puddles and slick surface reflections" },
+			{ "wetness density", "Intensity and puddle coverage of the slick ground wetness effect" },
+			{ "wetness speed", "Animation speed of surface ripples and glossy reflections" },
 			{ "weather", "Spawns custom environmental weather particles such as rain, snow, or stars" },
 			{ "wind", "Simulates ambient air currents that push weather particles" },
+			{ "wind strength", "Wind velocity affecting atmospheric weather particle movement" },
+			{ "wind direction", "Compass angle heading of ambient wind direction (0-360°)" },
+			{ "wind turbulence", "Erratic gusts and turbulence applied to falling weather particles" },
 
 			// Movement
 			{ "auto jump", "Automatically jumps continuously upon landing while holding spacebar" },
@@ -1957,11 +2044,14 @@ namespace xui {
 			{ "clantag", "Sets custom animated or static clan tag beside your name" },
 			{ "scoreboard weapons", "Displays icons of all player held weapons in the scoreboard" },
 			{ "auto buy", "Automatically purchases your selected weapon loadout each round" },
+			{ "kill say", "Automatically sends a custom message in game chat after eliminating an enemy" },
+			{ "chat spam", "Repeatedly sends automated text messages into game or team chat" },
 			{ "custom fov", "Overrides default camera field of view angle" },
 			{ "scoped fov override", "Override camera field of view while zooming with scoped rifles" },
 			{ "scoped fov", "Custom field of view applied while zooming with scoped rifles" },
 			{ "viewmodel adjust", "Customizes weapon viewmodel offset coordinates and viewmodel FOV" },
 			{ "custom aspect ratio", "Overrides screen aspect ratio (e.g. 4:3 stretched, 16:9, 16:10)" },
+			{ "motion blur", "Applies cinematic directional camera motion blur while turning and moving" },
 			{ "remove crosshair", "Hides default game crosshair" },
 			{ "remove scope", "Removes black scope overlay border when zooming with sniper rifles" },
 			{ "remove smoke", "Removes smoke grenade particle clouds for clear visibility" },
@@ -1984,6 +2074,7 @@ namespace xui {
 			{ "dpi scale", "Scales menu UI dimensions to match screen DPI scaling" },
 			{ "accent color", "Primary accent color for the cheat interface" },
 			{ "color palette", "Select menu color scheme preset" },
+			{ "theme", "Opens menu color scheme preset selection list" },
 			{ "unload", "Safely uninjects and unloads cheat module from game memory" },
 			{ "watermark", "Displays branded status watermark overlay with game stats" },
 			{ "steam username", "Shows your Steam profile name in watermark" },
@@ -1993,6 +2084,7 @@ namespace xui {
 			{ "map", "Shows currently loaded map name" },
 			{ "tick rate", "Shows current server tickrate" },
 			{ "velocity", "Shows current movement speed value in watermark" },
+			{ "tooltips", "Toggles interactive help tooltips throughout the cheat interface" },
 
 			// Skins & Config & Generic Actions
 			{ "wear", "Skin wear float value (0.00 Factory New to 1.00 Battle-Scarred)" },
@@ -2002,12 +2094,15 @@ namespace xui {
 			{ "stattrak", "Enables StatTrak kill counter on the weapon" },
 			{ "stattrak count", "Total kill count displayed on the StatTrak counter" },
 			{ "skin changer", "Equip any weapon skin, knife, glove, or agent model in game" },
+			{ "##cfg_name", "Enter configuration profile name or search query" },
 			{ "save", "Save current configuration profile to disk" },
 			{ "delete", "Delete selected configuration profile" },
 			{ "refresh", "Reload configuration files from disk" },
 			{ "confirm save?", "Confirm saving configuration to disk" },
 			{ "overwrite?", "Confirm overwriting existing configuration file" },
 			{ "confirm delete?", "Confirm permanent deletion of selected configuration" },
+			{ "reset config", "Resets cheat settings for this profile back to default values" },
+			{ "confirm reset?", "Confirm resetting this profile to default values" },
 			{ "file", "Audio file path located in sounds directory" },
 			{ "fill", "Renders a subtle semi-transparent background fill inside the 2D box" },
 			{ "material", "Selects texture shader material: metallic, flat, glow, electric, distortion, hologram, outline glow, etc." },
@@ -2042,7 +2137,26 @@ namespace xui {
 		// 4. Contextual disambiguation by suffix (when ## is present)
 		if ( !norm_suf.empty( ) )
 		{
-			if ( norm_suf.starts_with( "light" ) )
+			if ( norm_suf.starts_with( "rcs" ) )
+			{
+				if ( norm_disp == "min" ) return "Minimum recoil reduction percentage";
+				if ( norm_disp == "max" ) return "Maximum recoil reduction percentage";
+			}
+			else if ( norm_suf.starts_with( "srcs" ) )
+			{
+				if ( norm_disp == "strength" ) return "Recoil compensation strength for standalone RCS";
+				if ( norm_disp == "min" ) return "Minimum recoil reduction percentage";
+				if ( norm_disp == "max" ) return "Maximum recoil reduction percentage";
+			}
+			else if ( norm_suf.starts_with( "aw" ) )
+			{
+				if ( norm_disp == "min damage" || norm_disp == "damage" ) return "Minimum penetration damage required to fire through wallbangable obstacles";
+			}
+			else if ( norm_suf.starts_with( "fov" ) )
+			{
+				if ( norm_disp.find( "color" ) != std::string::npos ) return "Color of visible circular aimbot FOV acquisition radius";
+			}
+			else if ( norm_suf.starts_with( "light" ) )
 			{
 				if ( norm_disp == "intensity" ) return "Adjusts ambient world lighting brightness and intensity";
 				if ( norm_disp == "color" ) return "Custom color tint applied to ambient world lighting";
@@ -2055,6 +2169,8 @@ namespace xui {
 			{
 				if ( norm_disp == "color" ) return "Custom color of the atmospheric distance fog";
 				if ( norm_disp == "density" ) return "Density and thickness of atmospheric distance fog";
+				if ( norm_disp == "anisotropy" ) return "Directional light scattering through atmospheric distance fog";
+				if ( norm_disp == "draw distance" ) return "Maximum rendering distance for atmospheric distance fog";
 			}
 			else if ( norm_suf.starts_with( "wet" ) )
 			{
@@ -2064,8 +2180,13 @@ namespace xui {
 			else if ( norm_suf.starts_with( "wind" ) )
 			{
 				if ( norm_disp == "strength" ) return "Wind velocity affecting weather particle movement";
-				if ( norm_disp == "direction" ) return "Compass heading angle of ambient wind direction";
+				if ( norm_disp == "direction" ) return "Compass heading angle of ambient wind direction (0-360°)";
 				if ( norm_disp == "turbulence" ) return "Turbulence and erratic gusts applied to weather particles";
+			}
+			else if ( norm_suf.starts_with( "weather" ) )
+			{
+				if ( norm_disp.find( "color" ) != std::string::npos ) return "Color tint for atmospheric weather particles";
+				if ( norm_disp == "type" ) return "Select weather particle effect: snow, rain, or stars";
 			}
 			else if ( norm_suf.starts_with( "eb" ) )
 			{
@@ -2125,6 +2246,13 @@ namespace xui {
 			else if ( norm_suf.starts_with( "flags" ) || norm_suf == "mc" )
 			{
 				if ( norm_disp == "flags" ) return "Select player status flags to display (money, armor, kit, scoped, defusing, flashed, distance)";
+				if ( norm_disp.find( "money" ) != std::string::npos ) return "Color tint for player account balance status tag";
+				if ( norm_disp.find( "armor" ) != std::string::npos ) return "Color tint for body armor and helmet indicator tag";
+				if ( norm_disp.find( "kit" ) != std::string::npos ) return "Color tint for defuse kit indicator tag";
+				if ( norm_disp.find( "scoped" ) != std::string::npos ) return "Color tint for scoped rifle zoom status flag";
+				if ( norm_disp.find( "defusing" ) != std::string::npos ) return "Color tint for active bomb defusal status flag";
+				if ( norm_disp.find( "flashed" ) != std::string::npos ) return "Color tint for flashbang blindness indicator tag";
+				if ( norm_disp.find( "distance" ) != std::string::npos ) return "Color tint for target distance measurement tag";
 				return "Color tint for this player status indicator flag";
 			}
 			else if ( norm_suf.starts_with( "oof" ) )
@@ -2141,6 +2269,7 @@ namespace xui {
 			else if ( norm_suf.starts_with( "glow" ) )
 			{
 				if ( norm_suf.find( "rag" ) != std::string::npos ) return "Outer glow outline color around dead ragdoll models";
+				if ( norm_suf.find( "local" ) != std::string::npos ) return "Outer glow outline color around local player model";
 				return "Outer glow outline color around player models";
 			}
 			else if ( norm_suf.starts_with( "name" ) )
@@ -2320,21 +2449,6 @@ namespace xui {
 				if ( norm_disp == "z" ) return "Vertical viewmodel weapon position offset";
 				if ( norm_disp == "fov" ) return "Viewmodel field of view (hand and weapon scale)";
 			}
-			else if ( norm_suf.starts_with( "rcs" ) )
-			{
-				if ( norm_disp == "min" ) return "Minimum recoil reduction percentage";
-				if ( norm_disp == "max" ) return "Maximum recoil reduction percentage";
-			}
-			else if ( norm_suf.starts_with( "srcs" ) )
-			{
-				if ( norm_disp == "strength" ) return "Recoil compensation strength for standalone RCS";
-				if ( norm_disp == "min" ) return "Minimum recoil reduction percentage";
-				if ( norm_disp == "max" ) return "Maximum recoil reduction percentage";
-			}
-			else if ( norm_suf.starts_with( "aw" ) )
-			{
-				if ( norm_disp == "min damage" ) return "Minimum penetration damage required to fire through wallbangable obstacles";
-			}
 			else if ( norm_suf.starts_with( "bloom" ) )
 			{
 				if ( norm_disp == "value" ) return "Bloom post-processing glow intensity multiplier";
@@ -2343,7 +2457,67 @@ namespace xui {
 			{
 				if ( norm_disp == "value" ) return "Gamma brightness and contrast correction curve";
 			}
-			else if ( norm_suf.find( "layer" ) != std::string::npos || norm_suf.find( "primary" ) != std::string::npos || norm_suf.find( "secondary" ) != std::string::npos || norm_suf.find( "overlay" ) != std::string::npos )
+			else if ( norm_suf.starts_with( "mb" ) )
+			{
+				if ( norm_disp == "strength" ) return "Intensity and exposure strength of camera motion blur";
+				if ( norm_disp == "smoothness" ) return "Smoothing filter applied to camera rotational velocity";
+				if ( norm_disp == "samples" ) return "Number of directional motion blur texture samples (quality)";
+				if ( norm_disp == "center clarity" ) return "Preserves crosshair center screen sharpness to maintain aim visibility";
+				if ( norm_disp == "movement blur" ) return "Includes linear player movement velocity in motion blur calculation";
+			}
+			else if ( norm_suf.starts_with( "chatspam" ) )
+			{
+				if ( norm_disp == "text" ) return "Message text string to broadcast in chat";
+				if ( norm_disp == "delay" ) return "Delay interval in seconds between consecutive chat messages";
+				if ( norm_disp == "targets" ) return "Target chat channels to broadcast to (all chat, team chat)";
+			}
+			else if ( norm_suf.starts_with( "killsay" ) )
+			{
+				if ( norm_disp == "text" ) return "Custom message text to send automatically after scoring a kill";
+			}
+			else if ( norm_suf.starts_with( "camera" ) )
+			{
+				if ( norm_disp.find( "aspect" ) != std::string::npos ) return "Custom screen aspect ratio value (e.g. 1.333 for 4:3, 1.777 for 16:9)";
+			}
+			else if ( norm_suf.starts_with( "scoreboard" ) )
+			{
+				if ( norm_disp == "color" ) return "Color tint for weapon icons displayed on scoreboard";
+			}
+			else if ( norm_suf.starts_with( "override" ) )
+			{
+				if ( norm_disp == "nickname" || norm_disp == "name" ) return "Enter custom spoofed player nickname";
+			}
+			else if ( norm_suf.starts_with( "visible" ) )
+			{
+				if ( norm_disp == "color" ) return "Color applied to visible player model surfaces";
+				if ( norm_disp == "material" ) return "Texture shader material for visible player models";
+				if ( norm_disp == "filled" ) return "Fills model body when using outline or outline glow chams";
+			}
+			else if ( norm_suf.starts_with( "wall" ) )
+			{
+				if ( norm_disp == "color" ) return "Color applied to occluded player model surfaces behind walls";
+				if ( norm_disp == "material" ) return "Texture shader material for occluded player models behind walls";
+				if ( norm_disp == "filled" ) return "Fills model body when using outline or outline glow chams";
+			}
+			else if ( norm_suf.starts_with( "overlay" ) )
+			{
+				if ( norm_disp == "color" ) return "Color applied to top chams overlay layer";
+				if ( norm_disp == "material" ) return "Texture shader material for top chams overlay layer";
+				if ( norm_disp == "filled" ) return "Fills model body when using outline or outline glow chams";
+			}
+			else if ( norm_suf.starts_with( "ft" ) )
+			{
+				if ( norm_disp == "fade" ) return "Fade-out lifetime duration in seconds for onshot ghost chams";
+			}
+			else if ( norm_suf.starts_with( "cfg" ) )
+			{
+				if ( norm_disp == "name" ) return "Enter configuration profile name or search filter";
+			}
+			else if ( norm_suf.find( "item_sel" ) != std::string::npos || norm_suf.find( "proj_sel" ) != std::string::npos )
+			{
+				if ( norm_disp == "group" ) return "Select category group to configure independent visuals";
+			}
+			else if ( norm_suf.find( "layer" ) != std::string::npos || norm_suf.find( "primary" ) != std::string::npos || norm_suf.find( "secondary" ) != std::string::npos )
 			{
 				if ( norm_disp.find( "primary" ) != std::string::npos ) return "First base material layer applied to player model";
 				if ( norm_disp.find( "secondary" ) != std::string::npos ) return "Secondary overlay material layer applied to player model";
@@ -2363,13 +2537,14 @@ namespace xui {
 		const auto cur_win = layout::current_window( );
 		const std::string norm_parent = cur_win ? tooltips::normalize_label( cur_win->title ) : "";
 
-		if ( norm_disp == "enable" )
+		if ( norm_disp == "enable" || norm_disp == "enabled" )
 		{
 			if ( norm_parent.find( "rage" ) != std::string::npos ) return "Enables automated rage aimbot and shooting system";
 			if ( norm_parent.find( "legit" ) != std::string::npos ) return "Enables smooth, humanized aim assistance for stealthy gameplay";
 			if ( norm_parent.find( "player" ) != std::string::npos || norm_parent.find( "esp" ) != std::string::npos ) return "Enables visual ESP overlays for this player category";
 			if ( norm_parent.find( "world" ) != std::string::npos ) return "Enables visual enhancements for world elements";
 			if ( norm_parent.find( "mov" ) != std::string::npos ) return "Enables movement assistance features";
+			if ( norm_parent.find( "watermark" ) != std::string::npos || norm_parent.find( "wm" ) != std::string::npos ) return "Enables branded watermark status overlay on screen";
 			return "Enables or disables this feature";
 		}
 		if ( norm_disp == "fill" )
@@ -2400,11 +2575,14 @@ namespace xui {
 			if ( norm_parent.find( "fog" ) != std::string::npos ) return "Custom color of the atmospheric distance fog";
 			if ( norm_parent.find( "glow" ) != std::string::npos ) return "Color of the glowing outline aura";
 			if ( norm_parent.find( "fov" ) != std::string::npos ) return "Color of the visible aimbot FOV circle";
+			if ( norm_parent.find( "scoreboard" ) != std::string::npos ) return "Color tint for weapon icons displayed on scoreboard";
+			if ( norm_parent.find( "theme" ) != std::string::npos ) return "Custom menu interface accent color";
 			return "Color tint and opacity level for this element";
 		}
 		if ( norm_disp == "style" )
 		{
 			if ( norm_parent.find( "box" ) != std::string::npos ) return "Select full 2D bounding box or cornered bracket style";
+			if ( norm_parent.find( "marker" ) != std::string::npos || norm_parent.find( "hm" ) != std::string::npos ) return "Visual style of hit marker: classic ticks, damage numbers, or both";
 			return "Select visual rendering style";
 		}
 		if ( norm_disp == "mode" )
@@ -2416,7 +2594,7 @@ namespace xui {
 		if ( norm_disp == "type" )
 		{
 			if ( norm_parent.find( "weather" ) != std::string::npos ) return "Select weather particle effect: snow, rain, or stars";
-			if ( norm_parent.find( "sound" ) != std::string::npos || norm_parent.find( "hs" ) != std::string::npos ) return "Select audio sound effect type";
+			if ( norm_parent.find( "sound" ) != std::string::npos || norm_parent.find( "hs" ) != std::string::npos || norm_parent.find( "ds" ) != std::string::npos ) return "Select audio sound effect type";
 			if ( norm_parent.find( "impact" ) != std::string::npos || norm_parent.find( "bi" ) != std::string::npos ) return "Style of bullet impact marks: 3D box overlay, spark particles, or both";
 			if ( norm_parent.find( "marker" ) != std::string::npos || norm_parent.find( "hm" ) != std::string::npos ) return "Visual style of hit marker: classic ticks, damage numbers, or both";
 			if ( norm_parent.find( "hat" ) != std::string::npos ) return "Select 3D cosmetic hat model attached to your player head";
@@ -2443,7 +2621,7 @@ namespace xui {
 		{
 			if ( norm_parent.find( "glow" ) != std::string::npos ) return "Opacity and transparency level of the outline glow";
 			if ( norm_parent.find( "alpha" ) != std::string::npos ) return "Local player model opacity when zoomed in or near camera";
-			if ( norm_parent.find( "wm" ) != std::string::npos ) return "Background and text opacity of cheat watermark overlay";
+			if ( norm_parent.find( "wm" ) != std::string::npos || norm_parent.find( "watermark" ) != std::string::npos ) return "Background and text opacity of cheat watermark overlay";
 			return "Adjusts transparency and opacity level";
 		}
 		if ( norm_disp == "inner spread" )
@@ -2468,6 +2646,7 @@ namespace xui {
 		{
 			if ( norm_parent.find( "freecam" ) != std::string::npos ) return "Flight movement speed of the free spectator camera";
 			if ( norm_parent.find( "wet" ) != std::string::npos ) return "Speed of surface ripple animations and slick reflections";
+			if ( norm_parent.find( "slow" ) != std::string::npos ) return "Maximum player movement speed limit during slow walk";
 			return "Adjusts movement or animation speed";
 		}
 		if ( norm_disp == "density" )
@@ -2483,6 +2662,7 @@ namespace xui {
 			if ( norm_parent.find( "marker" ) != std::string::npos || norm_parent.find( "hm" ) != std::string::npos ) return "Duration in seconds hit markers remain visible on screen";
 			if ( norm_parent.find( "tracer" ) != std::string::npos ) return "Duration bullet tracer beams remain visible";
 			if ( norm_parent.find( "impact" ) != std::string::npos || norm_parent.find( "bi" ) != std::string::npos ) return "Lifetime in seconds before bullet impact markers disappear";
+			if ( norm_parent.find( "effect" ) != std::string::npos ) return "Duration of visual hit particle effect";
 			return "Adjusts on-screen duration in seconds";
 		}
 		if ( norm_disp == "passes" )
@@ -2501,6 +2681,59 @@ namespace xui {
 		{
 			return "Play a preview test of the selected sound effect";
 		}
+		if ( norm_disp == "min" )
+		{
+			return "Minimum recoil reduction percentage";
+		}
+		if ( norm_disp == "max" )
+		{
+			return "Maximum recoil reduction percentage";
+		}
+		if ( norm_disp == "strength" )
+		{
+			if ( norm_parent.find( "rcs" ) != std::string::npos || norm_parent.find( "legit" ) != std::string::npos ) return "Recoil compensation strength for standalone RCS";
+			if ( norm_parent.find( "blur" ) != std::string::npos || norm_parent.find( "motion" ) != std::string::npos ) return "Intensity and exposure strength of camera motion blur";
+			if ( norm_parent.find( "effect" ) != std::string::npos || norm_parent.find( "hit" ) != std::string::npos ) return "Intensity and particle density of hit effect";
+			if ( norm_parent.find( "wind" ) != std::string::npos ) return "Wind velocity affecting atmospheric weather particles";
+			return "Adjusts effect or feature strength multiplier";
+		}
+		if ( norm_disp == "smoothness" )
+		{
+			if ( norm_parent.find( "blur" ) != std::string::npos || norm_parent.find( "motion" ) != std::string::npos ) return "Smoothing filter applied to camera rotational velocity";
+			return "Crosshair movement smoothing to simulate natural human aim";
+		}
+		if ( norm_disp == "samples" )
+		{
+			return "Number of directional motion blur texture samples (quality)";
+		}
+		if ( norm_disp == "delay" )
+		{
+			if ( norm_parent.find( "chat" ) != std::string::npos || norm_parent.find( "spam" ) != std::string::npos ) return "Delay interval in seconds between consecutive chat messages";
+			return "Human reaction delay in milliseconds before triggerbot fires";
+		}
+		if ( norm_disp == "text" )
+		{
+			if ( norm_parent.find( "kill" ) != std::string::npos ) return "Custom message text to send automatically after scoring a kill";
+			if ( norm_parent.find( "chat" ) != std::string::npos || norm_parent.find( "spam" ) != std::string::npos ) return "Message text string to broadcast in chat";
+			return "Enter custom text string";
+		}
+		if ( norm_disp == "position" )
+		{
+			if ( norm_parent.find( "hp" ) != std::string::npos || norm_parent.find( "health" ) != std::string::npos ) return "Screen position of player health bar (left, top, bottom)";
+			if ( norm_parent.find( "ammo" ) != std::string::npos ) return "Screen position of player ammo bar (left, top, bottom)";
+			if ( norm_parent.find( "watermark" ) != std::string::npos || norm_parent.find( "wm" ) != std::string::npos ) return "Screen corner anchor position for cheat watermark overlay";
+			return "Select on-screen display anchor position";
+		}
+		if ( norm_disp == "primary" )
+		{
+			if ( norm_parent.find( "buy" ) != std::string::npos ) return "Primary weapon to purchase automatically at round start";
+			return "First base material layer applied to model";
+		}
+		if ( norm_disp == "secondary" )
+		{
+			if ( norm_parent.find( "buy" ) != std::string::npos ) return "Secondary pistol to purchase automatically at round start";
+			return "Secondary overlay material layer applied to model";
+		}
 
 		// 6. Direct fallback exact match on norm_disp if in k_exact
 		if ( it_disp != k_exact.end( ) )
@@ -2513,6 +2746,11 @@ namespace xui {
 
 	void set_hovered_tooltip( std::string_view label, std::string_view explicit_desc )
 	{
+		if ( !tooltips::is_enabled( ) )
+		{
+			return;
+		}
+
 		auto& c = get_ctx( );
 		if ( c.overlay_blocking( ) )
 		{
@@ -2587,6 +2825,16 @@ namespace xui {
 
 	static void render_active_tooltip( const style& st, const input_state& input )
 	{
+		if ( !tooltips::is_enabled( ) )
+		{
+			auto& t = tooltips::g_tooltip;
+			t.alpha = 0.0f;
+			t.target_alpha = 0.0f;
+			t.current_hovered_id = 0;
+			t.active_id = 0;
+			return;
+		}
+
 		const float dt = std::clamp( xdraw::delta_time( ), 0.001f, 0.1f );
 		auto& t = tooltips::g_tooltip;
 

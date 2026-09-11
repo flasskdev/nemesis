@@ -4,6 +4,7 @@
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
 #include <core/settings.hpp>
+#include <utilities/steam/steam.hpp>
 #include <protection/game_addresses.hpp>
 
 namespace features::changer {
@@ -107,7 +108,11 @@ namespace features::changer {
 			return;
 		}
 
-		const auto steam_id = memory::read<std::uint64_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+		auto steam_id = steam::user::get_steam_id( );
+		if ( !steam_id && local.controller )
+		{
+			steam_id = memory::read<std::uint64_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+		}
 		this->apply( local.pawn, item_view, local.team, *selected_glove_def, *selected_skin, static_cast< std::uint32_t >( steam_id ) );
 	}
 

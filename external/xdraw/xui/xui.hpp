@@ -583,6 +583,11 @@ namespace xui {
 
 	void text( std::string_view label, xdraw::color col );
 
+	namespace tooltips {
+		void set_enabled( bool enabled ) noexcept;
+		[[nodiscard]] bool is_enabled( ) noexcept;
+	}
+
 	void set_hovered_tooltip( std::string_view label, std::string_view explicit_desc = {} );
 	void tooltip( std::string_view desc );
 	std::string_view get_function_description( std::string_view label );

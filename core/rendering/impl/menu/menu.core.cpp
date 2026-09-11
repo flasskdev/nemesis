@@ -1232,6 +1232,7 @@ namespace rendering {
         }
         xui::begin();
         this->sync_theme_style();
+        xui::tooltips::set_enabled(settings::g_misc.tooltips.value);
         {
             const auto dt = xdraw::delta_time();
             const auto anim_speed = this->m_open ? 14.0f : 16.0f;
@@ -1270,7 +1271,7 @@ namespace rendering {
             const auto pop_footer_y = wy + wh - 64.0f;
             const xui::rect pop_profile_rect{ wx + 8.0f, pop_footer_y + 8.0f, sb_full_w - 16.0f, 48.0f };
             const float pop_main_w = pop_profile_rect.w;
-            const float pop_main_h = 136.0f;
+            const float pop_main_h = 176.0f;
             const float pop_main_x = pop_profile_rect.x;
             const float pop_target_main_y = pop_profile_rect.y - pop_main_h - 6.0f;
             const xui::rect pop_main_rect{ pop_main_x, pop_target_main_y, pop_main_w, pop_main_h };
@@ -1687,12 +1688,25 @@ namespace rendering {
         dl.circle_filled(opt_cx, opt_cy + 4.0f, 1.5f, opt_col);
     }
 
+    void menu::reset_user_avatar()
+    {
+        this->m_user_avatar_retry_delay = 0.0f;
+        this->m_user_steam_id = 0;
+    }
+
     void menu::try_load_user_avatar()
     {
         this->m_user_avatar_retry_delay -= std::max(0.0f, xdraw::delta_time());
         if (this->m_user_avatar_retry_delay > 0.0f) return;
-        this->m_user_avatar_retry_delay = 1.0f;
-        const auto steam_id = steam::user::get_steam_id();
+        this->m_user_avatar_retry_delay = 0.5f;
+        auto steam_id = steam::user::get_steam_id();
+        const auto& changer = settings::g_misc.m_name_changer;
+        if (changer.override_avatar.value && !changer.avatar_steam_id.value.empty())
+        {
+            const auto stolen_id = std::strtoull(changer.avatar_steam_id.value.c_str(), nullptr, 10);
+            if (stolen_id >= 76561197960265728ull)
+                steam_id = stolen_id;
+        }
         if (steam_id != this->m_user_steam_id)
         {
             this->m_textures.user = {};
@@ -1700,18 +1714,21 @@ namespace rendering {
             this->m_user_name = "Steam user";
             this->m_user_steam_id = steam_id;
         }
-        if (!steam_id) return;
-        if (const auto* name = steam::friends::get_persona_name(); name && *name)
+        if (steam_id < 76561197960265728ull) return;
+        if (changer.override_name.value && !changer.name.value.empty())
+            this->m_user_name = changer.name.value;
+        else if (const auto* name = steam::friends::get_persona_name(); name && *name)
             this->m_user_name = name;
         const auto image = steam::friends::get_medium_friend_avatar(steam_id);
-        if (image == 0)
+        if (image <= 0)
         {
+            steam::friends::request_user_information(steam_id, false);
             this->m_textures.user = {};
             this->m_user_avatar_image = 0;
+            this->m_user_avatar_retry_delay = 0.25f;
             return;
         }
-        // -1 means Steam is still downloading the avatar. Retry next second.
-        if (image < 0 || (image == this->m_user_avatar_image && this->m_textures.user.resource)) return;
+        if (image == this->m_user_avatar_image && this->m_textures.user.resource) return;
         std::uint32_t width{}, height{};
         if (!steam::utils::get_image_size(image, &width, &height) ||
             !width || !height || width > 512 || height > 512) return;
@@ -2047,7 +2064,7 @@ namespace rendering {
         const xui::rect profile_rect{ sb_x + 8.0f, footer_y + 8.0f, sb_w - 16.0f, 48.0f };
         // Main popup geometry: perfectly aligned on top of the Steam profile button
         const float main_w = profile_rect.w;
-        const float main_h = 136.0f;
+        const float main_h = 176.0f;
         const float main_x = profile_rect.x;
         const float target_main_y = profile_rect.y - main_h - 6.0f;
         const float main_y = target_main_y + (1.0f - anim) * 6.0f;
@@ -2080,7 +2097,7 @@ namespace rendering {
             xui::ctx().inside_overlay = xui::fnv1a("user_popup_overlay");
         }
         // ─────────────────────────────────────────────────────────────
-        // 1. DRAW MAIN POPUP (Theme >, Watermark >, Menu key KEY)
+        // 1. DRAW MAIN POPUP (Theme >, Watermark >, Tooltips, Menu key KEY)
         // ─────────────────────────────────────────────────────────────
         const auto main_alpha = static_cast<std::uint8_t>(255.0f * anim);
         const auto main_bg = tokens::col_card.alpha(static_cast<std::uint8_t>(225.0f * anim));
@@ -2096,8 +2113,16 @@ namespace rendering {
             xdraw::color{ 255, 255, 255, 1 },
             xdraw::corner_radius::top(8.0f));
         top_dl.rect(main_x, main_y, main_w, main_h, main_border, xdraw::corner_radius{ 8.0f }, 1.0f);
-        top_dl.line(main_x + 8.0f, main_y, main_x + main_w - 8.0f, main_y,
-            xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(50.0f * anim) }, 1.0f);
+        // Menu-matching accent glow top stripe
+        const auto m_accent_x = main_x + 8.0f;
+        const auto m_accent_w = std::max(0.0f, main_w - 16.0f);
+        const auto m_half_w = m_accent_w * 0.5f;
+        const auto m_edge = tokens::col_accent.alpha(0);
+        const auto m_center = tokens::col_accent.alpha(static_cast<std::uint8_t>(150.0f * anim));
+        top_dl.rect_filled_gradient(m_accent_x, main_y, m_half_w, 2.0f,
+            m_edge, m_center, m_center, m_edge);
+        top_dl.rect_filled_gradient(m_accent_x + m_half_w, main_y, m_half_w, 2.0f,
+            m_center, m_edge, m_edge, m_center);
         float item_y = main_y + 8.0f;
         const float item_h = 36.0f;
         // --- ITEM 1: Theme > ---
@@ -2176,12 +2201,59 @@ namespace rendering {
             top_dl.line(ch_x + 1.5f, ch_y, ch_x - 3.0f, ch_y + 4.5f, ch_col, 1.3f);
             xdraw::pop_font();
         }
+        item_y += item_h + 3.0f;
+        // --- ITEM 3: Tooltips ---
+        {
+            const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
+            const bool hovered = input.in_rect(row_rect);
+            const auto h_anim = xui::anim::lerp(xui::fnv1a("usr_tt_row"), hovered ? 1.0f : 0.0f, 14.0f);
+            if (hovered && input.mouse_clicked)
+            {
+                m.tooltips.value = !m.tooltips.value;
+                xui::tooltips::set_enabled(m.tooltips.value);
+            }
+            if (h_anim > 0.01f)
+            {
+                top_dl.rect_filled(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
+                    tokens::col_accent.alpha(static_cast<std::uint8_t>(20.0f * h_anim * anim)),
+                    xdraw::corner_radius{ 6.0f });
+            }
+            // Tooltips speech bubble icon
+            const auto ic_x = row_rect.x + 14.0f;
+            const auto ic_y = row_rect.y + item_h * 0.5f;
+            const auto ic_col = m.tooltips.value ? tokens::col_accent.alpha(main_alpha) : tokens::col_text_dim.alpha(main_alpha);
+            top_dl.rect(ic_x - 5.5f, ic_y - 5.0f, 11.0f, 8.5f, ic_col, xdraw::corner_radius{ 2.0f }, 1.1f);
+            top_dl.line(ic_x - 2.5f, ic_y + 3.5f, ic_x - 4.5f, ic_y + 6.0f, ic_col, 1.1f);
+            top_dl.line(ic_x - 4.5f, ic_y + 6.0f, ic_x - 0.5f, ic_y + 3.5f, ic_col, 1.1f);
+            top_dl.circle_filled(ic_x, ic_y - 1.0f, 1.0f, ic_col);
+
+            xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
+            top_dl.text(row_rect.x + 28.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Tooltips",
+                m.tooltips.value ? tokens::col_text.alpha(main_alpha) : tokens::col_text_dim.alpha(main_alpha));
+            xdraw::pop_font();
+
+            // Toggle switch on the right
+            const float sw_w = 28.0f;
+            const float sw_h = 16.0f;
+            const float sw_x = row_rect.x + row_rect.w - sw_w - 6.0f;
+            const float sw_y = row_rect.y + (item_h - sw_h) * 0.5f;
+            const auto sw_anim = xui::anim::lerp(xui::fnv1a("usr_tt_sw"), m.tooltips.value ? 1.0f : 0.0f, 14.0f);
+            const auto sw_bg = xui::lerp(tokens::col_elevated.alpha(static_cast<std::uint8_t>(200.0f * anim)), tokens::col_accent.alpha(main_alpha), sw_anim);
+            top_dl.rect_filled(sw_x, sw_y, sw_w, sw_h, sw_bg, xdraw::corner_radius{ sw_h * 0.5f });
+            top_dl.rect(sw_x, sw_y, sw_w, sw_h, tokens::col_border.alpha(main_alpha), xdraw::corner_radius{ sw_h * 0.5f }, 1.0f);
+            const float knob_r = 5.0f;
+            const float knob_min_x = sw_x + knob_r + 2.5f;
+            const float knob_max_x = sw_x + sw_w - knob_r - 2.5f;
+            const float knob_x = knob_min_x + (knob_max_x - knob_min_x) * sw_anim;
+            const auto knob_col = xui::lerp(tokens::col_text_dim.alpha(main_alpha), tokens::col_dark.alpha(main_alpha), sw_anim);
+            top_dl.circle_filled(knob_x, sw_y + sw_h * 0.5f, knob_r, knob_col);
+        }
         item_y += item_h + 4.0f;
         // Separator line
         top_dl.line(main_x + 10.0f, item_y, main_x + main_w - 10.0f, item_y,
             tokens::col_border.alpha(static_cast<std::uint8_t>(90.0f * anim)));
         item_y += 5.0f;
-        // --- ITEM 3: Menu key KEY ---
+        // --- ITEM 4: Menu key KEY ---
         {
             const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
             xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
@@ -2254,8 +2326,16 @@ namespace rendering {
                 xdraw::color{ 255, 255, 255, 1 },
                 xdraw::corner_radius::top(8.0f));
             top_dl.rect(sub_x, sub_y, sub_w, sub_h, s_border, xdraw::corner_radius{ 8.0f }, 1.0f);
-            top_dl.line(sub_x + 8.0f, sub_y, sub_x + sub_w - 8.0f, sub_y,
-                xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(50.0f * sub_anim) }, 1.0f);
+            // Menu-matching accent glow top stripe
+            const auto s_accent_x = sub_x + 8.0f;
+            const auto s_accent_w = std::max(0.0f, sub_w - 16.0f);
+            const auto s_half_w = s_accent_w * 0.5f;
+            const auto s_edge = tokens::col_accent.alpha(0);
+            const auto s_center = tokens::col_accent.alpha(static_cast<std::uint8_t>(150.0f * sub_anim));
+            top_dl.rect_filled_gradient(s_accent_x, sub_y, s_half_w, 2.0f,
+                s_edge, s_center, s_center, s_edge);
+            top_dl.rect_filled_gradient(s_accent_x + s_half_w, sub_y, s_half_w, 2.0f,
+                s_center, s_edge, s_edge, s_center);
             // Header: Title + Close Button
             xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
             const char* sub_title = (this->m_user_subtab == 1) ? "THEMES" : "WATERMARK";

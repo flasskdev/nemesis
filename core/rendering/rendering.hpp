@@ -39,6 +39,7 @@ namespace rendering {
         void apply_saved_cursor();
         void update_ui_state();
         [[nodiscard]] const std::string& user_name() const { return this->m_user_name; }
+        void reset_user_avatar();
         enum class tab : int
         {
             ragebot, legitbot, movement, visuals, skins, misc, config, count

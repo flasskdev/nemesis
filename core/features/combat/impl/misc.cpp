@@ -671,7 +671,7 @@ namespace features::combat {
 
         const auto automatic_revolver = g_shared.ctx().item_def_idx == cstypes::item_definition_index::weapon_r8_revolver &&
             settings::g_combat.m_ragebot.enabled &&
-            (settings::g_combat.m_autos.revolver.value || settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type).no_spread.value);
+            (settings::g_combat.m_autos.revolver.value || settings::g_combat.m_ragebot.get_group(g_shared.ctx().weapon_type, g_shared.ctx().item_def_idx).no_spread.value);
         const auto fired = automatic_revolver ? g_rage.is_firing_this_tick() :
             ((cmd->buttons.value & cstypes::command_buttons::in_attack) && !g_rage.is_cocking_revolver());
         if (fired)

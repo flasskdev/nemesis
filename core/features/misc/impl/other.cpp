@@ -5,6 +5,7 @@
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
+#include <utilities/steam/steam.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 #include <core/features/changer/cosmetic_attributes.hpp>
@@ -335,8 +336,10 @@ namespace features::misc {
 			}
 
 			this->m_name_changer_active = false;
+			this->m_avatar_overridden = false;
 			this->m_name_changer_controller = 0;
 			this->m_original_name.clear();
+			this->m_original_steam_id = 0;
 			this->m_last_sent_name.clear();
 			other::s_display_name.clear();
 			return;
@@ -345,6 +348,11 @@ namespace features::misc {
 		if (!local.controller)
 		{
 			return;
+		}
+
+		if (this->m_name_changer_controller != local.controller)
+		{
+			this->m_avatar_overridden = false;
 		}
 
 		if (!this->m_name_changer_active)

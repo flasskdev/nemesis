@@ -17,8 +17,15 @@ namespace steam {
         return memory::call<const char*>(MODULE_EXPORT("steam_api64.dll:SteamAPI_ISteamFriends_GetPersonaName"), detail::friends_interface);
     }
 
+    constexpr std::uint64_t k_steam_id_base = 76561197960265728ull;
+
     int friends::get_medium_friend_avatar(std::uint64_t steam_id) {
-        if (!steam_id || !initialize()) return 0;
+        if (steam_id < k_steam_id_base || !initialize()) return 0;
         return memory::call<int>(MODULE_EXPORT("steam_api64.dll:SteamAPI_ISteamFriends_GetMediumFriendAvatar"), detail::friends_interface, steam_id);
+    }
+
+    bool friends::request_user_information(std::uint64_t steam_id, bool name_only) {
+        if (steam_id < k_steam_id_base || !initialize()) return false;
+        return memory::call<bool>(MODULE_EXPORT("steam_api64.dll:SteamAPI_ISteamFriends_RequestUserInformation"), detail::friends_interface, steam_id, name_only);
     }
 }

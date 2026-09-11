@@ -2,6 +2,7 @@
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
+#include <utilities/steam/steam.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
@@ -49,6 +50,151 @@ namespace features::misc {
 				}
 			}
 			return null;
+		}
+
+		function getLocalRow(sb, xuid, account_id) {
+			if (typeof MyPersonaAPI !== "undefined" && typeof MyPersonaAPI.GetXuid === "function") {
+				var myXuid = MyPersonaAPI.GetXuid();
+				if (myXuid) {
+					var r = sb.FindChildTraverse("player-" + myXuid);
+					if (isValid(r)) return r;
+					r = sb.FindChildTraverse("id-player-" + myXuid);
+					if (isValid(r)) return r;
+				}
+			}
+
+			var row = getRow(sb, xuid, account_id);
+			if (isValid(row)) return row;
+
+			var candidates = sb.FindChildrenWithClassTraverse("sb-row--local");
+			if (candidates && candidates.length > 0 && isValid(candidates[0])) return candidates[0];
+
+			candidates = sb.FindChildrenWithClassTraverse("is-local-player");
+			if (candidates && candidates.length > 0 && isValid(candidates[0])) return candidates[0];
+
+			candidates = sb.FindChildrenWithClassTraverse("local");
+			for (var i = 0; candidates && i < candidates.length; ++i) {
+				if (isValid(candidates[i]) && candidates[i].id && candidates[i].id.indexOf("player") !== -1)
+					return candidates[i];
+			}
+			return null;
+		}
+
+		// Find the avatar stat cell (container that holds the CSGOAvatarImage)
+		function findAvatarCell(row) {
+			if (!isValid(row)) return null;
+
+			// 1. By CSS class (CS2 scoreboard uses 'sb-row__cell--avatar')
+			var cells = row.FindChildrenWithClassTraverse("sb-row__cell--avatar");
+			if (cells && cells.length > 0 && isValid(cells[0])) return cells[0];
+
+			// 2. By data-stat attribute
+			for (var c = 0; c < row.GetChildCount(); ++c) {
+				var ch = row.GetChild(c);
+				if (isValid(ch) && ch.GetAttributeString && ch.GetAttributeString("data-stat", "") === "avatar")
+					return ch;
+			}
+
+			// 3. Deep search children for data-stat="avatar"
+			var allCells = row.FindChildrenWithClassTraverse("sb-row__cell");
+			if (allCells) {
+				for (var i = 0; i < allCells.length; ++i) {
+					if (isValid(allCells[i]) && allCells[i].GetAttributeString && allCells[i].GetAttributeString("data-stat", "") === "avatar")
+						return allCells[i];
+				}
+			}
+
+			return null;
+		}
+
+		function getPingLabel(row) {
+			if (!isValid(row)) return null;
+
+			var pingCell = null;
+			var cells = row.FindChildrenWithClassTraverse("sb-row__cell--ping");
+			if (cells && cells.length > 0 && isValid(cells[0])) pingCell = cells[0];
+
+			if (!isValid(pingCell)) {
+				for (var c = 0; c < row.GetChildCount(); ++c) {
+					var ch = row.GetChild(c);
+					if (isValid(ch) && ch.GetAttributeString && ch.GetAttributeString("data-stat", "") === "ping") {
+						pingCell = ch;
+						break;
+					}
+				}
+			}
+
+			if (isValid(pingCell)) {
+				var lbl = pingCell.FindChildTraverse("label");
+				if (isValid(lbl)) return lbl;
+				for (var i = 0; i < pingCell.GetChildCount(); ++i) {
+					var child = pingCell.GetChild(i);
+					if (isValid(child) && (child.paneltype === "Label" || typeof child.text === "string"))
+						return child;
+				}
+				if (pingCell.paneltype === "Label") return pingCell;
+			}
+
+			// Fallbacks
+			var ping = row.FindChildTraverse("id-sb-ping__label");
+			if (isValid(ping)) return ping;
+			ping = row.FindChildTraverse("id-sb-ping");
+			if (isValid(ping)) return ping;
+			return null;
+		}
+
+		var g_profile = null;
+		var OVERLAY_ID = "vel_av_override";
+
+		function applyProfileNow() {
+			if (!g_profile) return;
+			var sb = getScoreboard();
+			if (!sb) return;
+			var row = getLocalRow(sb, g_profile.xuid, g_profile.account_id);
+			if (!row) return;
+
+			// --- AVATAR OVERRIDE (overlay approach) ---
+			// The scoreboard's own code continuously calls PopulateFromPlayerSlot(slot)
+			// on the original CSGOAvatarImage, which overwrites any PopulateFromSteamID we set.
+			// Solution: create our OWN CSGOAvatarImage panel, hide the original.
+			// The scoreboard updates the hidden original; our overlay stays with the stolen avatar.
+			if (g_profile.avatar_steamid && g_profile.avatar_steamid.length > 5) {
+				var avatarCell = findAvatarCell(row);
+				if (isValid(avatarCell)) {
+					var overlay = avatarCell.FindChildTraverse(OVERLAY_ID);
+
+					if (!isValid(overlay)) {
+						// Hide original avatar image (the one the scoreboard controls)
+						var origImg = avatarCell.FindChildTraverse("image");
+						if (isValid(origImg)) {
+							origImg.visible = false;
+						}
+						// Create our overlay CSGOAvatarImage
+						overlay = $.CreatePanel("CSGOAvatarImage", avatarCell, OVERLAY_ID);
+						if (isValid(overlay)) {
+							overlay.SetHasClass("sb-row__cell--avatar-image", true);
+						}
+					}
+
+					if (isValid(overlay)) {
+						overlay.visible = true;
+						overlay.PopulateFromSteamID(g_profile.avatar_steamid);
+					}
+				}
+			} else {
+				// Avatar override disabled — remove overlay and restore original
+				var avatarCell2 = findAvatarCell(row);
+				if (isValid(avatarCell2)) {
+					var existingOverlay = avatarCell2.FindChildTraverse(OVERLAY_ID);
+					if (isValid(existingOverlay)) {
+						existingOverlay.DeleteAsync(0.0);
+					}
+					var origImg2 = avatarCell2.FindChildTraverse("image");
+					if (isValid(origImg2)) {
+						origImg2.visible = true;
+					}
+				}
+			}
 		}
 
 		function getSize(w) {
@@ -164,6 +310,7 @@ namespace features::misc {
 				// RunScript already enters this panel's V8 context. Scheduling each
 				// update additionally churns CUIEngine's native async-event queue.
 				updateNow(xuid, account_id, weapons, active_path);
+				applyProfileNow();
 			},
 
 			clear: function () {
@@ -186,6 +333,13 @@ namespace features::misc {
 	SClient.register_handler("clearWeapons", function (msg) {
 		if (msg && msg.content)
 			SWeaponManager.update(msg.content.xuid, msg.content.account_id, [], "");
+	});
+
+	SClient.register_handler("updateProfile", function (msg) {
+		if (msg && msg.content) {
+			g_profile = msg.content;
+			applyProfileNow();
+		}
 	});
 
 })();
@@ -235,7 +389,11 @@ namespace features::misc {
 	}
 
 	void scoreboard_weapons::on_frame_stage_notify () {
-		if (!settings::g_misc.m_scoreboard_weapons.enabled.value) {
+		const bool need_scoreboard =
+			settings::g_misc.m_scoreboard_weapons.enabled.value ||
+			settings::g_misc.m_name_changer.override_avatar.value;
+
+		if (!need_scoreboard) {
 			if (m_script_injected) {
 				clear_all ();
 				m_script_injected = false;
@@ -245,9 +403,10 @@ namespace features::misc {
 			return;
 		}
 
-		const auto local = systems::g_local.get ();
-		if (!local.is_valid ())
-			return;
+		auto local_ctrl = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
+		if (!local_ctrl) {
+			local_ctrl = systems::g_local.get().controller;
+		}
 
 		const auto scoreboard_open = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
 		if (!scoreboard_open) {
@@ -266,7 +425,7 @@ namespace features::misc {
 
 		if (!m_script_injected) {
 			++m_init_throttle;
-			if (m_init_throttle % 30 == 0)
+			if (m_init_throttle % 5 == 0)
 				try_initialize ();
 
 			if (!m_script_injected)
@@ -274,22 +433,28 @@ namespace features::misc {
 		}
 
 		++m_throttle;
+
+		// Immediately update profile on opening and every 4 frames (faster response)
+		if (m_throttle == 1 || m_throttle % 4 == 0) {
+			if (settings::g_misc.m_name_changer.override_avatar.value) {
+				send_profile_override( local_ctrl );
+			}
+		}
+
 		if (m_throttle % 8 != 0)
 			return;
 		if (m_throttle % 64 == 0)
 			m_cache.clear();
 
-		const auto players = systems::g_entities.get_by_type (systems::entities::type::player);
-		const auto items = systems::g_entities.get_by_type (systems::entities::type::item);
-		if (m_throttle == 8) {
-			logging::console::print (xs ("[scoreboard_weapons] scoreboard opened; players={} weapon_entities={}\n"),
-				players.size(), items.size());
-		}
-		for (const auto& player : players) {
-			if (!player.ptr)
-				continue;
+		if (settings::g_misc.m_scoreboard_weapons.enabled.value) {
+			const auto players = systems::g_entities.get_by_type (systems::entities::type::player);
+			const auto items = systems::g_entities.get_by_type (systems::entities::type::item);
+			for (const auto& player : players) {
+				if (!player.ptr)
+					continue;
 
-			send_player_weapons (player.ptr, items);
+				send_player_weapons (player.ptr, items);
+			}
 		}
 	}
 
@@ -495,6 +660,36 @@ namespace features::misc {
 
 		if (run_script(script))
 			m_cache[steamid] = std::move(state);
+	}
+
+	void scoreboard_weapons::send_profile_override (std::uintptr_t controller) {
+		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+		auto steamid = controller ? memory::safe_read<std::uint64_t> (
+			controller + SCHEMA ("CBasePlayerController", "m_steamID"_hash)).value_or(0) : 0;
+		if (steamid < steam_id_base) {
+			steamid = steam::user::get_steam_id();
+		}
+		if (steamid < steam_id_base)
+			return;
+
+		const auto account_id = steamid - steam_id_base;
+
+		std::string avatar_id = "";
+		if (settings::g_misc.m_name_changer.override_avatar.value && !settings::g_misc.m_name_changer.avatar_steam_id.value.empty()) {
+			avatar_id = settings::g_misc.m_name_changer.avatar_steam_id.value;
+		}
+
+		if (avatar_id.empty())
+			return;
+
+		const auto script = std::format (
+			R"(if(typeof(SClient)!=='undefined'){{SClient.receive({{type:"updateProfile",content:{{xuid:"{}",account_id:"{}",avatar_steamid:"{}"}}}});}})",
+			steamid,
+			account_id,
+			avatar_id
+		);
+
+		(void)run_script(script);
 	}
 
 	bool scoreboard_weapons::send_clear (std::uint64_t steamid) {

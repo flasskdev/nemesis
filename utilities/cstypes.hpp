@@ -1,5 +1,10 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
+#include <span>
+#include <string_view>
+
 namespace cstypes {
 
 	constexpr auto tick_interval{ 0.015625f };
@@ -219,6 +224,103 @@ namespace cstypes {
 		constexpr std::uint16_t weapon_skeleton_knife{ 525 };
 
 	} // namespace item_definition_index
+
+	namespace weapons {
+
+		inline constexpr std::size_t k_group_count = 6;
+		inline constexpr std::size_t k_total_weapons = 34;
+
+		struct weapon_entry {
+			std::uint16_t id;
+			const char* name;
+			const char* config_name;
+			std::uint32_t group_idx;
+		};
+
+		struct group_entry {
+			std::uint32_t weapon_type;
+			const char* name;
+			const char* config_name;
+			std::size_t start_idx;
+			std::size_t count;
+		};
+
+		inline constexpr std::array<weapon_entry, k_total_weapons> k_weapons = {{
+			// Pistols (0..9)
+			{ item_definition_index::weapon_desert_eagle, "Desert Eagle", "deagle", 0 },
+			{ item_definition_index::weapon_dual_berettas, "Dual Berettas", "duals", 0 },
+			{ item_definition_index::weapon_five_seven, "Five-SeveN", "fiveseven", 0 },
+			{ item_definition_index::weapon_glock_18, "Glock-18", "glock", 0 },
+			{ item_definition_index::weapon_tec_9, "Tec-9", "tec9", 0 },
+			{ item_definition_index::weapon_p2000, "P2000", "p2000", 0 },
+			{ item_definition_index::weapon_p250, "P250", "p250", 0 },
+			{ item_definition_index::weapon_usp_s, "USP-S", "usps", 0 },
+			{ item_definition_index::weapon_cz75_auto, "CZ75-Auto", "cz75", 0 },
+			{ item_definition_index::weapon_r8_revolver, "R8 Revolver", "revolver", 0 },
+
+			// SMGs (10..16)
+			{ item_definition_index::weapon_mac_10, "MAC-10", "mac10", 1 },
+			{ item_definition_index::weapon_mp9, "MP9", "mp9", 1 },
+			{ item_definition_index::weapon_mp7, "MP7", "mp7", 1 },
+			{ item_definition_index::weapon_mp5_sd, "MP5-SD", "mp5sd", 1 },
+			{ item_definition_index::weapon_ump_45, "UMP-45", "ump45", 1 },
+			{ item_definition_index::weapon_p90, "P90", "p90", 1 },
+			{ item_definition_index::weapon_pp_bizon, "PP-Bizon", "bizon", 1 },
+
+			// Rifles (17..23)
+			{ item_definition_index::weapon_ak_47, "AK-47", "ak47", 2 },
+			{ item_definition_index::weapon_m4a4, "M4A4", "m4a4", 2 },
+			{ item_definition_index::weapon_m4a1_s, "M4A1-S", "m4a1s", 2 },
+			{ item_definition_index::weapon_galil_ar, "Galil AR", "galil", 2 },
+			{ item_definition_index::weapon_famas, "FAMAS", "famas", 2 },
+			{ item_definition_index::weapon_aug, "AUG", "aug", 2 },
+			{ item_definition_index::weapon_sg_553, "SG 553", "sg553", 2 },
+
+			// Shotguns (24..27)
+			{ item_definition_index::weapon_nova, "Nova", "nova", 3 },
+			{ item_definition_index::weapon_xm1014, "XM1014", "xm1014", 3 },
+			{ item_definition_index::weapon_mag_7, "MAG-7", "mag7", 3 },
+			{ item_definition_index::weapon_sawed_off, "Sawed-Off", "sawedoff", 3 },
+
+			// Snipers (28..31)
+			{ item_definition_index::weapon_awp, "AWP", "awp", 4 },
+			{ item_definition_index::weapon_ssg_08, "SSG 08", "ssg08", 4 },
+			{ item_definition_index::weapon_scar_20, "SCAR-20", "scar20", 4 },
+			{ item_definition_index::weapon_g3sg1, "G3SG1", "g3sg1", 4 },
+
+			// LMGs (32..33)
+			{ item_definition_index::weapon_m249, "M249", "m249", 5 },
+			{ item_definition_index::weapon_negev, "Negev", "negev", 5 },
+		}};
+
+		inline constexpr std::array<group_entry, k_group_count> k_groups = {{
+			{ weapon_type::pistol,  "Pistols",  "pistol",  0, 10 },
+			{ weapon_type::smg,     "SMGs",     "smg",     10, 7 },
+			{ weapon_type::rifle,   "Rifles",   "rifle",   17, 7 },
+			{ weapon_type::shotgun, "Shotguns", "shotgun", 24, 4 },
+			{ weapon_type::sniper,  "Snipers",  "sniper",  28, 4 },
+			{ weapon_type::lmg,     "LMGs",     "lmg",     32, 2 },
+		}};
+
+		[[nodiscard]] constexpr int get_weapon_index( std::uint16_t id ) noexcept
+		{
+			for ( std::size_t i = 0; i < k_total_weapons; ++i )
+			{
+				if ( k_weapons[ i ].id == id ) return static_cast< int >( i );
+			}
+			return -1;
+		}
+
+		[[nodiscard]] constexpr int get_group_index_by_type( std::uint32_t wtype ) noexcept
+		{
+			for ( std::size_t i = 0; i < k_group_count; ++i )
+			{
+				if ( k_groups[ i ].weapon_type == wtype ) return static_cast< int >( i );
+			}
+			return -1;
+		}
+
+	} // namespace weapons
 
 	struct tick_fraction
 	{

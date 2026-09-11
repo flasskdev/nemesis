@@ -4,6 +4,7 @@
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/memory/memory.hpp>
 #include <utilities/logging/logging.hpp>
+#include <utilities/steam/steam.hpp>
 #include <limits>
 
 #include "../../rendering.hpp"
@@ -150,6 +151,115 @@ namespace rendering {
 				if ( xui::begin_popup( "##restore_name", 250.0f ) )
 				{
 					xui::text_input( "nickname##override", m.m_name_changer.name.value, 127, "Player" );
+					if ( xui::checkbox( "override avatar", m.m_name_changer.override_avatar ) )
+					{
+						g_menu.reset_user_avatar( );
+					}
+					xui::layout::spacing( 3.0f );
+
+					struct match_player_t
+					{
+						std::string name;
+						std::uint64_t steam_id{ 0 };
+					};
+
+					std::vector<match_player_t> match_players;
+					const auto local = systems::g_local.get( );
+					for ( const auto& player : systems::g_entities.get_by_type( systems::entities::type::player ) )
+					{
+						if ( !player.ptr || player.ptr == local.controller )
+							continue;
+
+						const auto name_ptr = memory::safe_read<std::uintptr_t>( player.ptr + SCHEMA( "CCSPlayerController", "m_sSanitizedPlayerName"_hash ) ).value_or( 0 );
+						if ( !name_ptr )
+							continue;
+
+						auto pname = memory::read_string( name_ptr, 127 );
+						if ( pname.empty( ) )
+							continue;
+
+						const auto steam_id = memory::safe_read<std::uint64_t>( player.ptr + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) ).value_or( 0 );
+						match_players.push_back( { std::move( pname ), steam_id } );
+					}
+
+					static int s_selected_player = -1;
+					if ( match_players.empty( ) )
+					{
+						static constexpr const char* const k_empty_list[ ]{ "no players in match" };
+						int dummy_idx = 0;
+						xui::combo( "steal player##match", dummy_idx, k_empty_list, 1 );
+					}
+					else
+					{
+						std::vector<const char*> item_ptrs;
+						item_ptrs.reserve( match_players.size( ) );
+						for ( const auto& p : match_players )
+						{
+							item_ptrs.push_back( p.name.c_str( ) );
+						}
+
+						if ( s_selected_player < 0 && !m.m_name_changer.avatar_steam_id.value.empty( ) )
+						{
+							const auto current_target_id = std::strtoull( m.m_name_changer.avatar_steam_id.value.c_str( ), nullptr, 10 );
+							for ( int i = 0; i < static_cast< int >( match_players.size( ) ); ++i )
+							{
+								if ( match_players[ static_cast< std::size_t >( i ) ].steam_id == current_target_id )
+								{
+									s_selected_player = i;
+									break;
+								}
+							}
+						}
+
+						if ( s_selected_player < 0 || s_selected_player >= static_cast< int >( match_players.size( ) ) )
+						{
+							s_selected_player = 0;
+						}
+
+						auto copy_player = [&]( int idx ) {
+							if ( idx < 0 || idx >= static_cast< int >( match_players.size( ) ) )
+								return;
+
+							const auto& chosen = match_players[ static_cast< std::size_t >( idx ) ];
+							m.m_name_changer.name.value = chosen.name;
+							m.m_name_changer.override_name.value = true;
+							if ( chosen.steam_id >= 76561197960265728ull )
+							{
+								m.m_name_changer.avatar_steam_id.value = std::to_string( chosen.steam_id );
+								steam::friends::request_user_information( chosen.steam_id, false );
+							}
+							if ( m.m_name_changer.override_avatar.value )
+							{
+								g_menu.reset_user_avatar( );
+							}
+							logging::console::print( xs( "[name_changer] copied player '{}' (steam_id: {})\n" ), chosen.name, chosen.steam_id );
+						};
+
+						if ( xui::combo( "steal player##match", s_selected_player, item_ptrs.data( ), static_cast< int >( item_ptrs.size( ) ) ) )
+						{
+							if ( s_selected_player >= 0 && s_selected_player < static_cast< int >( match_players.size( ) ) )
+							{
+								const auto& chosen = match_players[ static_cast< std::size_t >( s_selected_player ) ];
+								m.m_name_changer.name.value = chosen.name;
+								if ( chosen.steam_id >= 76561197960265728ull )
+								{
+									m.m_name_changer.avatar_steam_id.value = std::to_string( chosen.steam_id );
+									steam::friends::request_user_information( chosen.steam_id, false );
+								}
+								if ( m.m_name_changer.override_avatar.value )
+								{
+									g_menu.reset_user_avatar( );
+								}
+							}
+						}
+
+						xui::layout::spacing( 2.0f );
+						if ( xui::button( "Copy Player##steal" ) )
+						{
+							copy_player( s_selected_player );
+						}
+					}
+
 					xui::end_popup( );
 				}
 				xui::layout::spacing( 3.0f );

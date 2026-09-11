@@ -2,6 +2,7 @@
 #include <core/settings.hpp>
 
 #include "../../rendering.hpp"
+#include "menu.weapons.hpp"
 
 namespace rendering {
 
@@ -9,8 +10,7 @@ namespace rendering {
 
 		constexpr const char* hitbox_names[ ]{ "head", "chest", "stomach", "arms", "legs", "feet" };
 		constexpr const char* pitch_items[ ]{ "none", "down", "up" };
-        constexpr const char* weapon_group_items[]{ "Pistol", "SMG", "Rifle", "Shotgun", "Sniper", "LMG" };
-        inline int weapon_group_idx{ 2 };
+		inline menu_weapons::weapon_selection weapon_sel_rage{ 2, -1 };
 
 	} // namespace detail
 
@@ -26,7 +26,12 @@ namespace rendering {
 		auto& autos = s.m_autos;
 		auto& lg = s.m_lagcomp;
 
+		const auto is_custom_wep = (detail::weapon_sel_rage.weapon_flat_idx >= 0 &&
+			detail::weapon_sel_rage.weapon_flat_idx < static_cast<int>(cstypes::weapons::k_total_weapons));
 
+		auto& wg = is_custom_wep
+			? rb.weapons[detail::weapon_sel_rage.weapon_flat_idx].cfg
+			: rb.groups[std::clamp(detail::weapon_sel_rage.group_idx, 0, 5)];
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
@@ -51,8 +56,6 @@ namespace rendering {
 
 		if ( xui::begin_child( "##ragebot_main", col_w, body_h - k_header_h, true ) )
 		{
-			auto& wg = rb.groups[std::clamp(detail::weapon_group_idx, 0, 5)];
-
 			xui::toggle( "Enable Ragebot", rb.enabled );
 			if ( xui::begin_popup( "##rb_popup", 220.0f ) )
 			{
@@ -67,7 +70,23 @@ namespace rendering {
 			}
 
 			xui::layout::spacing( 3.0f );
-			xui::combo("Weapon Group", detail::weapon_group_idx, detail::weapon_group_items, 6);
+			menu_weapons::draw_selector( "##rb_weapon_select", detail::weapon_sel_rage, false );
+			if ( is_custom_wep )
+			{
+				auto& ow = rb.weapons[ detail::weapon_sel_rage.weapon_flat_idx ];
+				xui::layout::spacing( 2.0f );
+				xui::toggle( "Custom Weapon Settings", ow.override_group );
+				if ( !ow.override_group.value )
+				{
+					xui::layout::spacing( 2.0f );
+					if ( xui::button( "Copy Group Settings##rb" ) )
+					{
+						ow.cfg.copy_values_from( rb.groups[ std::clamp( detail::weapon_sel_rage.group_idx, 0, 5 ) ] );
+						ow.override_group.value = true;
+					}
+				}
+			}
+			xui::layout::spacing( 3.0f );
 			xui::toggle("Silent Aim", wg.silent);
 			xui::layout::spacing( 3.0f );
 			xui::slider_float( "Field of View", wg.max_fov, 1.0f, 180.0f, "%.0f°" );
@@ -114,9 +133,8 @@ namespace rendering {
 			xui::layout::spacing( 8.0f );
 
 			// Плавная анимация скрытия/появления авторевольвера (только для пистолетов при выключенном No Spread)
-			const auto group_idx = std::clamp( detail::weapon_group_idx, 0, 5 );
-			const auto& current_wg = rb.groups[ group_idx ];
-			const bool should_show_revolver = ( group_idx == 0 && !current_wg.no_spread.value );
+			const auto group_idx = std::clamp( detail::weapon_sel_rage.group_idx, 0, 5 );
+			const bool should_show_revolver = ( group_idx == 0 && !wg.no_spread.value );
 
 			auto revolver_anim = xui::anim::lerp(
 				xui::fnv1a( "auto_revolver_menu_anim" ),
