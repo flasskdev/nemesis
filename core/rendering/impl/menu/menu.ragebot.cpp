@@ -113,8 +113,83 @@ namespace rendering {
 			xui::layout::separator( );
 			xui::layout::spacing( 8.0f );
 
-			xui::toggle( "Auto Revolver", autos.revolver );
-			xui::layout::spacing( 3.0f );
+			// Плавная анимация скрытия/появления авторевольвера (только для пистолетов при выключенном No Spread)
+			const auto group_idx = std::clamp( detail::weapon_group_idx, 0, 5 );
+			const auto& current_wg = rb.groups[ group_idx ];
+			const bool should_show_revolver = ( group_idx == 0 && !current_wg.no_spread.value );
+
+			auto revolver_anim = xui::anim::lerp(
+				xui::fnv1a( "auto_revolver_menu_anim" ),
+				should_show_revolver ? 1.0f : 0.0f,
+				10.0f,
+				should_show_revolver ? 1.0f : 0.0f
+			);
+
+			if ( revolver_anim <= 0.001f )
+			{
+				revolver_anim = 0.0f;
+				xui::anim::set( xui::fnv1a( "auto_revolver_menu_anim" ), 0.0f );
+			}
+			else if ( revolver_anim >= 0.999f )
+			{
+				revolver_anim = 1.0f;
+				xui::anim::set( xui::fnv1a( "auto_revolver_menu_anim" ), 1.0f );
+			}
+
+			if ( revolver_anim > 0.0f )
+			{
+				auto* win = xui::layout::current_window( );
+				auto& st = xui::ctx( ).style;
+
+				// Базовая позиция первого элемента под разделителем со стандартным отступом
+				if ( win && win->line_h > 0.0f )
+				{
+					win->cursor_y += win->line_h + st.item_spacing_y;
+					win->line_h = 0.0f;
+				}
+
+				const auto [start_cx, base_y] = xui::layout::get_cursor( );
+				const float scroll_y = win ? win->scroll_y : 0.0f;
+				const float win_bx = win ? win->bounds.x : 0.0f;
+				const float win_by = win ? win->bounds.y : 0.0f;
+				const float screen_x = win_bx + start_cx;
+				const float screen_y = win_by + base_y - scroll_y;
+
+				// Полный шаг переключателя: высота строки (30px) + spacing (3px) + стандартный межэлементный отступ (item_spacing_y)
+				const float full_stride = 30.0f + 3.0f + st.item_spacing_y;
+				const float anim_ease = xui::ease::out_cubic( revolver_anim );
+				const float current_offset = full_stride * anim_ease;
+				const float clip_h = 30.0f * anim_ease;
+				const float clip_w = win ? win->bounds.w : col_w;
+
+				auto& dl = xui::draw::current( );
+				dl.push_clip( screen_x - 10.0f, screen_y - 2.0f, clip_w + 20.0f, clip_h + 4.0f );
+
+				// Плавная модуляция прозрачности элементов переключателя
+				const auto a = std::clamp( revolver_anim, 0.0f, 1.0f );
+				xui::push_style_color( xui::style_col::text, st.text.alpha( static_cast< std::uint8_t >( st.text.a * a ) ) );
+				xui::push_style_color( xui::style_col::checkbox_bg, st.checkbox_bg.alpha( static_cast< std::uint8_t >( st.checkbox_bg.a * a ) ) );
+				xui::push_style_color( xui::style_col::checkbox_border, st.checkbox_border.alpha( static_cast< std::uint8_t >( st.checkbox_border.a * a ) ) );
+				xui::push_style_color( xui::style_col::accent, st.accent.alpha( static_cast< std::uint8_t >( st.accent.a * a ) ) );
+				xui::push_style_color( xui::style_col::text_dim, st.text_dim.alpha( static_cast< std::uint8_t >( st.text_dim.a * a ) ) );
+
+				// Блокировка клика во время анимации скрытия
+				auto& input = xui::ctx( ).input;
+				const auto saved_clicked = input.mouse_clicked;
+				if ( !should_show_revolver || revolver_anim < 0.95f )
+				{
+					input.mouse_clicked = false;
+				}
+
+				xui::toggle( "Auto Revolver", autos.revolver );
+
+				input.mouse_clicked = saved_clicked;
+				xui::pop_style_color( 5 );
+				dl.pop_clip( );
+
+				// Курсор для следующего виджета сдвигается ровно на анимированный шаг
+				xui::layout::set_cursor( start_cx, base_y + current_offset );
+			}
 			xui::toggle( "Quick Peek Assist", qp.enabled );
 			if ( xui::begin_popup( "##qp_popup", 220.0f ) )
 			{

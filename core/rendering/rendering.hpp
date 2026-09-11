@@ -1,9 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
-
 namespace rendering {
-
     class context
     {
     public:
@@ -18,12 +16,10 @@ namespace rendering {
         [[nodiscard]] bool is_initialized() const { return this->m_initialized; }
         [[nodiscard]] bool ui_assets_ready() const { return this->m_ui_assets_ready; }
         ID3D11RenderTargetView* get_rtv() const { return this->m_rtv; }
-
     private:
         void create_rtv(IDXGISwapChain* swap_chain);
         void setup_zdraw(HWND window);
         bool try_bind_ui_assets();
-
         ID3D11Device* m_device{ nullptr };
         ID3D11DeviceContext* m_context{ nullptr };
         ID3D11RenderTargetView* m_rtv{ nullptr };
@@ -32,7 +28,6 @@ namespace rendering {
         bool m_initialized{ false };
         bool m_ui_assets_ready{ false };
     };
-
     class menu
     {
     public:
@@ -44,14 +39,11 @@ namespace rendering {
         void apply_saved_cursor();
         void update_ui_state();
         [[nodiscard]] const std::string& user_name() const { return this->m_user_name; }
-
         enum class tab : int
         {
             ragebot, legitbot, movement, visuals, skins, misc, config, count
         };
-
         static constexpr float k_sidebar_w = tokens::sidebar_w;
-
     private:
         bool draw_intro();
         void draw_side_bar(float h); // Оставляем один аргумент
@@ -65,6 +57,9 @@ namespace rendering {
         void activate_search_result(std::size_t index);
         void draw_user_popup();
 
+        // New method for the Ambience modal
+        void draw_ambience();
+
         void draw_ragebot(float group_w) const;
         void draw_legitbot(float group_w) const;
         void draw_movement(float group_w) const;
@@ -74,7 +69,6 @@ namespace rendering {
         void draw_skins(float group_w) const;
         void draw_misc(float group_w) const;
         void draw_config(float group_w);
-
         bool m_open{ true };
         bool m_config_modal_open{};
         bool m_config_cloud_refresh_pending{};
@@ -85,43 +79,41 @@ namespace rendering {
         bool m_has_saved_cursor{};
         int m_saved_cursor_x{};
         int m_saved_cursor_y{};
-
         bool m_user_popup_open{ false };
         int m_user_subtab{ 0 }; // 0: none, 1: theme, 2: watermark
         bool m_binding_menu_key{ false };
-
         float m_x{ 100.0f };
         float m_y{ 100.0f };
         float m_w{ 920.0f };
         float m_h{ 680.0f };
-
         float m_body_x{};
         float m_body_y{};
         float m_body_w{};
         float m_body_h{};
-
         int m_tab{};
         int m_subtab{};
         int m_visuals_subtab{};
         bool m_visuals_expanded{ false };
         int m_subtab_pill_tab{ -1 };
         float m_subtab_pill_x{ -1.0f };
-
         float m_intro_elapsed{};
         float m_intro_assets_ready_at{ -1.0f };
         float m_intro_bar_phase{};
         bool m_intro_base_graphics_ready{};
         bool m_intro_finished{};
         bool m_intro_skip_requested{};
-
         bool m_search_open{};
+
+        // Ambience state
+        bool m_ambience_open{ false };
+        float m_ambience_anim{ 0.0f };
+
         std::string m_user_name{ "Steam user" };
         std::uint64_t m_user_steam_id{};
         int m_user_avatar_image{};
         float m_user_avatar_retry_delay{};
         std::string m_search_query{};
         std::vector<std::size_t> m_search_visible_indices{};
-
         struct search_entry
         {
             std::string name{};
@@ -133,7 +125,6 @@ namespace rendering {
             int bind_key{};
         };
         std::vector<search_entry> m_search_entries{};
-
         struct textures
         {
             struct entry
@@ -142,7 +133,6 @@ namespace rendering {
                 int width{};
                 int height{};
             };
-
             entry logo{};
             entry user{};
             entry tabs[7]{};
@@ -155,17 +145,14 @@ namespace rendering {
             entry cfg_plus{};
             entry intro_splash{};
         } m_textures{};
-
         static constexpr auto k_max_subtabs{ 7 };
         struct subtab_info
         {
             const char* names[k_max_subtabs]{};
             int count{};
         };
-
         static constexpr subtab_info k_visuals_player_subtabs{ { "enemy", "team", "local" }, 3 };
-        static constexpr subtab_info k_visuals_world_subtabs{ { "items", "world", "weather" }, 3 };
-
+        static constexpr subtab_info k_visuals_world_subtabs{ { "general" }, 1 };
         static constexpr subtab_info k_subtab_defs[static_cast<int>(tab::count)]
         {
             { { "general" }, 1 },
@@ -177,29 +164,24 @@ namespace rendering {
             { { "general" }, 1 }
         };
     };
-
     class widgets
     {
     public:
         void draw();
         static inline std::string s_map_name{};
-
         [[nodiscard]] bool is_keybinds_hovered() const noexcept { return this->m_keybinds_hovered; }
         [[nodiscard]] bool is_keybinds_dragging() const noexcept { return this->m_keybinds_dragging; }
         [[nodiscard]] bool is_spectators_hovered() const noexcept { return this->m_spectators_hovered; }
         [[nodiscard]] bool is_spectators_dragging() const noexcept { return this->m_spectators_dragging; }
-
     private:
         void watermark(xdraw::draw_list& draw_list);
         void keybinds(xdraw::draw_list& draw_list);
         void spectators(xdraw::draw_list& draw_list);
-
         bool m_keybinds_hovered{ false };
         bool m_keybinds_dragging{ false };
         bool m_spectators_hovered{ false };
         bool m_spectators_dragging{ false };
     };
-
     class fonts
     {
     public:
@@ -210,27 +192,21 @@ namespace rendering {
             big,
             count
         };
-
         struct family_t
         {
-            std::array<xdraw::font*, static_cast<std::size_t>(size::count)> sizes{ };
+            std::array<xdraw::font*, static_cast<std::size_t>(size::count)> sizes{};
             xdraw::font* operator[](size size) const { return this->sizes[static_cast<std::size_t>(size)]; }
             xdraw::font*& operator[](size size) { return this->sizes[static_cast<std::size_t>(size)]; }
         };
-
         void initialize();
-
         family_t inter_medium{};
         family_t inter_bold{};
         family_t smallest_pixel7{};
-
     private:
         void load_family(family_t& family, std::span<const std::byte> data, const std::array<float, static_cast<std::size_t>(size::count)>& sizes);
     };
-
     inline context g_context{};
     inline menu g_menu{};
     inline widgets g_widgets{};
     inline fonts g_fonts{};
-
 } // namespace rendering

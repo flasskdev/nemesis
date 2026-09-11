@@ -10,9 +10,7 @@
 #include "../../theme.hpp"
 
 namespace rendering {
-
     namespace detail {
-
         [[nodiscard]] static std::string to_lower_copy(std::string_view v)
         {
             std::string out(v);
@@ -108,50 +106,34 @@ namespace rendering {
         }
 
         constexpr const char* k_cham_material_names[]{
-            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl",
-            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)",
-            "outline glow", "outline glow (iz)"
+            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "outline glow", "electric", "distortion", "hologram", "pearl",
+            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)", "outline glow (iz)"
         };
         constexpr auto k_cham_material_count = static_cast<int>(settings::esp::cham_ids::count);
-
         constexpr const char* k_cham_visible_material_names[]{
             "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl"
         };
         constexpr int k_cham_visible_material_count = 11;
-
         constexpr const char* k_cham_wall_material_names[]{
             "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)"
         };
         constexpr int k_cham_wall_material_count = 8;
-
     } // namespace detail
 
     namespace svgs {
-
         constexpr auto logo = R"(<svg width="17" height="14" viewBox="0 0 17 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.148138 10.5306L7.19953 0.643266C7.81122 -0.214422 9.08773 -0.214422 9.69942 0.643266L16.7254 10.4949C17.099 11.0189 16.7236 11.7453 16.0792 11.7453H14.5344C14.1378 11.7453 13.7815 11.5036 13.6355 11.1356L11.5458 5.86857C11.4326 5.58318 11.1562 5.3957 10.8486 5.3957C10.7131 5.3957 10.6149 5.52457 10.651 5.65485L12.6899 12.9972C12.8299 13.5014 12.4499 14 11.9256 14H10.5367C10.2323 14 9.97322 13.7786 9.92648 13.4784L8.68012 4.66254C8.64757 4.45362 8.28767 4.45728 8.24676 4.66475L6.57384 13.5028C6.51683 13.7917 6.26301 14 5.96795 14H4.58215C4.04293 14 3.66094 13.4746 3.8282 12.9631L6.17936 5.7721C6.23588 5.59921 6.10678 5.4216 5.92452 5.4216H5.87377C5.57672 5.4216 5.30764 5.59658 5.1877 5.86781L2.81532 11.2326C2.65733 11.5899 2.29903 11.8169 1.9078 11.8076L0.775512 11.7808C0.139818 11.7656 -0.220464 11.0476 0.148214 10.5306H0.148138Z" fill="#111111"/> </svg>)";
-
         constexpr auto search = R"(<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 6.66667C2 7.2795 2.12071 7.88634 2.35523 8.45252C2.58975 9.01871 2.93349 9.53316 3.36683 9.9665C3.80017 10.3998 4.31462 10.7436 4.88081 10.9781C5.447 11.2126 6.05383 11.3333 6.66667 11.3333C7.2795 11.3333 7.88634 11.2126 8.45252 10.9781C9.01871 10.7436 9.53316 10.3998 9.9665 9.9665C10.3998 9.53316 10.7436 9.01871 10.9781 8.45252C11.2126 7.88634 11.3333 7.2795 11.3333 6.66667C11.3333 6.05383 11.2126 5.447 10.9781 4.88081C10.7436 4.31462 10.3998 3.80017 9.9665 3.36683C9.53316 2.93349 9.01871 2.58975 8.45252 2.35523C7.88634 2.12071 7.2795 2 6.66667 2C6.05383 2 5.447 2.12071 4.88081 2.35523C4.31462 2.58975 3.80017 2.93349 3.36683 3.36683C2.93349 3.80017 2.58975 4.31462 2.35523 4.88081C2.12071 5.447 2 6.05383 2 6.66667Z" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 14L10 10" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>)";
-
         constexpr auto settings = R"(<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.5937 3.65661C11.7942 3.77063 11.9607 3.93601 12.0761 4.13573C12.1914 4.33546 12.2514 4.56231 12.25 4.79294V9.04194C12.25 9.51386 11.9916 9.94903 11.5745 10.1783L7.637 12.6691C7.44179 12.7763 7.2227 12.8325 7 12.8325C6.7773 12.8325 6.55821 12.7763 6.363 12.6691L2.4255 10.1783C2.22143 10.0668 2.05107 9.90245 1.93224 9.70255C1.81341 9.50265 1.75047 9.2745 1.75 9.04194V4.79236C1.75 4.32044 2.00842 3.88586 2.4255 3.65661L6.363 1.33494C6.56398 1.22413 6.78975 1.16602 7.01925 1.16602C7.24875 1.16602 7.47452 1.22413 7.6755 1.33494L11.613 3.65661H11.5937Z" stroke="#111111" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.25 7C5.25 7.46413 5.43437 7.90925 5.76256 8.23744C6.09075 8.56563 6.53587 8.75 7 8.75C7.46413 8.75 7.90925 8.56563 8.23744 8.23744C8.56563 7.90925 8.75 7.46413 8.75 7C8.75 6.53587 8.56563 6.09075 8.23744 5.76256C7.90925 5.43437 7.46413 5.25 7 5.25C6.53587 5.25 6.09075 5.43437 5.76256 5.76256C5.43437 6.09075 5.25 6.53587 5.25 7Z" stroke="#111111" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>)";
-
         // Иконки вкладок удалены, так как теперь используется текст
-
         constexpr auto cfg_folder_black = R"(<svg width="15" height="13" viewBox="0 0 15 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.25 0.75H5.25L7.5 3H12.75C13.1478 3 13.5294 3.15804 13.8107 3.43934C14.092 3.72064 14.25 4.10218 14.25 4.5V10.5C14.25 10.8978 14.092 11.2794 13.8107 11.5607C13.5294 11.842 13.1478 12 12.75 12H2.25C1.85218 12 1.47064 11.842 1.18934 11.5607C0.908035 11.2794 0.75 10.8978 0.75 10.5V2.25C0.75 1.85218 0.908035 1.47064 1.18934 1.18934C1.47064 0.908035 1.85218 0.75 2.25 0.75Z" stroke="#111111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>)";
-
         constexpr auto cfg_folder_dim = R"(<svg width="15" height="13" viewBox="0 0 15 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.25 0.75H5.25L7.5 3H12.75C13.1478 3 13.5294 3.15804 13.8107 3.43934C14.092 3.72064 14.25 4.10218 14.25 4.5V10.5C14.25 10.8978 14.092 11.2794 13.8107 11.5607C13.5294 11.842 13.1478 12 12.75 12H2.25C1.85218 12 1.47064 11.842 1.18934 11.5607C0.908035 11.2794 0.75 10.8978 0.75 10.5V2.25C0.75 1.85218 0.908035 1.47064 1.18934 1.18934C1.47064 0.908035 1.85218 0.75 2.25 0.75Z" stroke="#ADC0FF" stroke-opacity="0.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>)";
-
         constexpr auto cfg_cloud_black = R"(<svg width="17" height="12" viewBox="0 0 17 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.24275 10.4998C2.31375 10.4998 0.75 8.99454 0.75 7.13754C0.75 5.28129 2.31375 3.77604 4.24275 3.77604C4.5375 2.45454 5.58825 1.37604 6.999 0.946291C8.409 0.517291 9.966 0.801541 11.082 1.69629C12.198 2.58879 12.7035 3.95154 12.4095 5.27304H13.152C14.5867 5.27304 15.75 6.44304 15.75 7.88754C15.75 9.33279 14.5867 10.5028 13.1512 10.5028H4.24275" stroke="#111111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>)";
-
         constexpr auto cfg_cloud_dim = R"(<svg width="17" height="12" viewBox="0 0 17 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.24275 10.4998C2.31375 10.4998 0.75 8.99454 0.75 7.13754C0.75 5.28129 2.31375 3.77604 4.24275 3.77604C4.5375 2.45454 5.58825 1.37604 6.999 0.946291C8.409 0.517291 9.966 0.801541 11.082 1.69629C12.198 2.58879 12.7035 3.95154 12.4095 5.27304H13.152C14.5867 5.27304 15.75 6.44304 15.75 7.88754C15.75 9.33279 14.5867 10.5028 13.1512 10.5028H4.24275" stroke="#ADC0FF" stroke-opacity="0.32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>)";
-
         constexpr auto cfg_plus = R"(<svg width="16" height="15" viewBox="0 0 16 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 4V11M4 7.5H12" stroke="#ADC0FF" stroke-width="1.5" stroke-linecap="round"/></svg>)";
-
         constexpr auto intro_splash_logo = R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4421.68 3676.26" width="4421.68" height="3676.26"><path fill="#FFFFFF" d="M38.84,2765.23L1886.62,168.91c160.29-225.22,494.79-225.22,655.08,0l1841.11,2586.94c97.92,137.59-.45,328.33-169.32,328.33h-404.81c-103.92,0-197.3-63.46-235.56-160.09l-547.58-1383.07c-29.67-74.94-102.1-124.17-182.71-124.17h0c-35.51,0-61.24,33.84-51.76,68.05l534.27,1928.03c36.69,132.4-62.89,263.32-200.28,263.32h-363.96c-79.77,0-147.65-58.14-159.9-136.97l-326.6-2314.95c-8.53-54.86-102.84-53.9-113.56.58l-438.38,2320.78c-14.94,75.86-81.45,130.56-158.77,130.56h-363.14c-141.3,0-241.4-137.96-197.57-272.29l616.11-1888.27c14.81-45.4-19.02-92.04-66.78-92.04h-13.3c-77.84,0-148.35,45.95-179.78,117.17l-621.67,1408.75c-41.4,93.82-135.29,153.43-237.81,150.99l-296.71-7.06c-166.58-3.97-260.99-192.52-164.38-328.27Z"/></svg>)";
-
     } // namespace svgs
 
     namespace images {
-
         inline unsigned char user[9427]
         {
             0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
@@ -941,7 +923,6 @@ namespace rendering {
             0x65, 0x76, 0xA7, 0x52, 0xF0, 0x1C, 0x39, 0x00, 0x00, 0x00, 0x00, 0x49,
             0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
         };
-
     } // namespace images
 
     void menu::initialize_graphics()
@@ -950,10 +931,8 @@ namespace rendering {
         {
             return;
         }
-
         constexpr auto icon_target{ 16.0f };
         this->m_textures.logo.resource = xdraw::load_svg(svgs::logo, icon_target / 14.0f, &this->m_textures.logo.width, &this->m_textures.logo.height);
-
         constexpr float k_intro_logo_view_w{ 4421.68f };
         constexpr float k_intro_logo_px_w{ 240.0f };
         this->m_textures.intro_splash.resource = xdraw::load_svg(
@@ -962,36 +941,29 @@ namespace rendering {
             &this->m_textures.intro_splash.width,
             &this->m_textures.intro_splash.height
         );
-
         this->m_textures.search.resource = xdraw::load_svg(svgs::search, icon_target / 16.0f, &this->m_textures.search.width, &this->m_textures.search.height);
         this->m_textures.settings.resource = xdraw::load_svg(svgs::settings, icon_target / 14.0f, &this->m_textures.settings.width, &this->m_textures.settings.height);
-
         constexpr float k_cfg_icon_scale{ 1.0f };
         this->m_textures.cfg_folder_on.resource = xdraw::load_svg(svgs::cfg_folder_black, k_cfg_icon_scale, &this->m_textures.cfg_folder_on.width, &this->m_textures.cfg_folder_on.height);
         this->m_textures.cfg_folder_off.resource = xdraw::load_svg(svgs::cfg_folder_dim, k_cfg_icon_scale, &this->m_textures.cfg_folder_off.width, &this->m_textures.cfg_folder_off.height);
         this->m_textures.cfg_cloud_on.resource = xdraw::load_svg(svgs::cfg_cloud_black, k_cfg_icon_scale, &this->m_textures.cfg_cloud_on.width, &this->m_textures.cfg_cloud_on.height);
         this->m_textures.cfg_cloud_off.resource = xdraw::load_svg(svgs::cfg_cloud_dim, k_cfg_icon_scale, &this->m_textures.cfg_cloud_off.width, &this->m_textures.cfg_cloud_off.height);
         this->m_textures.cfg_plus.resource = xdraw::load_svg(svgs::cfg_plus, 1.0f, &this->m_textures.cfg_plus.width, &this->m_textures.cfg_plus.height);
-
         // Иконки вкладок больше не загружаются здесь, так как используется текст
-
         this->m_intro_base_graphics_ready = true;
     }
 
     void menu::rebuild_search_index()
     {
         this->m_search_entries.clear();
-
         const auto all_settings = xui::binds::all();
         this->m_search_entries.reserve(all_settings.size());
-
         for (const auto* setting : all_settings)
         {
             if (!setting || setting->name.empty())
             {
                 continue;
             }
-
             search_entry entry{};
             entry.name = setting->name;
             entry.category = setting->category;
@@ -999,7 +971,6 @@ namespace rendering {
             entry.category_lower = detail::to_lower_copy(entry.category);
             std::tie(entry.tab, entry.subtab) = detail::map_category_to_tab(entry.category_lower);
             entry.bind_key = setting->bind.key;
-
             this->m_search_entries.emplace_back(std::move(entry));
         }
     }
@@ -1017,7 +988,6 @@ namespace rendering {
         {
             return;
         }
-
         const auto& chosen = this->m_search_entries[this->m_search_visible_indices[index]];
         this->m_tab = std::clamp(chosen.tab, 0, 6);
         if (this->m_tab == static_cast<int>(tab::visuals))
@@ -1026,7 +996,11 @@ namespace rendering {
             if (chosen.subtab >= 10)
             {
                 this->m_visuals_subtab = 1;
-                this->m_subtab = std::clamp(chosen.subtab - 10, 0, k_visuals_world_subtabs.count - 1);
+                this->m_subtab = 0;
+                if (chosen.subtab == 11 || chosen.subtab == 12)
+                {
+                    this->m_ambience_open = true;
+                }
             }
             else
             {
@@ -1046,9 +1020,7 @@ namespace rendering {
     {
         xui::layout::set_cursor(x - this->m_x, y - this->m_y);
         this->m_search_visible_indices.clear();
-
         auto query_lower = detail::to_lower_copy(this->m_search_query);
-
         for (std::size_t i = 0; i < this->m_search_entries.size(); ++i)
         {
             const auto& it = this->m_search_entries[i];
@@ -1061,7 +1033,6 @@ namespace rendering {
                 }
             }
         }
-
         if (xui::begin_child("##menu_search_results", w, h, true))
         {
             for (std::size_t i = 0; i < this->m_search_visible_indices.size(); ++i)
@@ -1071,19 +1042,14 @@ namespace rendering {
                 const auto row_h = 32.0f;
                 const auto row = xui::layout::item(avail_w, row_h);
                 const auto hovered = xui::ctx().input.in_rect(row);
-
                 const auto row_anim = xui::anim::lerp(xui::fnv1a("search_row") + static_cast<std::uintptr_t>(i), hovered ? 1.0f : 0.0f, 12.0f);
-
                 auto& dl = xui::draw::current();
                 const auto row_bg = xui::lerp(tokens::col_card, tokens::col_accent.alpha(90), row_anim * 0.35f);
                 dl.rect_filled(row.x, row.y, row.w, row.h, row_bg, xdraw::corner_radius{ 6.0f });
-
                 const auto label_col = xui::lerp(tokens::col_text, tokens::col_dark, row_anim * 0.2f);
                 const auto name_th = xdraw::measure_text(item.name).second;
                 const auto name_y = row.y + (row.h - name_th) * 0.5f;
-
                 dl.text(row.x + 10.0f, name_y, item.name, label_col);
-
                 if (item.bind_key != 0)
                 {
                     const auto key = xui::vk_name(item.bind_key);
@@ -1092,11 +1058,9 @@ namespace rendering {
                     const auto bw = kw + 16.0f;
                     const auto bx = row.right() - bw - 6.0f;
                     const auto by = row.y + (row.h - bh) * 0.5f;
-
                     dl.rect_filled(bx, by, bw, bh, tokens::col_card, xdraw::corner_radius{ 5.0f });
                     dl.text(bx + 8.0f, by + (bh - kh) * 0.5f, key, tokens::col_text_dim);
                 }
-
                 if (hovered && xui::ctx().input.mouse_clicked && !xui::ctx().overlay_blocking())
                 {
                     this->activate_search_result(i);
@@ -1105,7 +1069,6 @@ namespace rendering {
             }
             xui::end_child();
         }
-
         if (!this->m_search_visible_indices.empty())
         {
             for (const auto vk : xui::ctx().input.key_presses())
@@ -1125,119 +1088,92 @@ namespace rendering {
         {
             return false;
         }
-
         const float dt = xdraw::delta_time();
         this->m_intro_elapsed += dt;
         this->m_intro_bar_phase += dt;
-
         const auto [screen_w, screen_h] = xdraw::viewport_size();
         const float sw = static_cast<float>(screen_w);
         const float sh = static_cast<float>(screen_h);
-
         auto& dl = xdraw::get(xdraw::layer::top);
-
         const auto smoothstep = [](float edge0, float edge1, float x) -> float
             {
                 const auto t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
                 return t * t * (3.0f - 2.0f * t);
             };
-
         const bool pack_ready = g_context.ui_assets_ready();
         if (pack_ready && this->m_intro_assets_ready_at < 0.0f)
         {
             this->m_intro_assets_ready_at = this->m_intro_elapsed;
         }
-
         if (this->m_intro_assets_ready_at >= 0.0f)
         {
             this->m_intro_finished = true;
             return false;
         }
-
         dl.rect_filled(0.0f, 0.0f, sw, sh, xdraw::color{ 36, 36, 40, 153 });
-
         const auto reveal = smoothstep(0.0f, 0.30f, this->m_intro_elapsed);
-
         float anchor_x{};
         float anchor_y{};
         float anchor_w{};
         float anchor_bottom{};
-
         if (this->m_textures.intro_splash.resource)
         {
             auto tex_w = static_cast<float>(this->m_textures.intro_splash.width);
             auto tex_h = static_cast<float>(this->m_textures.intro_splash.height);
-
             if (tex_w > 0.0f && tex_h > 0.0f)
             {
                 const auto target_max = sw * 0.28f;
                 auto draw_w = tex_w;
                 auto draw_h = tex_h;
-
                 if (draw_w > target_max)
                 {
                     const auto s = target_max / draw_w;
                     draw_w *= s;
                     draw_h *= s;
                 }
-
                 if (draw_h > sh * 0.42f)
                 {
                     const auto s = (sh * 0.42f) / draw_h;
                     draw_w *= s;
                     draw_h *= s;
                 }
-
                 const auto eased_scale = std::lerp(0.92f, 1.0f, reveal);
                 const float dw = draw_w * eased_scale;
                 const float dh = draw_h * eased_scale;
-
                 const auto lx = std::floor((sw - dw) * 0.5f);
                 const auto ly = std::floor((sh - dh) * 0.5f);
-
                 const auto img_a = static_cast<std::uint8_t>(255.0f * reveal);
                 dl.image(lx, ly, dw, dh, this->m_textures.intro_splash.resource.Get(), xdraw::color{ 255, 255, 255, img_a });
-
                 anchor_x = lx;
                 anchor_y = ly;
                 anchor_w = dw;
                 anchor_bottom = ly + dh;
             }
         }
-
         const auto emergence = smoothstep(0.12f, 0.65f, this->m_intro_elapsed);
         const bool has_artwork = anchor_w > 4.0f && anchor_bottom > 1.0f;
-
         const float pad_x = 28.0f;
         const float track_w = std::clamp(has_artwork ? anchor_w + pad_x * 2.0f : sw * 0.38f, 200.0f, sw * 0.46f);
         const float track_center_x = has_artwork ? anchor_x + anchor_w * 0.5f : sw * 0.5f;
         const float track_left = track_center_x - track_w * 0.5f;
-
         const float bar_start_y = has_artwork ? anchor_bottom - 6.0f : sh * 0.58f;
         const float bar_rest_y = has_artwork ? anchor_bottom + 18.0f : sh * 0.58f + 28.0f;
         const float track_y = std::lerp(bar_start_y, bar_rest_y, emergence);
-
         // Indeterminate progress – short loop repeats for the whole intro; scene minimum duration handled above.
         constexpr float k_bar_cycle_sec{ 1.45f };
         const float t_norm = std::fmod(this->m_intro_bar_phase, k_bar_cycle_sec) / k_bar_cycle_sec;
-
         const float track_h = 8.0f;
         const float k_bar_round = track_h * 0.5f;
         const auto bar_round = xdraw::corner_radius{ k_bar_round };
-
         const auto track_fill_a = static_cast<std::uint8_t>(static_cast<float>(tokens::col_accent.a) * 0.2f * emergence);
         dl.rect_filled(track_left, track_y, track_w, track_h, tokens::col_accent.alpha(track_fill_a), bar_round);
-
         const float clip_x = track_left;
         const float clip_y = track_y;
         const float clip_w = track_w;
         const float clip_h = track_h;
-
         dl.push_clip(clip_x, clip_y, clip_w, clip_h);
-
         float scale_x{};
         float tx_frac{};
-
         if (t_norm <= 0.4f)
         {
             const float seg_u = smoothstep(0.0f, 1.0f, t_norm / 0.4f);
@@ -1250,19 +1186,15 @@ namespace rendering {
             scale_x = std::lerp(0.4f, 0.5f, seg_u);
             tx_frac = seg_u;
         }
-
         const float bar_w = clip_w * scale_x;
         const float bar_x = clip_x + tx_frac * clip_w;
-
         if (bar_w >= 1.0f)
         {
             const float bar_r = std::min(k_bar_round, bar_w * 0.5f);
             const auto value_a = static_cast<std::uint8_t>(static_cast<float>(tokens::col_accent.a) * emergence);
             dl.rect_filled(bar_x, clip_y, bar_w, clip_h, tokens::col_accent.alpha(value_a), xdraw::corner_radius{ bar_r });
         }
-
         dl.pop_clip();
-
         return true;
     }
 
@@ -1289,54 +1221,42 @@ namespace rendering {
             }
             this->m_last_open = this->m_open;
         }
-
         if (!g_context.ui_assets_ready())
         {
             this->draw_intro();
             return;
         }
-
         if (this->draw_intro())
         {
             return;
         }
-
         xui::begin();
         this->sync_theme_style();
-
         {
             const auto dt = xdraw::delta_time();
             const auto anim_speed = this->m_open ? 14.0f : 16.0f;
             const auto anim_target = this->m_open ? 1.0f : 0.0f;
             this->m_open_anim += (anim_target - this->m_open_anim) * std::min(anim_speed * dt, 1.0f);
-
             if (this->m_open_anim < 0.01f && !this->m_open)
             {
                 xui::end();
                 return;
             }
-
             const auto menu_reveal = xui::ease::smoothstep(this->m_open_anim);
-
             if (!xui::begin_window("##menu", this->m_x, this->m_y, this->m_w, this->m_h, false, 200.0f, 200.0f, menu_reveal))
             {
                 return;
             }
-
             if (g_widgets.is_keybinds_dragging() || (g_widgets.is_keybinds_hovered() && xui::ctx().input.mouse_clicked))
             {
                 xui::ctx().active_window = xui::null_id;
             }
-
             xdraw::push_font(rendering::g_fonts.inter_medium[rendering::fonts::size::petite]);
-
             auto& dl = xui::draw::current();
-
             const auto wx = this->m_x;
             const auto wy = this->m_y;
             const auto ww = this->m_w;
             const auto wh = this->m_h;
-
             const auto sb_w = menu::k_sidebar_w;
             const auto sb_x = wx + tokens::gap;
             const auto sb_y = wy + tokens::gap;
@@ -1345,7 +1265,6 @@ namespace rendering {
             dl.rect_filled(wx + 1.0f, wy + 1.0f, sidebar_edge - wx - 1.0f, wh - 2.0f,
                 xui::lerp(tokens::col_dark, tokens::col_card, 0.12f).alpha(140), xdraw::corner_radius::left(tokens::window_rounding - 1.0f));
             dl.line(sidebar_edge, wy + 1.0f, sidebar_edge, wy + wh - 1.0f, tokens::col_border.alpha(120));
-
             // User popup click and modal blocking handling
             const auto sb_full_w = menu::k_sidebar_w + tokens::gap;
             const auto pop_footer_y = wy + wh - 64.0f;
@@ -1355,24 +1274,20 @@ namespace rendering {
             const float pop_main_x = pop_profile_rect.x;
             const float pop_target_main_y = pop_profile_rect.y - pop_main_h - 6.0f;
             const xui::rect pop_main_rect{ pop_main_x, pop_target_main_y, pop_main_w, pop_main_h };
-
             const bool pop_sub_open = (this->m_user_subtab == 1 || this->m_user_subtab == 2);
             const float pop_sub_w = (this->m_user_subtab == 1) ? 230.0f : 240.0f;
             const float pop_sub_h = (this->m_user_subtab == 1) ? 385.0f : 375.0f;
             const float pop_sub_x = pop_main_x + pop_main_w + 6.0f;
             const float pop_target_sub_y = std::clamp(pop_target_main_y + pop_main_h - pop_sub_h, wy + 10.0f, wy + wh - pop_sub_h - 10.0f);
             const xui::rect pop_sub_rect{ pop_sub_x, pop_target_sub_y, pop_sub_w, pop_sub_h };
-
             auto& input_ref = xui::ctx().input;
             bool restore_popup_click = false;
-
             if (this->m_user_popup_open)
             {
                 xui::ctx().modal_blocking = true;
                 const bool in_prof = input_ref.in_rect(pop_profile_rect);
                 const bool in_main = input_ref.in_rect(pop_main_rect);
                 const bool in_sub = pop_sub_open && input_ref.in_rect(pop_sub_rect);
-
                 if (input_ref.mouse_clicked)
                 {
                     if (in_prof)
@@ -1402,7 +1317,6 @@ namespace rendering {
                     }
                 }
             }
-
             this->draw_side_bar(wh);
             const auto accent_x = wx + tokens::window_rounding + 1.0f;
             const auto accent_w = std::max(0.0f, ww - (tokens::window_rounding + 1.0f) * 2.0f);
@@ -1413,7 +1327,6 @@ namespace rendering {
                 edge, center, center, edge);
             dl.rect_filled_gradient(accent_x + half_w, wy, half_w, 2.0f,
                 center, edge, edge, center);
-
             // Liquid glass top highlight and glass perimeter rim
             dl.rect_filled_gradient(wx + 1.0f, wy + 1.0f, ww - 2.0f, 32.0f,
                 xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(20.0f * menu_reveal) },
@@ -1422,26 +1335,19 @@ namespace rendering {
                 xdraw::color{ 255, 255, 255, 0 },
                 xdraw::corner_radius::top(tokens::window_rounding - 1.0f));
             dl.rect(wx, wy, ww, wh, xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(32.0f * menu_reveal) }, xdraw::corner_radius{ tokens::window_rounding }, 1.0f);
-
             const auto content_x = sb_x + sb_w + tokens::gap;
             const auto content_y = sb_y;
             const auto content_w = ww - tokens::gap * 2.0f - sb_w - tokens::gap;
             const auto content_h = sb_h;
-
             this->draw_top_bar(content_w);
-
             const auto body_y = content_y + tokens::subtab_bar_h + tokens::gap;
             const auto body_h = content_h - tokens::subtab_bar_h - tokens::gap;
-
             const auto col_w = (content_w - tokens::gap) * 0.5f;
-
             this->m_body_x = content_x;
             this->m_body_y = body_y;
             this->m_body_w = content_w;
             this->m_body_h = body_h;
-
             xui::layout::set_cursor(content_x - wx, body_y - wy);
-
             if (this->m_search_open)
             {
                 // While search is open, block the regular top-bar interactions in this frame.
@@ -1458,6 +1364,21 @@ namespace rendering {
                 return;
             }
 
+            // Update Ambience modal animation and background blocking
+            {
+                const auto amb_anim_speed = this->m_ambience_open ? 16.0f : 18.0f;
+                const auto amb_target = this->m_ambience_open ? 1.0f : 0.0f;
+                this->m_ambience_anim += (amb_target - this->m_ambience_anim) * std::min(amb_anim_speed * dt, 1.0f);
+                if (this->m_ambience_anim < 0.02f && !this->m_ambience_open)
+                {
+                    this->m_ambience_anim = 0.0f;
+                }
+                if (this->m_ambience_open || this->m_ambience_anim > 0.001f)
+                {
+                    xui::ctx().modal_blocking = true;
+                }
+            }
+
             switch (this->m_tab)
             {
             case 0: this->draw_ragebot(col_w); break;
@@ -1469,17 +1390,15 @@ namespace rendering {
             case 6: this->draw_config(col_w); break;
             }
 
+            this->draw_ambience();
             xui::end_window();
-
             if (restore_popup_click)
             {
                 xui::ctx().input.mouse_clicked = true;
             }
-
             this->draw_user_popup();
             xui::ctx().modal_blocking = false;
             xui::ctx().inside_overlay = xui::null_id;
-
             xui::end();
             xdraw::pop_font();
         }
@@ -1499,15 +1418,12 @@ namespace rendering {
         {
             return;
         }
-
         const auto vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
         const auto vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         const auto vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         const auto vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
         const auto x = std::clamp(this->m_saved_cursor_x, vx, vx + std::max(1, vw) - 1);
         const auto y = std::clamp(this->m_saved_cursor_y, vy, vy + std::max(1, vh) - 1);
-
         SetCursorPos(x, y);
         SetCursor(LoadCursor(nullptr, IDC_ARROW));
     }
@@ -1520,7 +1436,6 @@ namespace rendering {
         const auto sb_x = this->m_x;
         const auto sb_y = this->m_y;
         const auto sb_w = menu::k_sidebar_w + tokens::gap;
-
         const auto badge_x = sb_x + 20.0f;
         const auto badge_y = sb_y + 24.0f;
         constexpr auto badge_size = 38.0f;
@@ -1536,8 +1451,7 @@ namespace rendering {
         dl.text(badge_x + badge_size + 13.0f, badge_y + (badge_size - th) * 0.5f, "mintaly", tokens::col_text);
         xdraw::pop_font();
         dl.line(sb_x + 1.0f, sb_y + 82.0f, sb_x + sb_w, sb_y + 82.0f, tokens::col_border);
-
-        constexpr std::array<const char*, 7> names{ {"Ragebot", "Legitbot", "Movement", "Visuals", "Skins", "Misc", "Configs"} };
+        constexpr std::array<const char*, 7> names{ { "Ragebot", "Legitbot", "Movement", "Visuals", "Skins", "Misc", "Configs" } };
         float curr_y = sb_y + 98.0f;
         for (int i = 0; i < static_cast<int>(names.size()); ++i)
         {
@@ -1598,12 +1512,12 @@ namespace rendering {
                 dl.circle(cx, cy, 2.2f, icon_color, 1.2f);
                 break;
             case 2: {
-                const std::array<float, 12> points{ {cx + 2, cy - 8, cx - 6, cy + 1, cx, cy + 1, cx - 2, cy + 8, cx + 7, cy - 2, cx + 1, cy - 2} };
+                const std::array<float, 12> points{ { cx + 2, cy - 8, cx - 6, cy + 1, cx, cy + 1, cx - 2, cy + 8, cx + 7, cy - 2, cx + 1, cy - 2 } };
                 dl.polyline(points, icon_color, true, 1.2f);
                 break;
             }
             case 3: {
-                const std::array<float, 16> points{ {cx - 8,cy, cx - 4,cy - 4,cx,cy - 5,cx + 4,cy - 4,cx + 8,cy,cx + 4,cy + 4,cx,cy + 5,cx - 4,cy + 4} };
+                const std::array<float, 16> points{ { cx - 8,cy, cx - 4,cy - 4,cx,cy - 5,cx + 4,cy - 4,cx + 8,cy,cx + 4,cy + 4,cx,cy + 5,cx - 4,cy + 4 } };
                 dl.polyline(points, icon_color, true, 1.2f);
                 dl.circle(cx, cy, 2.2f, icon_color, 1.2f);
                 break;
@@ -1633,57 +1547,46 @@ namespace rendering {
             const auto text_h = xdraw::measure_text(names[i]).second;
             dl.text(button.x + 43.0f, button.y + (button.h - text_h) * 0.5f,
                 names[i], active ? tokens::col_text : icon_color);
-
-            const auto raw_expand = xui::anim::lerp(xui::fnv1a("visuals_sidebar_expand"), this->m_visuals_expanded ? 1.0f : 0.0f, 13.0f);
+            const auto raw_expand = xui::anim::lerp(xui::fnv1a("visuals_sidebar_expand"), this->m_visuals_expanded ? 1.0f : 0.0f, 8.0f); // ИЗМЕНЕНО: Скорость анимации снижена с 13.0f до 8.0f для большей плавности
             const auto expand_anim = xui::ease::smoothstep(raw_expand);
-
             if (i == 3)
             {
                 const auto ch_x = button.x + button.w - 14.0f;
                 const auto ch_y = button.y + button.h * 0.5f;
                 const auto ch_color = (expand_anim > 0.5f || active) ? tokens::col_accent : tokens::col_text_dim;
-
                 const float p1_x = std::lerp(ch_x - 2.0f, ch_x - 3.5f, expand_anim);
                 const float p1_y = std::lerp(ch_y - 3.5f, ch_y - 1.5f, expand_anim);
                 const float p2_x = std::lerp(ch_x + 1.5f, ch_x, expand_anim);
                 const float p2_y = std::lerp(ch_y, ch_y + 2.0f, expand_anim);
                 const float p3_x = std::lerp(ch_x - 2.0f, ch_x + 3.5f, expand_anim);
                 const float p3_y = std::lerp(ch_y + 3.5f, ch_y - 1.5f, expand_anim);
-
                 dl.line(p1_x, p1_y, p2_x, p2_y, ch_color, 1.2f);
                 dl.line(p2_x, p2_y, p3_x, p3_y, ch_color, 1.2f);
             }
             xdraw::pop_font();
-
             const float sub_area_y = curr_y + 42.0f;
             const float total_sub_h = 64.0f;
             const float current_sub_h = total_sub_h * expand_anim;
-
             curr_y += 42.0f;
-
             if (i == 3)
             {
                 if (expand_anim > 0.001f)
                 {
                     dl.push_clip(sb_x, sub_area_y, sb_w, current_sub_h);
-
                     constexpr const char* vsub_names[2] = { "Player", "World" };
                     const float tree_x = sb_x + 22.0f;
                     const float branch_start_y = button.y + button.h - 2.0f;
                     const float branch_end_y = sub_area_y + 28.0f * 2.0f - 14.0f;
                     const auto line_col = tokens::col_border.alpha(static_cast<std::uint8_t>(130.0f * expand_anim));
                     dl.line(tree_x, branch_start_y, tree_x, branch_end_y, line_col, 1.0f);
-
                     for (int v = 0; v < 2; ++v)
                     {
                         const float item_y = sub_area_y + v * 30.0f;
                         const xui::rect sub_btn{ sb_x + 28.0f, item_y, sb_w - 38.0f, 28.0f };
                         const bool sub_active = (this->m_tab == 3 && this->m_visuals_subtab == v);
                         const bool sub_hovered = (expand_anim > 0.6f) && input.in_rect(sub_btn) && !ctx.overlay_blocking();
-
                         const float conn_y = sub_btn.y + sub_btn.h * 0.5f;
                         dl.line(tree_x, conn_y, sub_btn.x - 3.0f, conn_y, line_col, 1.0f);
-
                         if (!this->m_search_open && sub_hovered && input.mouse_clicked)
                         {
                             this->m_tab = 3;
@@ -1691,10 +1594,8 @@ namespace rendering {
                             this->m_subtab = 0;
                             ctx.active_window = xui::null_id;
                         }
-
                         const auto sub_anim = xui::anim::lerp(xui::fnv1a("vsub_item") + v,
                             sub_active ? 1.0f : sub_hovered ? 0.4f : 0.0f, 14.0f);
-
                         if (sub_anim > 0.01f)
                         {
                             const auto sub_bg = tokens::col_accent.alpha(static_cast<std::uint8_t>(22.0f * sub_anim * expand_anim));
@@ -1705,12 +1606,10 @@ namespace rendering {
                             const auto strip_col = tokens::col_accent.alpha(static_cast<std::uint8_t>(255.0f * expand_anim));
                             dl.rect_filled(sub_btn.x, sub_btn.y + 5.0f, 2.0f, sub_btn.h - 10.0f, strip_col, xdraw::corner_radius{ 1.0f });
                         }
-
                         const auto sub_base_col = sub_active ? tokens::col_accent : xui::lerp(tokens::col_text_dim, tokens::col_text, sub_anim);
                         const auto sub_col = sub_base_col.alpha(static_cast<std::uint8_t>(sub_base_col.a * expand_anim));
                         const auto sub_cx = sub_btn.x + 13.0f;
                         const auto sub_cy = sub_btn.y + sub_btn.h * 0.5f;
-
                         if (v == 0) // Player mini icon
                         {
                             dl.circle(sub_cx, sub_cy - 4.0f, 2.8f, sub_col, 1.1f);
@@ -1722,7 +1621,6 @@ namespace rendering {
                             dl.line(sub_cx - 4.5f, sub_cy, sub_cx + 4.5f, sub_cy, sub_col, 1.0f);
                             dl.line(sub_cx, sub_cy - 4.5f, sub_cx, sub_cy + 4.5f, sub_col, 1.0f);
                         }
-
                         xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
                         const auto sub_th = xdraw::measure_text(vsub_names[v]).second;
                         const auto text_base_col = sub_active ? tokens::col_text : sub_base_col;
@@ -1731,22 +1629,17 @@ namespace rendering {
                             vsub_names[v], text_col);
                         xdraw::pop_font();
                     }
-
                     dl.pop_clip();
                 }
-
                 curr_y += current_sub_h;
             }
         }
-
         const auto footer_y = sb_y + h - 64.0f;
         dl.line(sb_x + 1.0f, footer_y, sb_x + sb_w, footer_y, tokens::col_border.alpha(120));
-
         const xui::rect profile_rect{ sb_x + 8.0f, footer_y + 8.0f, sb_w - 16.0f, 48.0f };
         const bool profile_hovered = input.in_rect(profile_rect) && !ctx.overlay_blocking();
         const auto profile_hover_anim = xui::anim::lerp(xui::fnv1a("menu_profile_hover"),
             (profile_hovered || this->m_user_popup_open) ? 1.0f : 0.0f, 14.0f);
-
         if (profile_hovered && input.mouse_clicked && !this->m_search_open)
         {
             this->m_user_popup_open = !this->m_user_popup_open;
@@ -1756,7 +1649,6 @@ namespace rendering {
                 this->m_binding_menu_key = false;
             }
         }
-
         if (profile_hover_anim > 0.01f)
         {
             const auto bg_col = tokens::col_accent.alpha(static_cast<std::uint8_t>(22.0f * profile_hover_anim));
@@ -1764,7 +1656,6 @@ namespace rendering {
             dl.rect_filled(profile_rect.x, profile_rect.y, profile_rect.w, profile_rect.h, bg_col, xdraw::corner_radius{ 8.0f });
             dl.rect(profile_rect.x, profile_rect.y, profile_rect.w, profile_rect.h, border_col, xdraw::corner_radius{ 8.0f }, 1.0f);
         }
-
         constexpr float avatar_size = 34.0f;
         const auto avatar_x = profile_rect.x + 7.0f;
         const auto avatar_y = profile_rect.y + (profile_rect.h - avatar_size) * 0.5f;
@@ -1787,7 +1678,6 @@ namespace rendering {
             (profile_hovered || this->m_user_popup_open) ? tokens::col_accent : tokens::col_text);
         xdraw::pop_font();
         dl.text(text_x, profile_rect.y + 25.0f, "Steam", tokens::col_text_dim);
-
         // Options indicator icon (three dots)
         const auto opt_cx = profile_rect.x + profile_rect.w - 12.0f;
         const auto opt_cy = profile_rect.y + profile_rect.h * 0.5f;
@@ -1802,7 +1692,6 @@ namespace rendering {
         this->m_user_avatar_retry_delay -= std::max(0.0f, xdraw::delta_time());
         if (this->m_user_avatar_retry_delay > 0.0f) return;
         this->m_user_avatar_retry_delay = 1.0f;
-
         const auto steam_id = steam::user::get_steam_id();
         if (steam_id != this->m_user_steam_id)
         {
@@ -1812,10 +1701,8 @@ namespace rendering {
             this->m_user_steam_id = steam_id;
         }
         if (!steam_id) return;
-
         if (const auto* name = steam::friends::get_persona_name(); name && *name)
             this->m_user_name = name;
-
         const auto image = steam::friends::get_medium_friend_avatar(steam_id);
         if (image == 0)
         {
@@ -1825,11 +1712,9 @@ namespace rendering {
         }
         // -1 means Steam is still downloading the avatar. Retry next second.
         if (image < 0 || (image == this->m_user_avatar_image && this->m_textures.user.resource)) return;
-
         std::uint32_t width{}, height{};
         if (!steam::utils::get_image_size(image, &width, &height) ||
             !width || !height || width > 512 || height > 512) return;
-
         std::vector<std::uint8_t> rgba(static_cast<std::size_t>(width) * height * 4);
         if (!steam::utils::get_image_rgba(image, rgba.data(), static_cast<int>(rgba.size()))) return;
         auto resource = xdraw::create_srv_from_rgba(rgba.data(), static_cast<int>(width), static_cast<int>(height));
@@ -1871,40 +1756,40 @@ namespace rendering {
         style.combo_h = 30.0f;
         style.combo_item_h = 28.0f;
         style.button_rounding = 5.0f;
-        style.window_bg = tokens::col_dark.alpha( 225 );
-        style.window_border = tokens::col_border.alpha( 190 );
-        style.child_bg = tokens::col_card.alpha( 205 );
-        style.child_border = tokens::col_border.alpha( 170 );
-        style.checkbox_bg = tokens::col_elevated.alpha( 210 );
-        style.checkbox_border = tokens::col_border.alpha( 180 );
+        style.window_bg = tokens::col_dark.alpha(225);
+        style.window_border = tokens::col_border.alpha(190);
+        style.child_bg = tokens::col_card.alpha(205);
+        style.child_border = tokens::col_border.alpha(170);
+        style.checkbox_bg = tokens::col_elevated.alpha(210);
+        style.checkbox_border = tokens::col_border.alpha(180);
         style.checkbox_mark = tokens::col_accent;
         style.checkbox_mark_icon = tokens::col_dark;
-        style.slider_track = tokens::col_border.alpha( 180 );
+        style.slider_track = tokens::col_border.alpha(180);
         style.slider_fill = tokens::col_accent;
-        style.button_bg = tokens::col_elevated.alpha( 210 );
-        style.button_border = tokens::col_border.alpha( 180 );
-        style.button_hovered = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.12f).alpha( 230 );
-        style.button_active = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.24f).alpha( 240 );
-        style.keybind_bg = tokens::col_elevated.alpha( 210 );
-        style.keybind_border = tokens::col_border.alpha( 180 );
+        style.button_bg = tokens::col_elevated.alpha(210);
+        style.button_border = tokens::col_border.alpha(180);
+        style.button_hovered = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.12f).alpha(230);
+        style.button_active = xui::lerp(tokens::col_elevated, tokens::col_accent, 0.24f).alpha(240);
+        style.keybind_bg = tokens::col_elevated.alpha(210);
+        style.keybind_border = tokens::col_border.alpha(180);
         style.keybind_waiting = tokens::col_accent;
-        style.combo_bg = tokens::col_elevated.alpha( 210 );
-        style.combo_border = tokens::col_border.alpha( 180 );
+        style.combo_bg = tokens::col_elevated.alpha(210);
+        style.combo_border = tokens::col_border.alpha(180);
         style.combo_arrow = tokens::col_text_dim;
         style.combo_hovered = style.button_hovered;
-        style.combo_popup_bg = tokens::col_card.alpha( 230 );
-        style.combo_popup_border = tokens::col_border.alpha( 200 );
-        style.combo_popup_item_hovered = tokens::col_elevated.alpha( 225 );
+        style.combo_popup_bg = tokens::col_card.alpha(230);
+        style.combo_popup_border = tokens::col_border.alpha(200);
+        style.combo_popup_item_hovered = tokens::col_elevated.alpha(225);
         style.combo_popup_item_selected = tokens::col_accent.alpha(35);
-        style.popup_bg = tokens::col_card.alpha( 230 );
-        style.popup_border = tokens::col_border.alpha( 200 );
-        style.picker_bg = tokens::col_elevated.alpha( 210 );
-        style.picker_border = tokens::col_border.alpha( 180 );
-        style.picker_popup_bg = tokens::col_card.alpha( 230 );
-        style.picker_popup_border = tokens::col_border.alpha( 200 );
-        style.text_input_bg = tokens::col_elevated.alpha( 210 );
-        style.text_input_border = tokens::col_border.alpha( 180 );
-        style.separator = tokens::col_border.alpha( 150 );
+        style.popup_bg = tokens::col_card.alpha(230);
+        style.popup_border = tokens::col_border.alpha(200);
+        style.picker_bg = tokens::col_elevated.alpha(210);
+        style.picker_border = tokens::col_border.alpha(180);
+        style.picker_popup_bg = tokens::col_card.alpha(230);
+        style.picker_popup_border = tokens::col_border.alpha(200);
+        style.text_input_bg = tokens::col_elevated.alpha(210);
+        style.text_input_border = tokens::col_border.alpha(180);
+        style.separator = tokens::col_border.alpha(150);
         style.text = tokens::col_text;
         style.text_dim = tokens::col_text_dim;
         style.accent = tokens::col_accent;
@@ -1914,32 +1799,26 @@ namespace rendering {
     {
         auto& dl = xui::draw::current();
         const auto& input = xui::ctx().input;
-
         const auto content_x = this->m_x + tokens::gap + menu::k_sidebar_w + tokens::gap;
         const auto bar_y = this->m_y + tokens::gap;
-
         // Page title ("Ragebot", etc.)
         constexpr const char* page_titles[7] = {
             "RAGEBOT", "LEGITBOT", "MOVEMENT", "VISUALS", "SKINS", "MISC", "CONFIGS"
         };
-
         const auto tab_idx = std::clamp(this->m_tab, 0, 6);
         const char* page_title = page_titles[tab_idx];
         if (tab_idx == static_cast<int>(tab::visuals))
         {
             page_title = (this->m_visuals_subtab == 0) ? "PLAYER" : "WORLD";
         }
-
         xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::big]);
         const auto [title_w, title_h] = xdraw::measure_text(page_title);
         const auto title_y = bar_y + (tokens::subtab_bar_h - title_h) * 0.5f;
         dl.text(content_x, title_y, page_title, tokens::col_text);
         xdraw::pop_font();
-
         const subtab_info& subtabs = (tab_idx == static_cast<int>(tab::visuals))
             ? (this->m_visuals_subtab == 0 ? k_visuals_player_subtabs : k_visuals_world_subtabs)
             : k_subtab_defs[tab_idx];
-
         if (subtabs.count > 1)
         {
             float curr_x = content_x + title_w + 24.0f;
@@ -1953,12 +1832,10 @@ namespace rendering {
                 const xui::rect pill_rect{ curr_x, pill_y, pw, ph };
                 const bool is_active = (this->m_subtab == s);
                 const bool is_hovered = input.in_rect(pill_rect) && !xui::ctx().overlay_blocking();
-
                 if (is_hovered && input.mouse_clicked)
                 {
                     const_cast<menu*>(this)->m_subtab = s;
                 }
-
                 if (is_active)
                 {
                     dl.rect_filled(curr_x, pill_y, pw, ph, tokens::col_accent.alpha(35), xdraw::corner_radius{ 13.0f });
@@ -1973,47 +1850,37 @@ namespace rendering {
                     }
                     dl.text(curr_x + (pw - tw) * 0.5f, pill_y + (ph - th) * 0.5f, subtabs.names[s], is_hovered ? tokens::col_text : tokens::col_text_dim);
                 }
-
                 curr_x += pw + (subtabs.count > 4 ? 4.0f : 8.0f);
             }
             xdraw::pop_font();
         }
-
         dl.line(this->m_x + menu::k_sidebar_w + tokens::gap, this->m_y + 67.0f,
             this->m_x + this->m_w - 1.0f, this->m_y + 67.0f, tokens::col_border);
-
         // Utility: Search button on the right
         const auto inner_pad{ 4.0f };
         const auto subtab_h = tokens::subtab_bar_h - inner_pad * 2.0f;
         const auto util_w = inner_pad + subtab_h + inner_pad;
         const auto util_x = content_x + w - util_w;
-
         dl.rect_filled(util_x, bar_y, util_w, tokens::subtab_bar_h, tokens::col_card, xdraw::corner_radius{ tokens::card_rounding });
         dl.rect(util_x, bar_y, util_w, tokens::subtab_bar_h, tokens::col_elevated.alpha(180), xdraw::corner_radius{ tokens::card_rounding }, 1.0f);
-
         const auto search_anim = xui::anim::lerp(xui::fnv1a("menu_topbar_search_anim"), this->m_search_open ? 1.0f : 0.0f, 18.0f);
         const auto normal_interactive = search_anim < 0.03f;
-
         {
             const auto bx = util_x + inner_pad;
             const auto by = bar_y + (tokens::subtab_bar_h - subtab_h) * 0.5f;
             const auto btn = xui::rect{ bx, by, subtab_h, subtab_h };
             const auto hovered = input.in_rect(btn);
-
             const auto hover_anim = xui::anim::lerp(xui::fnv1a("menu_search_btn"), hovered ? 1.0f : 0.0f, 14.0f);
-
             if (hover_anim > 0.01f)
             {
                 dl.rect_filled(bx, by, subtab_h, subtab_h, tokens::col_card.alpha(static_cast<std::uint8_t>(120.0f * hover_anim)), xdraw::corner_radius{ tokens::btn_rounding });
             }
-
             if (this->m_textures.search.resource)
             {
                 const auto iw = static_cast<float>(this->m_textures.search.width);
                 const auto ih = static_cast<float>(this->m_textures.search.height);
                 dl.image(std::floor(bx + (subtab_h - iw) * 0.5f), std::floor(by + (subtab_h - ih) * 0.5f), iw, ih, this->m_textures.search.resource.Get(), xui::lerp(tokens::col_text_dim, tokens::col_text, hover_anim));
             }
-
             if (normal_interactive && hovered && input.mouse_clicked && !xui::ctx().overlay_blocking())
             {
                 this->m_search_open = true;
@@ -2022,7 +1889,6 @@ namespace rendering {
                 return;
             }
         }
-
         if (search_anim > 0.01f)
         {
             const auto t = search_anim * search_anim * (3.0f - 2.0f * search_anim);
@@ -2032,75 +1898,56 @@ namespace rendering {
             const auto panel_h = tokens::subtab_bar_h;
             const auto panel_rounding = tokens::card_rounding;
             const auto panel_alpha = static_cast<std::uint8_t>(std::clamp(190.0f + 55.0f * t, 0.0f, 245.0f));
-
             dl.rect_filled(panel_x, panel_y, panel_w, panel_h, tokens::col_dark.alpha(static_cast<std::uint8_t>(225.0f * t)), xdraw::corner_radius{ panel_rounding });
             dl.rect_filled_blurred(panel_x, panel_y, panel_w, panel_h, xdraw::corner_radius{ panel_rounding }, xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(130.0f * t) });
             dl.rect_filled(panel_x, panel_y, panel_w, panel_h, tokens::col_elevated.alpha(panel_alpha), xdraw::corner_radius{ panel_rounding });
-
             const auto close_w = subtab_h;
             const auto close_x = panel_x + panel_w - inner_pad - close_w;
             const auto close_y = bar_y + (tokens::subtab_bar_h - subtab_h) * 0.5f;
             const auto close_rect = xui::rect{ close_x, close_y, close_w, subtab_h };
             const auto close_hovered = input.in_rect(close_rect);
-
             const auto close_anim = xui::anim::lerp(xui::fnv1a("menu_search_close"), close_hovered ? 1.0f : 0.0f, 14.0f);
             const auto close_bg = xui::lerp(tokens::col_card.alpha(0), tokens::col_accent.alpha(80), close_anim);
-
             if (panel_w > util_w + 24.0f)
             {
                 const auto input_pad = inner_pad + 8.0f;
                 const auto input_x = panel_x + input_pad;
                 const auto input_y = bar_y + (tokens::subtab_bar_h - subtab_h) * 0.5f;
                 const auto input_w = std::max(24.0f, panel_w - input_pad - close_w - inner_pad * 2.0f);
-
                 dl.push_clip(panel_x + inner_pad, panel_y, panel_w - inner_pad * 2.0f, panel_h);
-
                 if (auto* win = xui::layout::current_window())
                 {
                     const auto saved_bounds = win->bounds;
                     const auto saved_cursor_x = win->cursor_x;
                     const auto saved_cursor_y = win->cursor_y;
                     const auto saved_line_h = win->line_h;
-
                     win->bounds.w = input_x - win->bounds.x + input_w + xui::ctx().style.window_pad_x;
-
                     xui::layout::set_cursor(input_x - this->m_x, input_y - this->m_y);
-
                     xui::push_style_var(xui::style_var::text_input_h, subtab_h);
                     xui::push_style_var(xui::style_var::text_input_rounding, tokens::btn_rounding);
                     xui::push_style_color(xui::style_col::text_input_bg, tokens::col_card.alpha(0));
                     xui::push_style_color(xui::style_col::text_input_border, tokens::col_card.alpha(0));
-
                     xui::text_input("##menu_search_input", this->m_search_query, 96, "i want to find...");
-
                     xui::pop_style_color(2);
                     xui::pop_style_var(2);
-
                     win->bounds = saved_bounds;
                     win->cursor_x = saved_cursor_x;
                     win->cursor_y = saved_cursor_y;
                     win->line_h = saved_line_h;
                 }
-
                 dl.pop_clip();
             }
-
             dl.rect_filled(close_x, close_y, close_w, subtab_h, close_bg, xdraw::corner_radius{ tokens::btn_rounding });
-
             const auto cx = close_x + close_w * 0.5f;
             const auto cy = close_y + subtab_h * 0.5f;
             const auto span = 4.0f;
-
             auto x_col = xui::lerp(tokens::col_text_dim.alpha(static_cast<std::uint8_t>(180.0f * t)), tokens::col_text, std::max(close_anim, t));
-
             dl.line(cx - span, cy - span, cx + span, cy + span, x_col, 1.3f);
             dl.line(cx - span, cy + span, cx + span, cy - span, x_col, 1.3f);
-
             if (close_hovered && input.mouse_clicked)
             {
                 this->close_search();
             }
-
             for (const auto vk : input.key_presses())
             {
                 if (vk == VK_ESCAPE)
@@ -2115,24 +1962,21 @@ namespace rendering {
     void menu::draw_movement(float col_w) const
     {
         auto& mov = settings::g_movement;
-
         const auto wx = this->m_x;
         const auto wy = this->m_y;
         const auto content_x = wx + tokens::gap + menu::k_sidebar_w + tokens::gap;
         const auto body_y = wy + tokens::gap + tokens::subtab_bar_h + tokens::gap;
         const auto body_h = this->m_body_h;
         const auto right_x = content_x + col_w + tokens::gap;
-
         constexpr float k_header_h = 22.0f;
-        auto draw_col_title = [&]( float x, const char* title ) {
-            auto& dl = xui::draw::current( );
-            xdraw::push_font( rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ] );
-            dl.text( x + 2.0f, body_y + 2.0f, title, tokens::col_text );
-            xdraw::pop_font( );
-        };
-
+        auto draw_col_title = [&](float x, const char* title) {
+            auto& dl = xui::draw::current();
+            xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::petite]);
+            dl.text(x + 2.0f, body_y + 2.0f, title, tokens::col_text);
+            xdraw::pop_font();
+            };
         // LEFT COLUMN: MOVEMENT MAIN
-        draw_col_title( content_x, "MOVEMENT MAIN" );
+        draw_col_title(content_x, "MOVEMENT MAIN");
         xui::layout::set_cursor(content_x - wx, body_y + k_header_h - wy);
         if (xui::begin_child("##movement_main", col_w, body_h - k_header_h, true))
         {
@@ -2145,16 +1989,13 @@ namespace rendering {
             xui::toggle("Edge Jump", mov.edgejump);
             xui::layout::spacing(3.0f);
             xui::toggle("Edge Stop", mov.edgestop);
-
             xui::end_child();
         }
-
         // RIGHT COLUMN: MOVEMENT ASSIST
-        draw_col_title( right_x, "MOVEMENT ASSIST" );
+        draw_col_title(right_x, "MOVEMENT ASSIST");
         xui::layout::set_cursor(right_x - wx, body_y + k_header_h - wy);
         if (xui::begin_child("##movement_assist", col_w, body_h - k_header_h, true))
         {
-
             xui::toggle("Jump Bug", mov.jumpbug);
             xui::layout::spacing(3.0f);
             xui::toggle("Edge Bug", mov.edgebug);
@@ -2166,11 +2007,9 @@ namespace rendering {
                 xui::checkbox("jump steps##eb", mov.edgebug_include_jump_steps);
                 xui::end_popup();
             }
-
             xui::layout::spacing(3.0f);
             xui::toggle("Slow Walk", mov.slowwalk);
             xui::slider_float("Slow Walk Speed", mov.slowwalk_speed, 10.0f, 150.0f, "%.0f u/s");
-
             xui::end_child();
         }
     }
@@ -2184,7 +2023,7 @@ namespace rendering {
         }
         if (this->m_visuals_subtab == 1)
         {
-            this->draw_world(col_w, std::clamp(this->m_subtab, 0, 2));
+            this->draw_world(col_w, 0);
             return;
         }
     }
@@ -2196,11 +2035,9 @@ namespace rendering {
         {
             return;
         }
-
         auto& top_dl = xdraw::get(xdraw::layer::top);
         auto& input = xui::ctx().input;
         auto& m = settings::g_misc;
-
         const auto wx = this->m_x;
         const auto wy = this->m_y;
         const auto wh = this->m_h;
@@ -2208,7 +2045,6 @@ namespace rendering {
         const auto sb_w = menu::k_sidebar_w + tokens::gap;
         const auto footer_y = wy + wh - 64.0f;
         const xui::rect profile_rect{ sb_x + 8.0f, footer_y + 8.0f, sb_w - 16.0f, 48.0f };
-
         // Main popup geometry: perfectly aligned on top of the Steam profile button
         const float main_w = profile_rect.w;
         const float main_h = 136.0f;
@@ -2216,18 +2052,15 @@ namespace rendering {
         const float target_main_y = profile_rect.y - main_h - 6.0f;
         const float main_y = target_main_y + (1.0f - anim) * 6.0f;
         const xui::rect main_rect{ main_x, main_y, main_w, main_h };
-
         // Sub-window geometry (Theme or Watermark)
         const bool sub_open = (this->m_user_subtab == 1 || this->m_user_subtab == 2);
         const auto sub_anim = xui::anim::lerp(xui::fnv1a("user_subpopup_anim"), (this->m_user_popup_open && sub_open) ? 1.0f : 0.0f, 16.0f);
-
         const float sub_w = (this->m_user_subtab == 1) ? 230.0f : 240.0f;
         const float sub_h = (this->m_user_subtab == 1) ? 385.0f : 375.0f;
         const float sub_x = main_x + main_w + 6.0f;
         const float target_sub_y = std::clamp(main_y + main_h - sub_h, wy + 10.0f, wy + wh - sub_h - 10.0f);
         const float sub_y = target_sub_y + (1.0f - sub_anim) * 6.0f;
         const xui::rect sub_rect{ sub_x, sub_y, sub_w, sub_h };
-
         // Click outside detection: close popup if clicked outside profile_rect, main_rect, and sub_rect (if open)
         if (input.mouse_clicked)
         {
@@ -2241,20 +2074,17 @@ namespace rendering {
                 this->m_binding_menu_key = false;
             }
         }
-
         // Block interaction with elements behind the popup
         if (input.in_rect(main_rect) || (sub_open && input.in_rect(sub_rect)))
         {
             xui::ctx().inside_overlay = xui::fnv1a("user_popup_overlay");
         }
-
         // ─────────────────────────────────────────────────────────────
         // 1. DRAW MAIN POPUP (Theme >, Watermark >, Menu key KEY)
         // ─────────────────────────────────────────────────────────────
         const auto main_alpha = static_cast<std::uint8_t>(255.0f * anim);
         const auto main_bg = tokens::col_card.alpha(static_cast<std::uint8_t>(225.0f * anim));
         const auto main_border = tokens::col_border.alpha(static_cast<std::uint8_t>(180.0f * anim));
-
         // Liquid glass blur + background + specular highlight
         top_dl.rect_filled_blurred(main_x, main_y, main_w, main_h, xdraw::corner_radius{ 8.0f },
             xdraw::color{ 50, 55, 65, static_cast<std::uint8_t>(170.0f * anim) });
@@ -2268,22 +2098,18 @@ namespace rendering {
         top_dl.rect(main_x, main_y, main_w, main_h, main_border, xdraw::corner_radius{ 8.0f }, 1.0f);
         top_dl.line(main_x + 8.0f, main_y, main_x + main_w - 8.0f, main_y,
             xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(50.0f * anim) }, 1.0f);
-
         float item_y = main_y + 8.0f;
         const float item_h = 36.0f;
-
         // --- ITEM 1: Theme > ---
         {
             const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
             const bool hovered = input.in_rect(row_rect);
             const bool selected = (this->m_user_subtab == 1);
             const auto h_anim = xui::anim::lerp(xui::fnv1a("usr_theme_row"), (selected ? 1.0f : (hovered ? 0.5f : 0.0f)), 14.0f);
-
             if (hovered && input.mouse_clicked)
             {
                 this->m_user_subtab = (this->m_user_subtab == 1) ? 0 : 1;
             }
-
             if (h_anim > 0.01f)
             {
                 top_dl.rect_filled(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
@@ -2295,17 +2121,14 @@ namespace rendering {
                         tokens::col_accent.alpha(static_cast<std::uint8_t>(90.0f * anim)), xdraw::corner_radius{ 6.0f }, 1.0f);
                 }
             }
-
             // Theme palette icon
             const auto ic_x = row_rect.x + 14.0f;
             const auto ic_y = row_rect.y + item_h * 0.5f;
             top_dl.circle_filled(ic_x, ic_y, 4.5f, tokens::col_accent.alpha(main_alpha));
             top_dl.circle(ic_x, ic_y, 4.5f, tokens::col_border.alpha(main_alpha));
-
             xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
             top_dl.text(row_rect.x + 28.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Theme",
                 selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text.alpha(main_alpha));
-
             // Chevron >
             const auto ch_x = row_rect.x + row_rect.w - 14.0f;
             const auto ch_y = row_rect.y + item_h * 0.5f;
@@ -2314,21 +2137,17 @@ namespace rendering {
             top_dl.line(ch_x + 1.5f, ch_y, ch_x - 3.0f, ch_y + 4.5f, ch_col, 1.3f);
             xdraw::pop_font();
         }
-
         item_y += item_h + 3.0f;
-
         // --- ITEM 2: Watermark > ---
         {
             const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
             const bool hovered = input.in_rect(row_rect);
             const bool selected = (this->m_user_subtab == 2);
             const auto h_anim = xui::anim::lerp(xui::fnv1a("usr_wm_row"), (selected ? 1.0f : (hovered ? 0.5f : 0.0f)), 14.0f);
-
             if (hovered && input.mouse_clicked)
             {
                 this->m_user_subtab = (this->m_user_subtab == 2) ? 0 : 2;
             }
-
             if (h_anim > 0.01f)
             {
                 top_dl.rect_filled(row_rect.x, row_rect.y, row_rect.w, row_rect.h,
@@ -2340,18 +2159,15 @@ namespace rendering {
                         tokens::col_accent.alpha(static_cast<std::uint8_t>(90.0f * anim)), xdraw::corner_radius{ 6.0f }, 1.0f);
                 }
             }
-
             // Watermark monitor icon
             const auto ic_x = row_rect.x + 14.0f;
             const auto ic_y = row_rect.y + item_h * 0.5f;
             const auto ic_col = selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text_dim.alpha(main_alpha);
             top_dl.rect(ic_x - 5.0f, ic_y - 4.5f, 10.0f, 7.5f, ic_col, xdraw::corner_radius{ 1.0f }, 1.1f);
             top_dl.line(ic_x - 2.5f, ic_y + 4.5f, ic_x + 2.5f, ic_y + 4.5f, ic_col, 1.1f);
-
             xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
             top_dl.text(row_rect.x + 28.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Watermark",
                 selected ? tokens::col_accent.alpha(main_alpha) : tokens::col_text.alpha(main_alpha));
-
             // Chevron >
             const auto ch_x = row_rect.x + row_rect.w - 14.0f;
             const auto ch_y = row_rect.y + item_h * 0.5f;
@@ -2360,32 +2176,25 @@ namespace rendering {
             top_dl.line(ch_x + 1.5f, ch_y, ch_x - 3.0f, ch_y + 4.5f, ch_col, 1.3f);
             xdraw::pop_font();
         }
-
         item_y += item_h + 4.0f;
-
         // Separator line
         top_dl.line(main_x + 10.0f, item_y, main_x + main_w - 10.0f, item_y,
             tokens::col_border.alpha(static_cast<std::uint8_t>(90.0f * anim)));
-
         item_y += 5.0f;
-
         // --- ITEM 3: Menu key KEY ---
         {
             const xui::rect row_rect{ main_x + 6.0f, item_y, main_w - 12.0f, item_h };
             xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
             top_dl.text(row_rect.x + 10.0f, row_rect.y + (item_h - 14.0f) * 0.5f, "Menu key",
                 tokens::col_text.alpha(main_alpha));
-
             const float kb_w = 72.0f;
             const float kb_h = 24.0f;
             const xui::rect kb_rect{ row_rect.x + row_rect.w - kb_w - 4.0f, row_rect.y + (item_h - kb_h) * 0.5f, kb_w, kb_h };
             const bool kb_hovered = input.in_rect(kb_rect);
-
             if (kb_hovered && input.mouse_clicked)
             {
                 this->m_binding_menu_key = !this->m_binding_menu_key;
             }
-
             if (this->m_binding_menu_key)
             {
                 if (input.mouse_clicked && !kb_hovered)
@@ -2411,26 +2220,22 @@ namespace rendering {
                     }
                 }
             }
-
             const auto kb_bg = this->m_binding_menu_key
                 ? tokens::col_accent.alpha(static_cast<std::uint8_t>(40.0f * anim))
                 : (kb_hovered ? tokens::col_elevated.alpha(static_cast<std::uint8_t>(240.0f * anim))
-                              : tokens::col_elevated.alpha(static_cast<std::uint8_t>(180.0f * anim)));
+                    : tokens::col_elevated.alpha(static_cast<std::uint8_t>(180.0f * anim)));
             const auto kb_border = this->m_binding_menu_key
                 ? tokens::col_accent.alpha(static_cast<std::uint8_t>(200.0f * anim))
                 : (kb_hovered ? tokens::col_accent.alpha(static_cast<std::uint8_t>(140.0f * anim))
-                              : tokens::col_border.alpha(static_cast<std::uint8_t>(160.0f * anim)));
-
+                    : tokens::col_border.alpha(static_cast<std::uint8_t>(160.0f * anim)));
             top_dl.rect_filled(kb_rect.x, kb_rect.y, kb_rect.w, kb_rect.h, kb_bg, xdraw::corner_radius{ 5.0f });
             top_dl.rect(kb_rect.x, kb_rect.y, kb_rect.w, kb_rect.h, kb_border, xdraw::corner_radius{ 5.0f }, 1.0f);
-
             const char* key_label = this->m_binding_menu_key ? "..." : xui::vk_name(m.menu_key.value);
             const auto [kw, kh] = xdraw::measure_text(key_label);
             top_dl.text(kb_rect.x + (kb_w - kw) * 0.5f, kb_rect.y + (kb_h - kh) * 0.5f, key_label,
                 this->m_binding_menu_key ? tokens::col_accent.alpha(main_alpha) : tokens::col_text.alpha(main_alpha));
             xdraw::pop_font();
         }
-
         // ─────────────────────────────────────────────────────────────
         // 2. DRAW SUB-WINDOW (Theme or Watermark)
         // ─────────────────────────────────────────────────────────────
@@ -2439,7 +2244,6 @@ namespace rendering {
             const auto s_alpha = static_cast<std::uint8_t>(255.0f * sub_anim);
             const auto s_bg = tokens::col_card.alpha(static_cast<std::uint8_t>(225.0f * sub_anim));
             const auto s_border = tokens::col_border.alpha(static_cast<std::uint8_t>(185.0f * sub_anim));
-
             top_dl.rect_filled_blurred(sub_x, sub_y, sub_w, sub_h, xdraw::corner_radius{ 8.0f },
                 xdraw::color{ 50, 55, 65, static_cast<std::uint8_t>(170.0f * sub_anim) });
             top_dl.rect_filled(sub_x, sub_y, sub_w, sub_h, s_bg, xdraw::corner_radius{ 8.0f });
@@ -2452,13 +2256,11 @@ namespace rendering {
             top_dl.rect(sub_x, sub_y, sub_w, sub_h, s_border, xdraw::corner_radius{ 8.0f }, 1.0f);
             top_dl.line(sub_x + 8.0f, sub_y, sub_x + sub_w - 8.0f, sub_y,
                 xdraw::color{ 255, 255, 255, static_cast<std::uint8_t>(50.0f * sub_anim) }, 1.0f);
-
             // Header: Title + Close Button
             xdraw::push_font(g_fonts.inter_bold[fonts::size::petite]);
             const char* sub_title = (this->m_user_subtab == 1) ? "THEMES" : "WATERMARK";
             top_dl.text(sub_x + 14.0f, sub_y + 11.0f, sub_title, tokens::col_text.alpha(s_alpha));
             xdraw::pop_font();
-
             // Close button 'X' in top right
             const xui::rect close_btn{ sub_x + sub_w - 26.0f, sub_y + 8.0f, 18.0f, 18.0f };
             const bool close_hovered = input.in_rect(close_btn);
@@ -2469,10 +2271,8 @@ namespace rendering {
             const auto close_col = close_hovered ? tokens::col_accent.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha);
             top_dl.line(close_btn.x + 4.0f, close_btn.y + 4.0f, close_btn.x + close_btn.w - 4.0f, close_btn.y + close_btn.h - 4.0f, close_col, 1.3f);
             top_dl.line(close_btn.x + close_btn.w - 4.0f, close_btn.y + 4.0f, close_btn.x + 4.0f, close_btn.y + close_btn.h - 4.0f, close_col, 1.3f);
-
             top_dl.line(sub_x + 1.0f, sub_y + 32.0f, sub_x + sub_w - 1.0f, sub_y + 32.0f,
                 tokens::col_border.alpha(static_cast<std::uint8_t>(120.0f * sub_anim)));
-
             if (this->m_user_subtab == 1)
             {
                 // ────────────────────────────
@@ -2481,23 +2281,20 @@ namespace rendering {
                 float t_y = sub_y + 38.0f;
                 const float t_row_h = 29.0f;
                 xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
-
                 for (std::size_t i = 0; i < theme::presets.size(); ++i)
                 {
                     const xui::rect t_rect{ sub_x + 6.0f, t_y, sub_w - 12.0f, t_row_h };
                     const bool t_hovered = input.in_rect(t_rect);
                     const bool t_active = (m.menu_palette.value == static_cast<int>(i));
-
                     if (t_hovered && input.mouse_clicked)
                     {
                         this->apply_theme_preset(static_cast<int>(i));
                     }
-
                     if (t_active || t_hovered)
                     {
                         top_dl.rect_filled(t_rect.x, t_rect.y, t_rect.w, t_rect.h,
                             t_active ? tokens::col_accent.alpha(static_cast<std::uint8_t>(32.0f * sub_anim))
-                                     : tokens::col_elevated.alpha(static_cast<std::uint8_t>(140.0f * sub_anim)),
+                            : tokens::col_elevated.alpha(static_cast<std::uint8_t>(140.0f * sub_anim)),
                             xdraw::corner_radius{ 5.0f });
                         if (t_active)
                         {
@@ -2505,25 +2302,21 @@ namespace rendering {
                                 tokens::col_accent.alpha(static_cast<std::uint8_t>(80.0f * sub_anim)), xdraw::corner_radius{ 5.0f }, 1.0f);
                         }
                     }
-
                     // Swatch circle
                     const auto sc_x = t_rect.x + 14.0f;
                     const auto sc_y = t_rect.y + t_row_h * 0.5f;
                     top_dl.circle_filled(sc_x, sc_y, 5.0f, theme::presets[i].accent.alpha(s_alpha));
                     top_dl.circle(sc_x, sc_y, 5.0f, tokens::col_border.alpha(s_alpha));
-
                     // Name
                     top_dl.text(t_rect.x + 28.0f, t_rect.y + (t_row_h - 14.0f) * 0.5f,
                         theme::presets[i].name,
                         t_active ? tokens::col_accent.alpha(s_alpha) : tokens::col_text.alpha(s_alpha));
-
                     // Active check dot
                     if (t_active)
                     {
                         const auto dot_x = t_rect.x + t_rect.w - 14.0f;
                         top_dl.circle_filled(dot_x, sc_y, 3.0f, tokens::col_accent.alpha(s_alpha));
                     }
-
                     t_y += t_row_h + 2.0f;
                 }
                 xdraw::pop_font();
@@ -2536,7 +2329,6 @@ namespace rendering {
                 float w_y = sub_y + 38.0f;
                 const float w_row_h = 24.0f;
                 xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
-
                 // Helper lambda for boolean toggle
                 auto draw_toggle_row = [&](const char* label, auto& setting_val) {
                     const xui::rect t_rect{ sub_x + 10.0f, w_y, sub_w - 20.0f, w_row_h };
@@ -2545,10 +2337,8 @@ namespace rendering {
                     {
                         setting_val.value = !setting_val.value;
                     }
-
                     top_dl.text(t_rect.x + 2.0f, t_rect.y + (w_row_h - 14.0f) * 0.5f, label,
                         setting_val.value ? tokens::col_text.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha));
-
                     // Switch widget on right
                     const float sw_w = 26.0f;
                     const float sw_h = 14.0f;
@@ -2557,34 +2347,26 @@ namespace rendering {
                     const auto sw_bg = setting_val.value
                         ? tokens::col_accent.alpha(s_alpha)
                         : tokens::col_elevated.alpha(static_cast<std::uint8_t>(200.0f * sub_anim));
-
                     top_dl.rect_filled(sw_x, sw_y, sw_w, sw_h, sw_bg, xdraw::corner_radius{ sw_h * 0.5f });
                     top_dl.rect(sw_x, sw_y, sw_w, sw_h, tokens::col_border.alpha(s_alpha), xdraw::corner_radius{ sw_h * 0.5f }, 1.0f);
-
                     const float knob_r = 5.0f;
                     const float knob_x = setting_val.value ? (sw_x + sw_w - knob_r - 2.0f) : (sw_x + knob_r + 2.0f);
                     top_dl.circle_filled(knob_x, sw_y + sw_h * 0.5f, knob_r,
                         setting_val.value ? tokens::col_dark.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha));
-
                     w_y += w_row_h + 3.0f;
-                };
-
+                    };
                 draw_toggle_row("Enabled", m.m_watermark.enabled);
-
                 // Position selector
                 {
                     constexpr const char* wm_pos_names[] = { "Top Left", "Top Center", "Top Right", "Bottom Left", "Bottom Center", "Bottom Right" };
                     const xui::rect pos_rect{ sub_x + 10.0f, w_y, sub_w - 20.0f, 26.0f };
                     top_dl.text(pos_rect.x + 2.0f, pos_rect.y + (26.0f - 14.0f) * 0.5f, "Position", tokens::col_text.alpha(s_alpha));
-
                     const float sel_w = 114.0f;
                     const float sel_h = 24.0f;
                     const float sel_x = pos_rect.x + pos_rect.w - sel_w - 2.0f;
                     const float sel_y = pos_rect.y + (26.0f - sel_h) * 0.5f;
-
                     top_dl.rect_filled(sel_x, sel_y, sel_w, sel_h, tokens::col_elevated.alpha(static_cast<std::uint8_t>(200.0f * sub_anim)), xdraw::corner_radius{ 4.0f });
                     top_dl.rect(sel_x, sel_y, sel_w, sel_h, tokens::col_border.alpha(s_alpha), xdraw::corner_radius{ 4.0f }, 1.0f);
-
                     // Left arrow <
                     const xui::rect left_arrow{ sel_x, sel_y, 18.0f, sel_h };
                     const bool la_hovered = input.in_rect(left_arrow);
@@ -2595,7 +2377,6 @@ namespace rendering {
                     const auto la_col = la_hovered ? tokens::col_accent.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha);
                     top_dl.line(sel_x + 11.0f, sel_y + 7.0f, sel_x + 6.0f, sel_y + sel_h * 0.5f, la_col, 1.2f);
                     top_dl.line(sel_x + 6.0f, sel_y + sel_h * 0.5f, sel_x + 11.0f, sel_y + sel_h - 7.0f, la_col, 1.2f);
-
                     // Right arrow >
                     const xui::rect right_arrow{ sel_x + sel_w - 18.0f, sel_y, 18.0f, sel_h };
                     const bool ra_hovered = input.in_rect(right_arrow);
@@ -2606,34 +2387,27 @@ namespace rendering {
                     const auto ra_col = ra_hovered ? tokens::col_accent.alpha(s_alpha) : tokens::col_text_dim.alpha(s_alpha);
                     top_dl.line(sel_x + sel_w - 11.0f, sel_y + 7.0f, sel_x + sel_w - 6.0f, sel_y + sel_h * 0.5f, ra_col, 1.2f);
                     top_dl.line(sel_x + sel_w - 6.0f, sel_y + sel_h * 0.5f, sel_x + sel_w - 11.0f, sel_y + sel_h - 7.0f, ra_col, 1.2f);
-
                     // Current pos text
                     const auto cur_pos = std::clamp(m.m_watermark.position.value, 0, 5);
                     const char* cur_name = wm_pos_names[cur_pos];
                     const auto [pw, ph] = xdraw::measure_text(cur_name);
                     top_dl.text(sel_x + (sel_w - pw) * 0.5f, sel_y + (sel_h - ph) * 0.5f, cur_name, tokens::col_text.alpha(s_alpha));
-
                     w_y += 30.0f;
                 }
-
                 // Opacity slider
                 {
                     const xui::rect op_row{ sub_x + 10.0f, w_y, sub_w - 20.0f, 22.0f };
                     top_dl.text(op_row.x + 2.0f, op_row.y + 2.0f, "Opacity", tokens::col_text.alpha(s_alpha));
-
                     char op_buf[16];
                     std::snprintf(op_buf, sizeof(op_buf), "%.0f%%", m.m_watermark.opacity.value);
                     const auto [tw, th] = xdraw::measure_text(op_buf);
                     top_dl.text(op_row.x + op_row.w - tw - 2.0f, op_row.y + 2.0f, op_buf, tokens::col_text_dim.alpha(s_alpha));
-
                     w_y += 18.0f;
-
                     const float track_w = sub_w - 24.0f;
                     const float track_h = 4.0f;
                     const float track_x = sub_x + 12.0f;
                     const float track_y = w_y + 4.0f;
                     const xui::rect track_rect{ track_x, track_y - 4.0f, track_w, 12.0f };
-
                     static bool s_dragging_op = false;
                     if (input.in_rect(track_rect) && input.mouse_clicked)
                     {
@@ -2648,20 +2422,16 @@ namespace rendering {
                         const float fraction = std::clamp((input.mouse_x - track_x) / track_w, 0.0f, 1.0f);
                         m.m_watermark.opacity.value = std::round(fraction * 100.0f);
                     }
-
                     const float fill_fraction = std::clamp(m.m_watermark.opacity.value / 100.0f, 0.0f, 1.0f);
                     top_dl.rect_filled(track_x, track_y, track_w, track_h, tokens::col_border.alpha(s_alpha), xdraw::corner_radius{ 2.0f });
                     top_dl.rect_filled(track_x, track_y, track_w * fill_fraction, track_h, tokens::col_accent.alpha(s_alpha), xdraw::corner_radius{ 2.0f });
                     top_dl.circle_filled(track_x + track_w * fill_fraction, track_y + track_h * 0.5f, 5.0f, tokens::col_accent.alpha(s_alpha));
                     top_dl.circle(track_x + track_w * fill_fraction, track_y + track_h * 0.5f, 5.0f, tokens::col_text.alpha(s_alpha));
-
                     w_y += 16.0f;
                 }
-
                 top_dl.line(sub_x + 10.0f, w_y, sub_x + sub_w - 10.0f, w_y,
                     tokens::col_border.alpha(static_cast<std::uint8_t>(90.0f * sub_anim)));
                 w_y += 6.0f;
-
                 draw_toggle_row("Steam Username", m.m_watermark.show_user);
                 draw_toggle_row("FPS", m.m_watermark.show_fps);
                 draw_toggle_row("Ping", m.m_watermark.show_ping);
@@ -2669,11 +2439,8 @@ namespace rendering {
                 draw_toggle_row("Map", m.m_watermark.show_map);
                 draw_toggle_row("Tick Rate", m.m_watermark.show_tick);
                 draw_toggle_row("Velocity", m.m_watermark.show_velocity);
-
                 xdraw::pop_font();
             }
         }
     }
-
-
 } // namespace rendering

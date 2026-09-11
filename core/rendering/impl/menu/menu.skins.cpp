@@ -1,6 +1,5 @@
 #include <pch/pch.hpp>
 #include <core/features/features.hpp>
-#include <core/features/changer/inspect_preview.hpp>
 #include <core/settings.hpp>
 
 #include "../../rendering.hpp"
@@ -32,56 +31,6 @@ namespace rendering {
 		};
 
 		skins_state skins_ui{};
-
-		static void inspect_item( const features::changer::econ_item_system::item_def* def, int paint_kit )
-		{
-			if ( !def || def->def_index <= 0 || paint_kit < 0 ) return;
-			auto& econ = features::changer::g_econ_item_system;
-			settings::changer::applied_skin skin{};
-			if ( const auto it = skin_map( ).find( def->def_index ); it != skin_map( ).end( ) )
-				skin = it->second;
-			const auto pk = econ.find_paint_kit( paint_kit );
-			const auto [low, high] = pk ? skin_options::wear_limits( pk->wear_min, pk->wear_max ) : std::pair{0.0f, 1.0f};
-			using category = features::changer::econ_item_system::item_category;
-			const auto supports_stattrak = def->category == category::gun || def->category == category::knife;
-			skin_inspect::item preview{};
-			preview.def_index = static_cast<std::uint32_t>( def->def_index );
-			preview.paint_kit = static_cast<std::uint32_t>( paint_kit );
-			preview.rarity = static_cast<std::uint32_t>( std::clamp( paint_kit ? econ.combined_rarity( def->def_index, paint_kit ) : static_cast<int>( def->rarity ), 0, 7 ) );
-			preview.quality = def->category == category::knife || def->category == category::glove ? 3u : 4u;
-			preview.wear = paint_kit ? skin_options::clamp_wear( skin.wear, low, high ) : 0.0f;
-			preview.seed = static_cast<std::uint32_t>( std::clamp( skin.seed, 0, 1000 ) );
-			if ( supports_stattrak && skin.stattrak )
-			{
-				preview.quality = 9;
-				preview.stattrak = static_cast<std::uint32_t>( std::max( skin.stattrak_count, 0 ) );
-			}
-			if ( features::changer::g_inspect_preview.request( preview ) && g_menu.is_open( ) )
-				g_menu.toggle( ); // Native inspect owns mouse/keyboard, not the overlay.
-		}
-
-		static bool draw_inspect_button( const xui::rect& card, const features::changer::econ_item_system::item_def* def, int paint_kit, float fade_alpha )
-		{
-			if ( !def ) return false;
-			const xui::rect button{ card.x + 4.0f, card.y + 4.0f, 32.0f, 20.0f };
-			auto& c = xui::ctx( );
-			const auto win = xui::layout::current_window( );
-			const auto hovered = g_menu.is_open( ) && fade_alpha > 0.95f && !c.overlay_blocking( ) &&
-				c.input.in_rect( button ) && win && c.input.in_rect( win->bounds );
-			auto& dl = xui::draw::current( );
-			auto bg = hovered ? c.style.button_hovered : c.style.button_bg;
-			bg.a = static_cast<std::uint8_t>( bg.a * fade_alpha );
-			dl.rect_filled( button.x, button.y, button.w, button.h, bg, xdraw::corner_radius{4.0f} );
-			const auto [tw, th] = xdraw::measure_text( "3D" );
-			auto text = c.style.text;
-			text.a = static_cast<std::uint8_t>( text.a * fade_alpha );
-			dl.text( button.x + ( button.w - tw ) * 0.5f, button.y + ( button.h - th ) * 0.5f, "3D", text );
-			if ( !hovered || !c.input.mouse_clicked ) return false;
-			inspect_item( def, paint_kit );
-			c.input.mouse_clicked = false;
-			c.input.mouse_double_clicked = false;
-			return true; // Never equip or navigate as a side effect of inspection.
-		}
 
 		constexpr xdraw::color k_rarity_colors[ 8 ]
 		{
@@ -897,8 +846,6 @@ namespace rendering {
 				dl.polyline( pts, check, false, 1.5f );
 			}
 
-			if ( draw_inspect_button( card, def, is_skinned ? applied_it->second.paint_kit_id : 0, fade_alpha ) ) return;
-
 			if ( !hovered )
 			{
 				return;
@@ -1027,8 +974,6 @@ namespace rendering {
 				dl.polyline( pts, check, false, 1.5f );
 			}
 
-			if ( draw_inspect_button( card, def, 0, fade_alpha ) ) return;
-
 			if ( hovered && input.mouse_clicked )
 			{
 				auto& target = ( skins_ui.browsing_agent_team == 3 ) ? settings::g_changer.agents.ct_def : settings::g_changer.agents.t_def;
@@ -1066,8 +1011,6 @@ namespace rendering {
 			if ( !weapon ) return;
 			auto& econ = features::changer::g_econ_item_system;
 			const auto it = skin_map( ).find( weapon->def_index );
-			if ( xui::button( "3D inspect in CS2 (full game window)", xui::layout::item_width( ) ) )
-				inspect_item( weapon, it == skin_map( ).end( ) ? 0 : it->second.paint_kit_id );
 			if ( it == skin_map( ).end( ) )
 			{
 				return;
@@ -1201,8 +1144,6 @@ namespace rendering {
 				dl.polyline( pts, check, false, 1.5f );
 			}
 
-			if ( draw_inspect_button( card, weapon, pk->id, fade_alpha ) ) return;
-
 			if ( hovered && input.mouse_clicked )
 			{
 				if ( is_equipped )
@@ -1280,14 +1221,9 @@ namespace rendering {
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
 		const auto content_x = wx + tokens::gap + tokens::sidebar_w + tokens::gap;
-		constexpr auto inspect_toolbar_h = 50.0f;
-		const auto body_y = wy + tokens::gap + tokens::subtab_bar_h + tokens::gap + inspect_toolbar_h;
+		const auto body_y = wy + tokens::gap + tokens::subtab_bar_h + tokens::gap;
 		const auto content_w = this->m_w - tokens::gap * 2.0f - tokens::sidebar_w - tokens::gap;
-		const auto body_h = this->m_h - tokens::gap * 2.0f - tokens::subtab_bar_h - tokens::gap - inspect_toolbar_h;
-
-		xui::layout::set_cursor( content_x - wx, body_y - wy - inspect_toolbar_h );
-		xui::text( theme::fit_text( "3D: native CS2 inspect. Esc closes; menu hotkey returns.", content_w ), tokens::col_text_dim );
-		xui::text( theme::fit_text( features::changer::g_inspect_preview.status( ), content_w ), tokens::col_text_dim );
+		const auto body_h = this->m_h - tokens::gap * 2.0f - tokens::subtab_bar_h - tokens::gap;
 
 		const auto dt = xdraw::delta_time( );
 		const auto fade_target = ( detail::skins_ui.current == detail::skins_ui.target ) ? 1.0f : 0.0f;

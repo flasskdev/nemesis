@@ -13,16 +13,16 @@ namespace settings {
 		{
 			static constexpr auto k_group_count{ 6u };
 
-			xui::setting enabled{ true, {}, "enabled", "ragebot" };
+			xui::setting enabled{ true,{}, "enabled", "ragebot" };
 
 			struct weapon_group
 			{
-				xui::setting silent{ true, {}, "silent", "ragebot" };
-				xui::setting no_spread{ false, {}, "no spread", "ragebot" };
-				xui::setting body_aim{ false, {}, "force b-aim", "ragebot" };
-				xui::setting force_shot_air{ false, {}, "force shot in air", "ragebot" };
-				xui::setting force_shot{ false, {}, "force shot on ground", "ragebot" };
-				xui::setting autostop{ true, {}, "autostop", "ragebot" };
+				xui::setting silent{ true,{}, "silent", "ragebot" };
+				xui::setting no_spread{ false,{}, "no spread", "ragebot" };
+				xui::setting body_aim{ false,{}, "force b-aim", "ragebot" };
+				xui::setting force_shot_air{ false,{}, "force shot in air", "ragebot" };
+				xui::setting force_shot{ false,{}, "force shot on ground", "ragebot" };
+				xui::setting autostop{ true,{}, "autostop", "ragebot" };
 
 				config::val<float> max_fov{ 180.0f };
 
@@ -30,42 +30,42 @@ namespace settings {
 				config::val<int> min_damage{ 101 };
 
 				config::val<int> min_damage_override_value{ 11 };
-				xui::setting min_damage_override{ false, {}, "min damage override", "ragebot" };
+				xui::setting min_damage_override{ false,{}, "min damage override", "ragebot" };
 
 				config::val<int> hitchance_override_value{ 75 };
-				xui::setting hitchance_override{ false, {}, "hit chance override", "ragebot" };
+				xui::setting hitchance_override{ false,{}, "hit chance override", "ragebot" };
 
-			config::val<float> pointscale{ 85.0f };
-			xui::setting dynamic_pointscale{ true, {}, "dynamic point scale", "ragebot" };
-			xui::setting debug_multipoints{ false, {}, "debug multipoints", "ragebot" };
+				config::val<float> pointscale{ 85.0f };
+				xui::setting dynamic_pointscale{ true,{}, "dynamic point scale", "ragebot" };
+				xui::setting debug_multipoints{ false,{}, "debug multipoints", "ragebot" };
 
-			config::bools<6> hitboxes{ { true, true, true, true, true, true } };
+				config::bools<6> hitboxes{ { true, true, true, true, true, true } };
 
-			void init( std::string_view cat )
-			{
-				const auto s = std::string( cat );
+				void init(std::string_view cat)
+				{
+					const auto s = std::string(cat);
 
-				this->silent.category = s;
-				this->no_spread.category = s;
-				this->body_aim.category = s;
-				this->force_shot_air.category = s;
-				this->force_shot.category = s;
-				this->autostop.category = s;
-				this->min_damage_override.category = s;
-				this->hitchance_override.category = s;
-				this->dynamic_pointscale.category = s;
-				this->debug_multipoints.category = s;
+					this->silent.category = s;
+					this->no_spread.category = s;
+					this->body_aim.category = s;
+					this->force_shot_air.category = s;
+					this->force_shot.category = s;
+					this->autostop.category = s;
+					this->min_damage_override.category = s;
+					this->hitchance_override.category = s;
+					this->dynamic_pointscale.category = s;
+					this->debug_multipoints.category = s;
 
-				this->max_fov.reg( s, "max fov" );
-				this->hitchance.reg( s, "hit chance" );
-				this->min_damage.reg( s, "min damage" );
-				this->min_damage_override_value.reg( s, "min damage override value" );
-				this->hitchance_override_value.reg( s, "hit chance override value" );
-				this->pointscale.reg( s, "point scale" );
-				this->hitboxes.reg( s, "hitboxes" );
-			}
+					this->max_fov.reg(s, "max fov");
+					this->hitchance.reg(s, "hit chance");
+					this->min_damage.reg(s, "min damage");
+					this->min_damage_override_value.reg(s, "min damage override value");
+					this->hitchance_override_value.reg(s, "hit chance override value");
+					this->pointscale.reg(s, "point scale");
+					this->hitboxes.reg(s, "hitboxes");
+				}
 
-				void set_default_binds( )
+				void set_default_binds()
 				{
 					this->force_shot_air.bind = { .key = VK_XBUTTON1, .mode = xui::bind_mode::hold_on };
 					this->min_damage_override.bind = { .key = VK_XBUTTON2, .mode = xui::bind_mode::hold_on };
@@ -75,29 +75,29 @@ namespace settings {
 
 			std::array<weapon_group, k_group_count> groups{};
 
-			ragebot( )
+			ragebot()
 			{
-				constexpr const char* weapon_names[ ]{ "pistol", "smg", "rifle", "shotgun", "sniper", "lmg" };
+				constexpr const char* weapon_names[]{ "pistol", "smg", "rifle", "shotgun", "sniper", "lmg" };
 
-				for ( std::uint32_t i = 0; i < k_group_count; ++i )
+				for (std::uint32_t i = 0; i < k_group_count; ++i)
 				{
-					this->groups[ i ].init( std::string( "ragebot - " ) + weapon_names[ i ] );
+					this->groups[i].init(std::string("ragebot - ") + weapon_names[i]);
 				}
 
-				this->groups[ 0 ].set_default_binds( );
-				this->groups[ 4 ].set_default_binds( );
+				this->groups[0].set_default_binds();
+				this->groups[4].set_default_binds();
 			}
 
-			weapon_group& get_group( std::uint32_t weapon_type )
+			weapon_group& get_group(std::uint32_t weapon_type)
 			{
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[ idx < k_group_count ? idx : 2 ];
+				return this->groups[idx < k_group_count ? idx : 2];
 			}
 
-			const weapon_group& get_group( std::uint32_t weapon_type ) const
+			const weapon_group& get_group(std::uint32_t weapon_type) const
 			{
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[ idx < k_group_count ? idx : 2 ];
+				return this->groups[idx < k_group_count ? idx : 2];
 			}
 		} m_ragebot{};
 
@@ -107,35 +107,35 @@ namespace settings {
 
 			struct weapon_group
 			{
-				xui::setting aimbot{ false, { VK_XBUTTON2, xui::bind_mode::hold_on }, "aimbot", "legitbot" };
+				xui::setting aimbot{ false,{ VK_XBUTTON2, xui::bind_mode::hold_on }, "aimbot", "legitbot" };
 				config::val<float> fov{ 5.0f };
 				config::val<int> smooth{ 5 };
 				config::bools<5> hitboxes{ { true, false, false, false, false } };
 
-				xui::setting rcs{ true, {}, "recoil control", "legitbot" };
+				xui::setting rcs{ true,{}, "recoil control", "legitbot" };
 				config::val<int> rcs_min{ 95 };
 				config::val<int> rcs_max{ 105 };
 
-				xui::setting standalone_rcs{ false, {}, "standalone rcs", "legitbot" };
+				xui::setting standalone_rcs{ false,{}, "standalone rcs", "legitbot" };
 				config::val<int> standalone_rcs_strength{ 100 };
 				config::val<int> standalone_rcs_min{ 95 };
 				config::val<int> standalone_rcs_max{ 105 };
 
-				xui::setting triggerbot{ false, { VK_XBUTTON1, xui::bind_mode::hold_on }, "triggerbot", "legitbot" };
+				xui::setting triggerbot{ false,{ VK_XBUTTON1, xui::bind_mode::hold_on }, "triggerbot", "legitbot" };
 				config::val<int> trigger_delay{ 5 };
 				config::val<int> trigger_hitchance{ 80 };
-				xui::setting trigger_head_only{ false, {}, "trigger head only", "legitbot" };
-				xui::setting give_me_your_seed{ false, {}, "trigger seed mode", "legitbot" };
+				xui::setting trigger_head_only{ false,{}, "trigger head only", "legitbot" };
+				xui::setting give_me_your_seed{ false,{}, "trigger seed mode", "legitbot" };
 
-				xui::setting autowall{ true, {}, "autowall", "legitbot" };
+				xui::setting autowall{ true,{}, "autowall", "legitbot" };
 				config::val<int> min_damage{ 101 };
 
-				xui::setting visualize_fov{ true, {}, "visualize fov", "legitbot" };
+				xui::setting visualize_fov{ true,{}, "visualize fov", "legitbot" };
 				config::col fov_color{ { 255, 255, 255, 150 } };
 
-				void init( std::string_view cat )
+				void init(std::string_view cat)
 				{
-					const auto s = std::string( cat );
+					const auto s = std::string(cat);
 
 					this->aimbot.category = s;
 					this->rcs.category = s;
@@ -146,44 +146,44 @@ namespace settings {
 					this->autowall.category = s;
 					this->visualize_fov.category = s;
 
-					this->fov.reg( s, "fov" );
-					this->smooth.reg( s, "smooth" );
-					this->hitboxes.reg( s, "hitboxes" );
-					this->rcs_min.reg( s, "rcs min" );
-					this->rcs_max.reg( s, "rcs max" );
-					this->standalone_rcs_strength.reg( s, "standalone rcs strength" );
-					this->standalone_rcs_min.reg( s, "standalone rcs min" );
-					this->standalone_rcs_max.reg( s, "standalone rcs max" );
-					this->trigger_delay.reg( s, "trigger delay" );
-					this->trigger_hitchance.reg( s, "trigger hitchance" );
-					this->min_damage.reg( s, "min damage" );
-					this->fov_color.reg( s, "fov color" );
+					this->fov.reg(s, "fov");
+					this->smooth.reg(s, "smooth");
+					this->hitboxes.reg(s, "hitboxes");
+					this->rcs_min.reg(s, "rcs min");
+					this->rcs_max.reg(s, "rcs max");
+					this->standalone_rcs_strength.reg(s, "standalone rcs strength");
+					this->standalone_rcs_min.reg(s, "standalone rcs min");
+					this->standalone_rcs_max.reg(s, "standalone rcs max");
+					this->trigger_delay.reg(s, "trigger delay");
+					this->trigger_hitchance.reg(s, "trigger hitchance");
+					this->min_damage.reg(s, "min damage");
+					this->fov_color.reg(s, "fov color");
 				}
 			};
 
-			xui::setting enabled{ false, {}, "enabled", "legitbot" };
+			xui::setting enabled{ false,{}, "enabled", "legitbot" };
 			std::array<weapon_group, k_group_count> groups{};
 
-			legitbot( )
+			legitbot()
 			{
-				constexpr const char* weapon_names[ ]{ "pistol", "smg", "rifle", "shotgun", "sniper", "lmg" };
+				constexpr const char* weapon_names[]{ "pistol", "smg", "rifle", "shotgun", "sniper", "lmg" };
 
-				for ( auto i = 0u; i < k_group_count; ++i )
+				for (auto i = 0u; i < k_group_count; ++i)
 				{
-					this->groups[ i ].init( std::string( "legitbot - " ) + weapon_names[ i ] );
+					this->groups[i].init(std::string("legitbot - ") + weapon_names[i]);
 				}
 			}
 
-			weapon_group& get_group( std::uint32_t weapon_type )
+			weapon_group& get_group(std::uint32_t weapon_type)
 			{
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[ idx < k_group_count ? idx : 2 ];
+				return this->groups[idx < k_group_count ? idx : 2];
 			}
 
-			const weapon_group& get_group( std::uint32_t weapon_type ) const
+			const weapon_group& get_group(std::uint32_t weapon_type) const
 			{
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
-				return this->groups[ idx < k_group_count ? idx : 2 ];
+				return this->groups[idx < k_group_count ? idx : 2];
 			}
 		} m_legitbot{};
 
@@ -196,19 +196,19 @@ namespace settings {
 				up
 			};
 
-			xui::setting enabled{ true, {}, "anti aim", "anti aim" };
+			xui::setting enabled{ true,{}, "anti aim", "anti aim" };
 			config::enm<pitch_mode> pitch{ pitch_mode::down, "anti aim", "pitch" };
-			xui::setting auto_yaw_adjust{true, {}, "correct yaw to compensate for the models inherit sideways roll", "anti aim"};
-			xui::setting manual_left{ false, { 'Z', xui::bind_mode::toggle }, "force left", "anti aim" };
-			xui::setting manual_right{ false, { 'C', xui::bind_mode::toggle }, "force right", "anti aim" };
-			xui::setting hide_shots{ true, {}, "hide onshot", "anti aim" };
-			xui::setting avoid_backstab{ true, {}, "avoid backstab", "anti aim" };
-			xui::setting direction_indicator{ true, {}, "direction indicator", "anti aim" };
+			xui::setting auto_yaw_adjust{ true,{}, "correct yaw to compensate for the models inherit sideways roll", "anti aim" };
+			xui::setting manual_left{ false,{ 'Z', xui::bind_mode::toggle }, "force left", "anti aim" };
+			xui::setting manual_right{ false,{ 'C', xui::bind_mode::toggle }, "force right", "anti aim" };
+			xui::setting hide_shots{ true,{}, "hide onshot", "anti aim" };
+			xui::setting avoid_backstab{ true,{}, "avoid backstab", "anti aim" };
+			xui::setting direction_indicator{ true,{}, "direction indicator", "anti aim" };
 			config::col direction_indicator_color{ { 173, 192, 255, 220 }, "anti aim", "direction indicator color" };
-			xui::setting direction_indicator_glow{ true, {}, "direction indicator glow", "anti aim" };
+			xui::setting direction_indicator_glow{ true,{}, "direction indicator glow", "anti aim" };
 			config::val<float> direction_indicator_glow_strength{ 0.55f, "anti aim", "direction indicator glow strength" };
 
-			antiaim( )
+			antiaim()
 			{
 				this->manual_left.bind.excludes = &this->manual_right;
 				this->manual_right.bind.excludes = &this->manual_left;
@@ -217,50 +217,50 @@ namespace settings {
 
 		struct quickpeek
 		{
-			xui::setting enabled{ false, { 'V', xui::bind_mode::hold_on }, "quick peek", "peek assistance" };
+			xui::setting enabled{ false,{ 'V', xui::bind_mode::hold_on }, "quick peek", "peek assistance" };
 			config::col color{ { 173, 192, 255, 255 }, "peek assistance", "quick peek color" };
 			config::col retrack_color{ { 255, 171, 234, 255 }, "peek assistance", "retracting color" };
 		} m_quickpeek{};
 
 		struct duckpeek
 		{
-			xui::setting enabled{ false, { 'C', xui::bind_mode::hold_on }, "duck peek", "peek assistance" };
+			xui::setting enabled{ false,{ 'C', xui::bind_mode::hold_on }, "duck peek", "peek assistance" };
 		} m_duckpeek{};
 
 		struct lagcomp_settings
 		{
 			config::val<int> max_backtrack_ticks{ 12, "ragebot", "max backtrack ticks" };
-			xui::setting extrapolation{ true, {}, "extrapolation", "ragebot" };
+			xui::setting extrapolation{ true,{}, "extrapolation", "ragebot" };
 			config::val<int> max_extrapolate_ticks{ 8, "ragebot", "max extrapolate ticks" };
 		} m_lagcomp{};
 
 		struct zeusbot
 		{
-			xui::setting enabled{ true, {}, "zeusbot", "other 'bots'" };
-			xui::setting drop_after{ true, {}, "drop after", "zeusbot" };
+			xui::setting enabled{ true,{}, "zeusbot", "other 'bots'" };
+			xui::setting drop_after{ true,{}, "drop after", "zeusbot" };
 			config::val<float> max_fov{ 180.0f, "zeusbot", "max fov" };
 		} m_zeusbot{};
 
 		struct autos
 		{
-			xui::setting revolver{ true, {}, "auto revolver", "autos" };
-			xui::setting scope{ true, {}, "auto scope", "autos" };
+			xui::setting revolver{ true,{}, "auto revolver", "autos" };
+			xui::setting scope{ true,{}, "auto scope", "autos" };
 		} m_autos{};
 
 		struct knifebot
 		{
-			xui::setting enabled{ true, {}, "knifebot", "other 'bots'" };
+			xui::setting enabled{ true,{}, "knifebot", "other 'bots'" };
 			config::val<float> max_fov{ 180.0f, "knifebot", "max fov" };
 		} m_knifebot{};
 
 		struct penetration_crosshair
 		{
-			xui::setting enabled{ false, {}, "penetration crosshair", "pen crosshair" };
+			xui::setting enabled{ false,{}, "penetration crosshair", "pen crosshair" };
 			config::col can_penetrate_fill{ { 173, 192, 255, 120 }, "pen crosshair", "can penetrate fill" };
 			config::col can_penetrate_outline{ { 173, 192, 255, 210 }, "pen crosshair", "can penetrate outline" };
 			config::col blocked_fill{ { 252, 217, 240, 80 }, "pen crosshair", "blocked fill" };
 			config::col blocked_outline{ { 252, 217, 240, 160 }, "pen crosshair", "blocked outline" };
-			xui::setting glow{ true, {}, "glow", "pen crosshair" };
+			xui::setting glow{ true,{}, "glow", "pen crosshair" };
 			config::val<float> glow_strength{ 1.0f, "pen crosshair", "glow strength" };
 		} m_penetration_crosshair{};
 	};
@@ -275,14 +275,14 @@ namespace settings {
 			count
 		};
 
-		static constexpr bool is_outline_material( cham_ids id ) noexcept
+		static constexpr bool is_outline_material(cham_ids id) noexcept
 		{
 			return id == cham_ids::outlines ||
-			       id == cham_ids::outlines_ignorez ||
-			       id == cham_ids::outline_glow ||
-			       id == cham_ids::outline_glow_ignorez ||
-			       id == cham_ids::glow ||
-			       id == cham_ids::glow_ignorez;
+				id == cham_ids::outlines_ignorez ||
+				id == cham_ids::outline_glow ||
+				id == cham_ids::outline_glow_ignorez ||
+				id == cham_ids::glow ||
+				id == cham_ids::glow_ignorez;
 		}
 
 		struct outline_glow_config
@@ -294,72 +294,72 @@ namespace settings {
 			config::val<float> inner_spread{ 0.0f };
 			config::val<float> pulse_speed{ 0.0f };
 
-			outline_glow_config( ) = default;
+			outline_glow_config() = default;
 
-			void reg( std::string_view cat, std::string_view prefix )
+			void reg(std::string_view cat, std::string_view prefix)
 			{
-				const auto s = std::string( cat );
-				const auto p = prefix.empty( ) ? "" : ( std::string( prefix ) + " " );
-				this->intensity.reg( s, p + "glow intensity" );
-				this->thickness.reg( s, p + "glow thickness" );
-				this->softness.reg( s, p + "glow softness" );
-				this->opacity.reg( s, p + "glow opacity" );
-				this->inner_spread.reg( s, p + "glow inner spread" );
-				this->pulse_speed.reg( s, p + "glow pulse speed" );
+				const auto s = std::string(cat);
+				const auto p = prefix.empty() ? "" : (std::string(prefix) + " ");
+				this->intensity.reg(s, p + "glow intensity");
+				this->thickness.reg(s, p + "glow thickness");
+				this->softness.reg(s, p + "glow softness");
+				this->opacity.reg(s, p + "glow opacity");
+				this->inner_spread.reg(s, p + "glow inner spread");
+				this->pulse_speed.reg(s, p + "glow pulse speed");
 			}
 		};
 
 		struct chams_layer
 		{
-			xui::setting enabled{ false, {}, "chams layer", "chams" };
+			xui::setting enabled{ false,{}, "chams layer", "chams" };
 			config::col color{ { 255, 255, 255, 255 } };
 			config::enm<cham_ids> material{ cham_ids::matte };
-			xui::setting filled{ true, {}, "filled", "chams" };
+			xui::setting filled{ true,{}, "filled", "chams" };
 			outline_glow_config glow{};
 
-			void init( std::string_view cat, std::string_view layer_prefix )
+			void init(std::string_view cat, std::string_view layer_prefix)
 			{
-				const auto s = std::string( cat );
-				const auto p = std::string( layer_prefix );
+				const auto s = std::string(cat);
+				const auto p = std::string(layer_prefix);
 				this->enabled.name = p + " layer";
 				this->enabled.category = s;
-				this->color.reg( s, p + " color" );
-				this->material.reg( s, p + " material" );
+				this->color.reg(s, p + " color");
+				this->material.reg(s, p + " material");
 				this->filled.name = p + " filled";
 				this->filled.category = s;
 				this->filled.value = true;
-				this->glow.reg( s, p );
+				this->glow.reg(s, p);
 			}
 		};
 
 		struct chams_config
 		{
-			xui::setting enabled{ false, {}, "chams", "chams" };
+			xui::setting enabled{ false,{}, "chams", "chams" };
 			chams_layer primary{};
 			chams_layer secondary{};
 			chams_layer overlay{};
 
-			void init( std::string_view cat, std::string_view toggle_name = "chams" )
+			void init(std::string_view cat, std::string_view toggle_name = "chams")
 			{
-				const auto s = std::string( cat );
-				this->enabled.name = std::string( toggle_name );
+				const auto s = std::string(cat);
+				this->enabled.name = std::string(toggle_name);
 				this->enabled.category = s;
-				this->primary.init( s, "primary" );
-				this->secondary.init( s, "secondary" );
-				this->overlay.init( s, "overlay" );
+				this->primary.init(s, "primary");
+				this->secondary.init(s, "secondary");
+				this->overlay.init(s, "overlay");
 			}
 		};
 
 		struct glow_target
 		{
-			xui::setting enabled{ false, {}, "glow", "glow" };
+			xui::setting enabled{ false,{}, "glow", "glow" };
 			config::col color{ { 173, 192, 255, 75 } };
 
-			void init( std::string_view cat, std::string_view color_name = "color", std::string_view toggle_name = "glow" )
+			void init(std::string_view cat, std::string_view color_name = "color", std::string_view toggle_name = "glow")
 			{
-				this->enabled.category = std::string( cat );
-				this->enabled.name = std::string( toggle_name );
-				this->color.reg( cat, color_name );
+				this->enabled.category = std::string(cat);
+				this->enabled.name = std::string(toggle_name);
+				this->color.reg(cat, color_name);
 			}
 		};
 
@@ -367,7 +367,7 @@ namespace settings {
 		{
 			struct overlay
 			{
-				xui::setting enabled{ true, {}, "esp overlay", "esp" };
+				xui::setting enabled{ true,{}, "esp overlay", "esp" };
 
 				struct box
 				{
@@ -382,18 +382,18 @@ namespace settings {
 					config::col visible_color{ { 173, 192, 255, 255 } };
 					config::col occluded_color{ { 255, 171, 234, 255 } };
 
-					box( ) = default;
+					box() = default;
 
-					explicit box( const std::string& prefix )
-						: enabled{ false, {}, "bounding box", prefix + " box" }
-						, fill{ true, {}, "fill", prefix + " box" }
-						, outline{ true, {}, "outline", prefix + " box" }
+					explicit box(const std::string& prefix)
+						: enabled{ false,{}, "bounding box", prefix + " box" }
+						, fill{ true,{}, "fill", prefix + " box" }
+						, outline{ true,{}, "outline", prefix + " box" }
 					{
 						const auto cat = prefix + " box";
-						this->style.reg( cat, "style" );
-						this->corner_length.reg( cat, "corner length" );
-						this->visible_color.reg( cat, "visible color" );
-						this->occluded_color.reg( cat, "occluded color" );
+						this->style.reg(cat, "style");
+						this->corner_length.reg(cat, "corner length");
+						this->visible_color.reg(cat, "visible color");
+						this->occluded_color.reg(cat, "occluded color");
 					}
 				};
 
@@ -408,16 +408,16 @@ namespace settings {
 					config::col visible_color{ { 173, 192, 255, 255 } };
 					config::col occluded_color{ { 220, 225, 240, 255 } };
 
-					skeleton( ) = default;
+					skeleton() = default;
 
-					explicit skeleton( const std::string& prefix )
-						: enabled{ false, {}, "skeleton", prefix + " skeleton" }
+					explicit skeleton(const std::string& prefix)
+						: enabled{ false,{}, "skeleton", prefix + " skeleton" }
 					{
 						const auto cat = prefix + " skeleton";
-						this->type.reg( cat, "mode" );
-						this->thickness.reg( cat, "thickness" );
-						this->visible_color.reg( cat, "visible color" );
-						this->occluded_color.reg( cat, "occluded color" );
+						this->type.reg(cat, "mode");
+						this->thickness.reg(cat, "thickness");
+						this->visible_color.reg(cat, "visible color");
+						this->occluded_color.reg(cat, "occluded color");
 					}
 				};
 
@@ -440,24 +440,24 @@ namespace settings {
 					config::col glow_color{ { 173, 192, 255, 255 } };
 					config::val<float> glow_strength{ 0.55f };
 
-					health_bar( ) = default;
+					health_bar() = default;
 
-					explicit health_bar( const std::string& prefix )
-						: enabled{ true, {}, "health bar", prefix + " health" }
-						, outline_setting{ true, {}, "outline", prefix + " health" }
-						, gradient{ true, {}, "gradient", prefix + " health" }
-						, show_value{ true, {}, "show value", prefix + " health" }
-						, glow{ true, {}, "glow", prefix + " health" }
+					explicit health_bar(const std::string& prefix)
+						: enabled{ true,{}, "health bar", prefix + " health" }
+						, outline_setting{ true,{}, "outline", prefix + " health" }
+						, gradient{ true,{}, "gradient", prefix + " health" }
+						, show_value{ true,{}, "show value", prefix + " health" }
+						, glow{ true,{}, "glow", prefix + " health" }
 					{
 						const auto cat = prefix + " health";
-						this->position.reg( cat, "position" );
-						this->full_color.reg( cat, "full color" );
-						this->low_color.reg( cat, "low color" );
-						this->background_color.reg( cat, "background" );
-						this->outline_color.reg( cat, "outline color" );
-						this->text_color.reg( cat, "text color" );
-						this->glow_color.reg( cat, "glow color" );
-						this->glow_strength.reg( cat, "glow strength" );
+						this->position.reg(cat, "position");
+						this->full_color.reg(cat, "full color");
+						this->low_color.reg(cat, "low color");
+						this->background_color.reg(cat, "background");
+						this->outline_color.reg(cat, "outline color");
+						this->text_color.reg(cat, "text color");
+						this->glow_color.reg(cat, "glow color");
+						this->glow_strength.reg(cat, "glow strength");
 					}
 				};
 
@@ -480,24 +480,24 @@ namespace settings {
 					config::col glow_color{ { 173, 192, 255, 255 } };
 					config::val<float> glow_strength{ 0.55f };
 
-					ammo_bar( ) = default;
+					ammo_bar() = default;
 
-					explicit ammo_bar( const std::string& prefix )
-						: enabled{ true, {}, "ammo bar", prefix + " ammo" }
-						, outline_setting{ true, {}, "outline", prefix + " ammo" }
-						, gradient{ true, {}, "gradient", prefix + " ammo" }
-						, show_value{ false, {}, "show value", prefix + " ammo" }
-						, glow{ true, {}, "glow", prefix + " ammo" }
+					explicit ammo_bar(const std::string& prefix)
+						: enabled{ true,{}, "ammo bar", prefix + " ammo" }
+						, outline_setting{ true,{}, "outline", prefix + " ammo" }
+						, gradient{ true,{}, "gradient", prefix + " ammo" }
+						, show_value{ false,{}, "show value", prefix + " ammo" }
+						, glow{ true,{}, "glow", prefix + " ammo" }
 					{
 						const auto cat = prefix + " ammo";
-						this->position.reg( cat, "position" );
-						this->full_color.reg( cat, "full color" );
-						this->low_color.reg( cat, "low color" );
-						this->background_color.reg( cat, "background" );
-						this->outline_color.reg( cat, "outline color" );
-						this->text_color.reg( cat, "text color" );
-						this->glow_color.reg( cat, "glow color" );
-						this->glow_strength.reg( cat, "glow strength" );
+						this->position.reg(cat, "position");
+						this->full_color.reg(cat, "full color");
+						this->low_color.reg(cat, "low color");
+						this->background_color.reg(cat, "background");
+						this->outline_color.reg(cat, "outline color");
+						this->text_color.reg(cat, "text color");
+						this->glow_color.reg(cat, "glow color");
+						this->glow_strength.reg(cat, "glow strength");
 					}
 				};
 
@@ -519,22 +519,22 @@ namespace settings {
 					config::col flashed_color{ { 240, 230, 170, 255 } };
 					config::col distance_color{ { 185, 190, 205, 255 } };
 
-					info_flags( ) = default;
+					info_flags() = default;
 
-					explicit info_flags( const std::string& prefix ) : enabled{ true, {}, "info flags", prefix + " flags" }
+					explicit info_flags(const std::string& prefix) : enabled{ true,{}, "info flags", prefix + " flags" }
 					{
 						const auto cat = prefix + " flags";
-						this->flags.reg( cat, "flags" );
-						this->money_color.reg( cat, "money color" );
-						this->armor_color.reg( cat, "armor color" );
-						this->kit_color.reg( cat, "kit color" );
-						this->scoped_color.reg( cat, "scoped color" );
-						this->defusing_color.reg( cat, "defusing color" );
-						this->flashed_color.reg( cat, "flashed color" );
-						this->distance_color.reg( cat, "distance color" );
+						this->flags.reg(cat, "flags");
+						this->money_color.reg(cat, "money color");
+						this->armor_color.reg(cat, "armor color");
+						this->kit_color.reg(cat, "kit color");
+						this->scoped_color.reg(cat, "scoped color");
+						this->defusing_color.reg(cat, "defusing color");
+						this->flashed_color.reg(cat, "flashed color");
+						this->distance_color.reg(cat, "distance color");
 					}
 
-					[[nodiscard]] bool has( flag f ) const { return this->flags[ f ]; }
+					[[nodiscard]] bool has(flag f) const { return this->flags[f]; }
 				};
 
 				struct name
@@ -542,11 +542,11 @@ namespace settings {
 					xui::setting enabled{};
 					config::col color{ { 255, 255, 255, 225 } };
 
-					name( ) = default;
+					name() = default;
 
-					explicit name( const std::string& prefix ) : enabled{ true, {}, "name", prefix + " name" }
+					explicit name(const std::string& prefix) : enabled{ true,{}, "name", prefix + " name" }
 					{
-						this->color.reg( prefix + " name", "color" );
+						this->color.reg(prefix + " name", "color");
 					}
 				};
 
@@ -560,14 +560,14 @@ namespace settings {
 					config::col text_color{ { 255, 255, 255, 225 } };
 					config::col icon_color{ { 255, 255, 255, 225 } };
 
-					weapon( ) = default;
+					weapon() = default;
 
-					explicit weapon( const std::string& prefix ) : enabled{ true, {}, "weapon", prefix + " weapon" }
+					explicit weapon(const std::string& prefix) : enabled{ true,{}, "weapon", prefix + " weapon" }
 					{
 						const auto cat = prefix + " weapon";
-						this->display.reg( cat, "display" );
-						this->text_color.reg( cat, "text color" );
-						this->icon_color.reg( cat, "icon color" );
+						this->display.reg(cat, "display");
+						this->text_color.reg(cat, "text color");
+						this->icon_color.reg(cat, "icon color");
 					}
 				};
 
@@ -584,18 +584,18 @@ namespace settings {
 					config::col visible_color{ { 255, 171, 234, 255 } };
 					config::col occluded_color{ { 173, 192, 255, 255 } };
 
-					oof_arrow( ) = default;
+					oof_arrow() = default;
 
-					explicit oof_arrow( const std::string& prefix ) : enabled{ true, {}, "oof arrow", prefix + " oof" }, glow{ true, {}, "glow", prefix + " oof" }
+					explicit oof_arrow(const std::string& prefix) : enabled{ true,{}, "oof arrow", prefix + " oof" }, glow{ true,{}, "glow", prefix + " oof" }
 					{
 						const auto cat = prefix + " oof";
-						this->width.reg( cat, "width" );
-						this->height.reg( cat, "height" );
-						this->radius_x.reg( cat, "radius x" );
-						this->radius_y.reg( cat, "radius y" );
-						this->glow_strength.reg( cat, "glow strength" );
-						this->visible_color.reg( cat, "visible color" );
-						this->occluded_color.reg( cat, "occluded color" );
+						this->width.reg(cat, "width");
+						this->height.reg(cat, "height");
+						this->radius_x.reg(cat, "radius x");
+						this->radius_y.reg(cat, "radius y");
+						this->glow_strength.reg(cat, "glow strength");
+						this->visible_color.reg(cat, "visible color");
+						this->occluded_color.reg(cat, "occluded color");
 					}
 				};
 
@@ -608,15 +608,15 @@ namespace settings {
 				weapon m_weapon{};
 				oof_arrow m_oof_arrow{};
 
-				overlay( ) = default;
+				overlay() = default;
 
-				explicit overlay( const char* prefix, bool enabled_default = true )
+				explicit overlay(const char* prefix, bool enabled_default = true)
 					: overlay{ std::string{ prefix }, enabled_default }
 				{
 				}
 
-				explicit overlay( const std::string& prefix, bool enabled_default = true )
-					: enabled{ enabled_default, {}, "esp overlay", prefix }
+				explicit overlay(const std::string& prefix, bool enabled_default = true)
+					: enabled{ enabled_default,{}, "esp overlay", prefix }
 					, m_box{ prefix }
 					, m_skeleton{ prefix }
 					, m_health_bar{ prefix }
@@ -643,9 +643,9 @@ namespace settings {
 				chams_config onshot{};
 				config::val<float> onshot_fade_time{ 0.8f, "chams onshot", "fade time" };
 
-				chams( )
+				chams()
 				{
-					this->enemy.init( "chams enemy", "chams" );
+					this->enemy.init("chams enemy", "chams");
 					this->enemy.enabled.value = true;
 					this->enemy.primary.enabled.value = true;
 					this->enemy.primary.color.value = { 173, 192, 255, 150 };
@@ -654,27 +654,27 @@ namespace settings {
 					this->enemy.secondary.color.value = { 255, 208, 243, 118 };
 					this->enemy.secondary.material.value = cham_ids::flat_ignorez;
 
-					this->enemy_ragdoll.init( "chams enemy ragdoll", "ragdoll chams" );
+					this->enemy_ragdoll.init("chams enemy ragdoll", "ragdoll chams");
 
-					this->team.init( "chams team", "chams" );
+					this->team.init("chams team", "chams");
 
-					this->team_ragdoll.init( "chams team ragdoll", "ragdoll chams" );
+					this->team_ragdoll.init("chams team ragdoll", "ragdoll chams");
 
-					this->local.init( "chams local", "chams" );
+					this->local.init("chams local", "chams");
 					this->local.enabled.value = true;
 					this->local.overlay.enabled.value = true;
 					this->local.overlay.color.value = { 173, 192, 255, 175 };
 					this->local.overlay.material.value = cham_ids::outlines;
 
-					this->local_ragdoll.init( "chams local ragdoll", "ragdoll chams" );
+					this->local_ragdoll.init("chams local ragdoll", "ragdoll chams");
 
-					this->backtrack.init( "chams backtrack", "backtrack chams" );
+					this->backtrack.init("chams backtrack", "backtrack chams");
 					this->backtrack.primary.color.value = { 173, 192, 255, 25 };
 					this->backtrack.primary.material.value = cham_ids::flat;
 					this->backtrack.secondary.color.value = { 173, 192, 255, 255 };
 					this->backtrack.secondary.material.value = cham_ids::outlines;
 
-					this->onshot.init( "chams onshot", "onshot chams" );
+					this->onshot.init("chams onshot", "onshot chams");
 					this->onshot.primary.enabled.value = true;
 					this->onshot.primary.color.value = { 255, 100, 100, 200 };
 					this->onshot.primary.material.value = cham_ids::flat;
@@ -687,12 +687,12 @@ namespace settings {
 
 			struct glow
 			{
-				glow_target enemy{ .enabled = { true, {}, "glow", "glow enemy" }, .color = { { 173, 192, 255, 40 }, "glow enemy", "color" } };
-				glow_target enemy_ragdoll{ .enabled = { false, {}, "ragdoll glow", "glow enemy" }, .color = { { 173, 192, 255, 40 }, "glow enemy", "ragdoll color" } };
-				glow_target team{ .enabled = { true, {}, "glow", "glow team" }, .color = { { 225, 225, 225, 40 }, "glow team", "color" } };
-				glow_target team_ragdoll{ .enabled = { false, {}, "ragdoll glow", "glow team" }, .color = { { 173, 192, 255, 40 }, "glow team", "ragdoll color" } };
-				glow_target local{ .enabled = { false, {}, "glow", "glow local" }, .color = { { 252, 217, 240, 50 }, "glow local", "color" } };
-				glow_target local_ragdoll{ .enabled = { false, {}, "ragdoll glow", "glow local" }, .color = { { 173, 192, 255, 40 }, "glow local", "ragdoll color" } };
+				glow_target enemy{ .enabled = { true,{}, "glow", "glow enemy" }, .color = { { 173, 192, 255, 40 }, "glow enemy", "color" } };
+				glow_target enemy_ragdoll{ .enabled = { false,{}, "ragdoll glow", "glow enemy" }, .color = { { 173, 192, 255, 40 }, "glow enemy", "ragdoll color" } };
+				glow_target team{ .enabled = { true,{}, "glow", "glow team" }, .color = { { 225, 225, 225, 40 }, "glow team", "color" } };
+				glow_target team_ragdoll{ .enabled = { false,{}, "ragdoll glow", "glow team" }, .color = { { 173, 192, 255, 40 }, "glow team", "ragdoll color" } };
+				glow_target local{ .enabled = { false,{}, "glow", "glow local" }, .color = { { 252, 217, 240, 50 }, "glow local", "color" } };
+				glow_target local_ragdoll{ .enabled = { false,{}, "ragdoll glow", "glow local" }, .color = { { 173, 192, 255, 40 }, "glow local", "ragdoll color" } };
 			} m_glow{};
 
 		} m_player{};
@@ -702,9 +702,9 @@ namespace settings {
 			chams_config weapon{};
 			chams_config arms{};
 
-			viewmodel( )
+			viewmodel()
 			{
-				this->weapon.init( "viewmodel weapon", "weapon chams" );
+				this->weapon.init("viewmodel weapon", "weapon chams");
 				this->weapon.enabled.category = "viewmodel";
 				this->weapon.enabled.value = true;
 				this->weapon.primary.color.value = { 255, 255, 255, 255 };
@@ -713,7 +713,7 @@ namespace settings {
 				this->weapon.overlay.color.value = { 217, 173, 202, 175 };
 				this->weapon.overlay.material.value = cham_ids::glow;
 
-				this->arms.init( "viewmodel arms", "arms chams" );
+				this->arms.init("viewmodel arms", "arms chams");
 				this->arms.enabled.category = "viewmodel";
 				this->arms.enabled.value = true;
 				this->arms.primary.color.value = { 173, 192, 255, 255 };
@@ -726,28 +726,28 @@ namespace settings {
 
 		struct local_alpha
 		{
-			xui::setting enabled{ true, {}, "lower opacity", "chams local" };
+			xui::setting enabled{ true,{}, "lower opacity", "chams local" };
 			config::val<float> opacity{ 0.5f, "chams local", "opacity" };
-			xui::setting only_scoped{ true, {}, "only when scoped", "chams local" };
+			xui::setting only_scoped{ true,{}, "only when scoped", "chams local" };
 		} m_local_alpha{};
 
 		struct legacy_outline_glow_config : outline_glow_config
 		{
-			legacy_outline_glow_config( )
+			legacy_outline_glow_config()
 			{
-				this->intensity.reg( "chams outline glow", "intensity" );
-				this->thickness.reg( "chams outline glow", "thickness" );
-				this->softness.reg( "chams outline glow", "softness" );
-				this->opacity.reg( "chams outline glow", "opacity" );
-				this->inner_spread.reg( "chams outline glow", "inner spread" );
-				this->pulse_speed.reg( "chams outline glow", "pulse speed" );
+				this->intensity.reg("chams outline glow", "intensity");
+				this->thickness.reg("chams outline glow", "thickness");
+				this->softness.reg("chams outline glow", "softness");
+				this->opacity.reg("chams outline glow", "opacity");
+				this->inner_spread.reg("chams outline glow", "inner spread");
+				this->pulse_speed.reg("chams outline glow", "pulse speed");
 			}
 		} m_outline_glow{};
 
 		struct item
 		{
 			static constexpr auto k_group_count{ 6u };
-			static constexpr const char* k_group_names[ ]{ "pistol", "smg", "rifle", "shotgun", "sniper", "utility" };
+			static constexpr const char* k_group_names[]{ "pistol", "smg", "rifle", "shotgun", "sniper", "utility" };
 
 			struct overlay
 			{
@@ -760,42 +760,42 @@ namespace settings {
 					config::col text_color{ { 255, 255, 255, 225 } };
 					config::col icon_color{ { 255, 255, 255, 225 } };
 
-					void init( std::string_view cat )
+					void init(std::string_view cat)
 					{
-						const auto s = std::string( cat );
-						this->display.reg( s, "display" );
-						this->max_distance.reg( s, "max distance" );
-						this->text_color.reg( s, "text color" );
-						this->icon_color.reg( s, "icon color" );
+						const auto s = std::string(cat);
+						this->display.reg(s, "display");
+						this->max_distance.reg(s, "max distance");
+						this->text_color.reg(s, "text color");
+						this->icon_color.reg(s, "icon color");
 					}
 				};
 
-				xui::setting enabled{ true, {}, "item esp", "esp items" };
-				xui::setting pistol{ false, {}, "pistol", "esp items" };
-				xui::setting smg{ false, {}, "smg", "esp items" };
-				xui::setting rifle{ false, {}, "rifle", "esp items" };
-				xui::setting shotgun{ false, {}, "shotgun", "esp items" };
-				xui::setting sniper{ true, {}, "sniper", "esp items" };
-				xui::setting utility{ true, {}, "utility", "esp items" };
+				xui::setting enabled{ true,{}, "item esp", "esp items" };
+				xui::setting pistol{ false,{}, "pistol", "esp items" };
+				xui::setting smg{ false,{}, "smg", "esp items" };
+				xui::setting rifle{ false,{}, "rifle", "esp items" };
+				xui::setting shotgun{ false,{}, "shotgun", "esp items" };
+				xui::setting sniper{ true,{}, "sniper", "esp items" };
+				xui::setting utility{ true,{}, "utility", "esp items" };
 
 				std::array<group, k_group_count> groups{};
 
-				overlay( )
+				overlay()
 				{
-					for ( auto i = 0u; i < k_group_count; ++i )
+					for (auto i = 0u; i < k_group_count; ++i)
 					{
-						this->groups[ i ].init( std::string( "esp items - " ) + k_group_names[ i ] );
+						this->groups[i].init(std::string("esp items - ") + k_group_names[i]);
 					}
 
-					this->groups[ 4 ].display = group::display_type::text_and_icon;
-					this->groups[ 4 ].max_distance = 100.0f;
-					this->groups[ 5 ].display = group::display_type::text_and_icon;
-					this->groups[ 5 ].max_distance = 100.0f;
+					this->groups[4].display = group::display_type::text_and_icon;
+					this->groups[4].max_distance = 100.0f;
+					this->groups[5].display = group::display_type::text_and_icon;
+					this->groups[5].max_distance = 100.0f;
 				}
 
-				xui::setting& group_toggle( std::uint32_t id )
+				xui::setting& group_toggle(std::uint32_t id)
 				{
-					switch ( id )
+					switch (id)
 					{
 					case 0: return this->pistol;
 					case 1: return this->smg;
@@ -807,9 +807,9 @@ namespace settings {
 					}
 				}
 
-				[[nodiscard]] bool is_active( std::uint32_t group_id ) const
+				[[nodiscard]] bool is_active(std::uint32_t group_id) const
 				{
-					switch ( group_id )
+					switch (group_id)
 					{
 					case 0: return this->pistol.value;
 					case 1: return this->smg.value;
@@ -821,49 +821,49 @@ namespace settings {
 					}
 				}
 
-				group& get_group( std::uint32_t group_id )
+				group& get_group(std::uint32_t group_id)
 				{
-					return this->groups[ group_id < k_group_count ? group_id : 2 ];
+					return this->groups[group_id < k_group_count ? group_id : 2];
 				}
 
-				const group& get_group( std::uint32_t group_id ) const
+				const group& get_group(std::uint32_t group_id) const
 				{
-					return this->groups[ group_id < k_group_count ? group_id : 2 ];
+					return this->groups[group_id < k_group_count ? group_id : 2];
 				}
 			} m_overlay{};
 
 			struct chams
 			{
-				xui::setting enabled{ true, {}, "item chams", "chams items" };
-				xui::setting pistol{ false, {}, "pistol", "chams items" };
-				xui::setting smg{ false, {}, "smg", "chams items" };
-				xui::setting rifle{ false, {}, "rifle", "chams items" };
-				xui::setting shotgun{ false, {}, "shotgun", "chams items" };
-				xui::setting sniper{ true, {}, "sniper", "chams items" };
-				xui::setting utility{ true, {}, "utility", "chams items" };
+				xui::setting enabled{ true,{}, "item chams", "chams items" };
+				xui::setting pistol{ false,{}, "pistol", "chams items" };
+				xui::setting smg{ false,{}, "smg", "chams items" };
+				xui::setting rifle{ false,{}, "rifle", "chams items" };
+				xui::setting shotgun{ false,{}, "shotgun", "chams items" };
+				xui::setting sniper{ true,{}, "sniper", "chams items" };
+				xui::setting utility{ true,{}, "utility", "chams items" };
 
 				std::array<chams_config, k_group_count> groups{};
 
-				chams( )
+				chams()
 				{
-					for ( auto i = 0u; i < k_group_count; ++i )
+					for (auto i = 0u; i < k_group_count; ++i)
 					{
-						const auto cat = std::string( "chams items - " ) + k_group_names[ i ];
-						this->groups[ i ].init( cat, "item chams" );
+						const auto cat = std::string("chams items - ") + k_group_names[i];
+						this->groups[i].init(cat, "item chams");
 					}
 
-					this->groups[ 4 ].primary.enabled.value = true;
-					this->groups[ 4 ].primary.color = { 173, 192, 255, 255 };
-					this->groups[ 4 ].primary.material = cham_ids::flat;
+					this->groups[4].primary.enabled.value = true;
+					this->groups[4].primary.color = { 173, 192, 255, 255 };
+					this->groups[4].primary.material = cham_ids::flat;
 
-					this->groups[ 5 ].primary.enabled.value = true;
-					this->groups[ 5 ].primary.color = { 173, 192, 255, 255 };
-					this->groups[ 5 ].primary.material = cham_ids::flat;
+					this->groups[5].primary.enabled.value = true;
+					this->groups[5].primary.color = { 173, 192, 255, 255 };
+					this->groups[5].primary.material = cham_ids::flat;
 				}
 
-				xui::setting& group_toggle( std::uint32_t id )
+				xui::setting& group_toggle(std::uint32_t id)
 				{
-					switch ( id )
+					switch (id)
 					{
 					case 0: return this->pistol;
 					case 1: return this->smg;
@@ -875,9 +875,9 @@ namespace settings {
 					}
 				}
 
-				[[nodiscard]] bool is_active( std::uint32_t group_id ) const
+				[[nodiscard]] bool is_active(std::uint32_t group_id) const
 				{
-					switch ( group_id )
+					switch (group_id)
 					{
 					case 0: return this->pistol.value;
 					case 1: return this->smg.value;
@@ -889,44 +889,44 @@ namespace settings {
 					}
 				}
 
-				chams_config& get_group( std::uint32_t group_id )
+				chams_config& get_group(std::uint32_t group_id)
 				{
-					return this->groups[ group_id < k_group_count ? group_id : 2 ];
+					return this->groups[group_id < k_group_count ? group_id : 2];
 				}
 
-				const chams_config& get_group( std::uint32_t group_id ) const
+				const chams_config& get_group(std::uint32_t group_id) const
 				{
-					return this->groups[ group_id < k_group_count ? group_id : 2 ];
+					return this->groups[group_id < k_group_count ? group_id : 2];
 				}
 			} m_chams{};
 
 			struct glow
 			{
-				xui::setting enabled{ true, {}, "item glow", "glow items" };
-				xui::setting pistol{ false, {}, "pistol", "glow items" };
-				xui::setting smg{ false, {}, "smg", "glow items" };
-				xui::setting rifle{ false, {}, "rifle", "glow items" };
-				xui::setting shotgun{ false, {}, "shotgun", "glow items" };
-				xui::setting sniper{ true, {}, "sniper", "glow items" };
-				xui::setting utility{ true, {}, "utility", "glow items" };
+				xui::setting enabled{ true,{}, "item glow", "glow items" };
+				xui::setting pistol{ false,{}, "pistol", "glow items" };
+				xui::setting smg{ false,{}, "smg", "glow items" };
+				xui::setting rifle{ false,{}, "rifle", "glow items" };
+				xui::setting shotgun{ false,{}, "shotgun", "glow items" };
+				xui::setting sniper{ true,{}, "sniper", "glow items" };
+				xui::setting utility{ true,{}, "utility", "glow items" };
 
 				std::array<glow_target, k_group_count> groups{};
 
-				glow( )
+				glow()
 				{
-					for ( auto i = 0u; i < k_group_count; ++i )
+					for (auto i = 0u; i < k_group_count; ++i)
 					{
-						const auto cat = std::string( "glow items - " ) + k_group_names[ i ];
-						this->groups[ i ].init( cat, "color", k_group_names[ i ] );
+						const auto cat = std::string("glow items - ") + k_group_names[i];
+						this->groups[i].init(cat, "color", k_group_names[i]);
 					}
 
-					this->groups[ 4 ].color = { 173, 192, 255, 50 };
-					this->groups[ 5 ].color = { 173, 192, 255, 50 };
+					this->groups[4].color = { 173, 192, 255, 50 };
+					this->groups[5].color = { 173, 192, 255, 50 };
 				}
 
-				xui::setting& group_toggle( std::uint32_t id )
+				xui::setting& group_toggle(std::uint32_t id)
 				{
-					switch ( id )
+					switch (id)
 					{
 					case 0: return this->pistol;
 					case 1: return this->smg;
@@ -938,9 +938,9 @@ namespace settings {
 					}
 				}
 
-				[[nodiscard]] bool is_active( std::uint32_t group_id ) const
+				[[nodiscard]] bool is_active(std::uint32_t group_id) const
 				{
-					switch ( group_id )
+					switch (group_id)
 					{
 					case 0: return this->pistol.value;
 					case 1: return this->smg.value;
@@ -952,14 +952,14 @@ namespace settings {
 					}
 				}
 
-				glow_target& get_group( std::uint32_t group_id )
+				glow_target& get_group(std::uint32_t group_id)
 				{
-					return this->groups[ group_id < k_group_count ? group_id : 2 ];
+					return this->groups[group_id < k_group_count ? group_id : 2];
 				}
 
-				const glow_target& get_group( std::uint32_t group_id ) const
+				const glow_target& get_group(std::uint32_t group_id) const
 				{
-					return this->groups[ group_id < k_group_count ? group_id : 2 ];
+					return this->groups[group_id < k_group_count ? group_id : 2];
 				}
 			} m_glow{};
 		} m_item{};
@@ -967,7 +967,7 @@ namespace settings {
 		struct projectile
 		{
 			static constexpr auto k_group_count{ 6u };
-			static constexpr const char* k_group_names[ ]{ "he grenade", "flashbang", "smoke", "molotov", "decoy", "inferno" };
+			static constexpr const char* k_group_names[]{ "he grenade", "flashbang", "smoke", "molotov", "decoy", "inferno" };
 
 			struct overlay
 			{
@@ -976,58 +976,58 @@ namespace settings {
 					config::col fill_color{ { 173, 192, 255, 50 }, "esp inferno", "fill color" };
 					config::col outline_color{ { 255, 171, 234, 150 }, "esp inferno", "outline color" };
 					config::val<float> outline_thickness{ 1.5f, "esp inferno", "outline thickness" };
-					xui::setting glow{ true, {}, "glow", "esp inferno" };
+					xui::setting glow{ true,{}, "glow", "esp inferno" };
 					config::val<float> glow_strength{ 0.55f, "esp inferno", "glow strength" };
 				} m_infernos{};
 
 				struct indicator
 				{
 					static constexpr auto k_group_count{ 3u };
-					static constexpr const char* k_group_names[ ]{ "he grenade", "molotov", "inferno" };
+					static constexpr const char* k_group_names[]{ "he grenade", "molotov", "inferno" };
 
 					struct group
 					{
-						xui::setting enabled{ true, {}, "", "" };
+						xui::setting enabled{ true,{}, "", "" };
 						config::col arc_color{ { 173, 192, 255, 225 } };
 						config::col icon_color{ { 255, 255, 255, 225 } };
 						config::col background_color{ { 0, 0, 0, 175 } };
-						xui::setting glow{ true, {}, "", "" };
+						xui::setting glow{ true,{}, "", "" };
 						config::val<float> glow_strength{ 1.0f };
 
-						void init( std::string_view cat )
+						void init(std::string_view cat)
 						{
-							const auto s = std::string( cat );
+							const auto s = std::string(cat);
 							this->enabled.name = "indicator " + s;
 							this->enabled.category = s;
 							this->glow.name = "glow";
 							this->glow.category = s;
-							this->arc_color.reg( s, "arc color" );
-							this->icon_color.reg( s, "icon color" );
-							this->background_color.reg( s, "background color" );
-							this->glow_strength.reg( s, "glow strength" );
+							this->arc_color.reg(s, "arc color");
+							this->icon_color.reg(s, "icon color");
+							this->background_color.reg(s, "background color");
+							this->glow_strength.reg(s, "glow strength");
 						}
 					};
 
 					std::array<group, k_group_count> groups{};
 
-					indicator( )
+					indicator()
 					{
-						for ( auto i = 0u; i < k_group_count; ++i )
+						for (auto i = 0u; i < k_group_count; ++i)
 						{
-							this->groups[ i ].init( std::string( "esp indicator - " ) + k_group_names[ i ] );
+							this->groups[i].init(std::string("esp indicator - ") + k_group_names[i]);
 						}
 
-						this->groups[ 2 ].arc_color = { 255, 171, 234, 225 };
+						this->groups[2].arc_color = { 255, 171, 234, 225 };
 					}
 
-					group& get_group( std::uint32_t id )
+					group& get_group(std::uint32_t id)
 					{
-						return this->groups[ id < k_group_count ? id : 0 ];
+						return this->groups[id < k_group_count ? id : 0];
 					}
 
-					const group& get_group( std::uint32_t id ) const
+					const group& get_group(std::uint32_t id) const
 					{
-						return this->groups[ id < k_group_count ? id : 0 ];
+						return this->groups[id < k_group_count ? id : 0];
 					}
 				} m_indicator{};
 
@@ -1040,37 +1040,37 @@ namespace settings {
 					config::col text_color{ { 255, 255, 255, 225 } };
 					config::col icon_color{ { 255, 255, 255, 225 } };
 
-					void init( std::string_view cat )
+					void init(std::string_view cat)
 					{
-						const auto s = std::string( cat );
-						this->display.reg( s, "display" );
-						this->max_distance.reg( s, "max distance" );
-						this->text_color.reg( s, "text color" );
-						this->icon_color.reg( s, "icon color" );
+						const auto s = std::string(cat);
+						this->display.reg(s, "display");
+						this->max_distance.reg(s, "max distance");
+						this->text_color.reg(s, "text color");
+						this->icon_color.reg(s, "icon color");
 					}
 				};
 
-				xui::setting enabled{ true, {}, "projectile esp", "esp projectiles" };
-				xui::setting he_grenade{ true, {}, "he grenade", "esp projectiles" };
-				xui::setting flashbang{ true, {}, "flashbang", "esp projectiles" };
-				xui::setting smoke{ true, {}, "smoke", "esp projectiles" };
-				xui::setting molotov{ true, {}, "molotov", "esp projectiles" };
-				xui::setting decoy{ true, {}, "decoy", "esp projectiles" };
-				xui::setting inferno{ true, {}, "inferno", "esp projectiles" };
+				xui::setting enabled{ true,{}, "projectile esp", "esp projectiles" };
+				xui::setting he_grenade{ true,{}, "he grenade", "esp projectiles" };
+				xui::setting flashbang{ true,{}, "flashbang", "esp projectiles" };
+				xui::setting smoke{ true,{}, "smoke", "esp projectiles" };
+				xui::setting molotov{ true,{}, "molotov", "esp projectiles" };
+				xui::setting decoy{ true,{}, "decoy", "esp projectiles" };
+				xui::setting inferno{ true,{}, "inferno", "esp projectiles" };
 
 				std::array<group, 5> groups{};
 
-				overlay( )
+				overlay()
 				{
-					for ( auto i = 0u; i < 5u; ++i )
+					for (auto i = 0u; i < 5u; ++i)
 					{
-						this->groups[ i ].init( std::string( "esp projectiles - " ) + k_group_names[ i ] );
+						this->groups[i].init(std::string("esp projectiles - ") + k_group_names[i]);
 					}
 				}
 
-				xui::setting& group_toggle( std::uint32_t id )
+				xui::setting& group_toggle(std::uint32_t id)
 				{
-					switch ( id )
+					switch (id)
 					{
 					case 0: return this->he_grenade;
 					case 1: return this->flashbang;
@@ -1082,9 +1082,9 @@ namespace settings {
 					}
 				}
 
-				[[nodiscard]] bool is_active( std::uint32_t group_id ) const
+				[[nodiscard]] bool is_active(std::uint32_t group_id) const
 				{
-					switch ( group_id )
+					switch (group_id)
 					{
 					case 0: return this->he_grenade.value;
 					case 1: return this->flashbang.value;
@@ -1096,14 +1096,14 @@ namespace settings {
 					}
 				}
 
-				group& get_group( std::uint32_t group_id )
+				group& get_group(std::uint32_t group_id)
 				{
-					return this->groups[ group_id < 5 ? group_id : 0 ];
+					return this->groups[group_id < 5 ? group_id : 0];
 				}
 
-				const group& get_group( std::uint32_t group_id ) const
+				const group& get_group(std::uint32_t group_id) const
 				{
-					return this->groups[ group_id < 5 ? group_id : 0 ];
+					return this->groups[group_id < 5 ? group_id : 0];
 				}
 			} m_overlay{};
 
@@ -1115,7 +1115,7 @@ namespace settings {
 
 		struct other
 		{
-			xui::setting bomb_timer{ true, {}, "bomb timer", "other esp" };
+			xui::setting bomb_timer{ true,{}, "bomb timer", "other esp" };
 		} m_other{};
 	};
 
@@ -1129,69 +1129,69 @@ namespace settings {
 			bool stattrak{};
 			int stattrak_count{};
 
-			bool operator==( const applied_skin& ) const = default;
+			bool operator==(const applied_skin&) const = default;
 		};
 
 		struct skin_map_field : config::custom_field
 		{
 			std::unordered_map<std::int16_t, applied_skin> data{};
 
-			static int bounded_integer( const nlohmann::json& object, const char* key, int fallback, int maximum )
+			static int bounded_integer(const nlohmann::json& object, const char* key, int fallback, int maximum)
 			{
-				const auto it = object.find( key );
-				if ( it == object.end( ) ) return fallback;
-				if ( it->is_number_unsigned( ) )
-					return static_cast<int>( std::min( it->get<std::uint64_t>( ), static_cast<std::uint64_t>( maximum ) ) );
-				if ( it->is_number_integer( ) )
-					return static_cast<int>( std::clamp( it->get<std::int64_t>( ), std::int64_t{0}, static_cast<std::int64_t>( maximum ) ) );
+				const auto it = object.find(key);
+				if (it == object.end()) return fallback;
+				if (it->is_number_unsigned())
+					return static_cast<int>(std::min(it->get<std::uint64_t>(), static_cast<std::uint64_t>(maximum)));
+				if (it->is_number_integer())
+					return static_cast<int>(std::clamp(it->get<std::int64_t>(), std::int64_t{ 0 }, static_cast<std::int64_t>(maximum)));
 				return fallback;
 			}
 
-			nlohmann::json serialize( ) const override
+			nlohmann::json serialize() const override
 			{
-				auto j = nlohmann::json::object( );
-				for ( const auto& [def, s] : data )
+				auto j = nlohmann::json::object();
+				for (const auto& [def, s] : data)
 				{
-					j[ std::to_string( def ) ] = nlohmann::json
+					j[std::to_string(def)] = nlohmann::json
 					{
-						{"p", s.paint_kit_id},
-						{"w", s.wear},
-						{"s", s.seed},
-						{"t", s.stattrak},
-						{"c", s.stattrak_count}
+						{ "p", s.paint_kit_id },
+						{ "w", s.wear },
+						{ "s", s.seed },
+						{ "t", s.stattrak },
+						{ "c", s.stattrak_count }
 					};
 				}
 
 				return j;
 			}
 
-			void deserialize( const nlohmann::json& j ) override
+			void deserialize(const nlohmann::json& j) override
 			{
-				data.clear( );
+				data.clear();
 
-				if ( !j.is_object( ) )
+				if (!j.is_object())
 				{
 					return;
 				}
 
-				for ( auto it = j.begin( ); it != j.end( ); ++it )
+				for (auto it = j.begin(); it != j.end(); ++it)
 				{
 					try
 					{
 						std::size_t parsed{};
-						const auto def = std::stoi( it.key( ), &parsed );
-						if ( parsed != it.key( ).size( ) || def <= 0 || def > std::numeric_limits<std::int16_t>::max( ) || !it.value( ).is_object( ) )
+						const auto def = std::stoi(it.key(), &parsed);
+						if (parsed != it.key().size() || def <= 0 || def > std::numeric_limits<std::int16_t>::max() || !it.value().is_object())
 							continue;
 
 						applied_skin s{};
-						s.paint_kit_id = bounded_integer( it.value( ), "p", 0, std::numeric_limits<int>::max( ) );
-						s.wear = skin_options::clamp_wear( it.value( ).value( "w", 0.01f ) );
-						s.seed = bounded_integer( it.value( ), "s", 0, 1000 );
-						s.stattrak = it.value( ).value( "t", false );
-						s.stattrak_count = bounded_integer( it.value( ), "c", 0, std::numeric_limits<int>::max( ) );
-						data.emplace( static_cast<std::int16_t>( def ), s );
+						s.paint_kit_id = bounded_integer(it.value(), "p", 0, std::numeric_limits<int>::max());
+						s.wear = skin_options::clamp_wear(it.value().value("w", 0.01f));
+						s.seed = bounded_integer(it.value(), "s", 0, 1000);
+						s.stattrak = it.value().value("t", false);
+						s.stattrak_count = bounded_integer(it.value(), "c", 0, std::numeric_limits<int>::max());
+						data.emplace(static_cast<std::int16_t>(def), s);
 					}
-					catch ( ... ) {}
+					catch (...) {}
 				}
 			}
 		};
@@ -1201,7 +1201,7 @@ namespace settings {
 			std::int16_t ct_def{};
 			std::int16_t t_def{};
 
-			nlohmann::json serialize( ) const override
+			nlohmann::json serialize() const override
 			{
 				return nlohmann::json
 				{
@@ -1210,25 +1210,25 @@ namespace settings {
 				};
 			}
 
-			void deserialize( const nlohmann::json& j ) override
+			void deserialize(const nlohmann::json& j) override
 			{
-				if ( !j.is_object( ) )
+				if (!j.is_object())
 				{
 					return;
 				}
 
-				ct_def = j.value( "ct", static_cast< std::int16_t >( 0 ) );
-				t_def = j.value( "t", static_cast< std::int16_t >( 0 ) );
+				ct_def = j.value("ct", static_cast<std::int16_t>(0));
+				t_def = j.value("t", static_cast<std::int16_t>(0));
 			}
 		};
 
 		skin_map_field skins{};
 		agent_selection_field agents{};
 
-		changer( )
+		changer()
 		{
-			config::detail::register_field( { .key = config::detail::make_key( "changer", "applied skins" ), .type = config::field_type::custom, .ptr = &skins, .count = 1 } );
-			config::detail::register_field( { .key = config::detail::make_key( "changer", "agents" ), .type = config::field_type::custom, .ptr = &agents, .count = 1 } );
+			config::detail::register_field({ .key = config::detail::make_key("changer", "applied skins"), .type = config::field_type::custom, .ptr = &skins, .count = 1 });
+			config::detail::register_field({ .key = config::detail::make_key("changer", "agents"), .type = config::field_type::custom, .ptr = &agents, .count = 1 });
 		}
 	};
 
@@ -1236,28 +1236,28 @@ namespace settings {
 	{
 		struct scoreboard_weapons
 		{
-			xui::setting enabled{ false, {}, "scoreboard weapons", "misc" };
+			xui::setting enabled{ false,{}, "scoreboard weapons", "misc" };
 			config::col color{ { 255, 255, 0, 255 }, "misc", "scoreboard weapons color" };
 		} m_scoreboard_weapons{};
 
 		struct name_changer
 		{
-			xui::setting clantag{ false, {}, "clantag", "name changer" };
-			xui::setting override_name{ false, {}, "override name", "name changer" };
+			xui::setting clantag{ false,{}, "clantag", "name changer" };
+			xui::setting override_name{ false,{}, "override name", "name changer" };
 			config::str name{ "Player", "name changer", "name" };
 		} m_name_changer{};
 
 		struct projectile_trajectory
 		{
-			xui::setting enabled{ true, {}, "projectile trajectory", "trajectory" };
-			xui::setting straight_throw{ true, {}, "straight throw", "trajectory" };
+			xui::setting enabled{ true,{}, "projectile trajectory", "trajectory" };
+			xui::setting straight_throw{ true,{}, "straight throw", "trajectory" };
 
 			config::col held_color{ { 173, 192, 255, 255 }, "trajectory", "held color" };
 			config::col thrown_color{ { 220, 225, 240, 255 }, "trajectory", "thrown color" };
 			config::col will_deal_damage_held_color{ { 252, 217, 240, 255 }, "trajectory", "will damage held color" };
 			config::col will_deal_damage_thrown_color{ { 252, 217, 240, 255 }, "trajectory", "will damage thrown color" };
 
-			xui::setting glow{ true, {}, "glow", "trajectory" };
+			xui::setting glow{ true,{}, "glow", "trajectory" };
 			config::val<float> glow_strength{ 1.0f, "trajectory", "glow strength" };
 		} m_projectile_trajectory{};
 
@@ -1267,104 +1267,104 @@ namespace settings {
 			enum class marker_type : int { classic, damage, both };
 			enum class bullet_impact_type : int { overlay, sparks, both };
 
-			xui::setting hit_log{ true, {}, "hit logs", "impacts" };
+			xui::setting hit_log{ true,{}, "hit logs", "impacts" };
 			config::val<float> hit_log_duration{ 3.5f, "impacts", "hit log duration" };
-			xui::setting console_log{ true, {}, "console logs", "impacts" };
-			xui::setting chat_log{ false, {}, "chat logs", "impacts" };
+			xui::setting console_log{ true,{}, "console logs", "impacts" };
+			xui::setting chat_log{ false,{}, "chat logs", "impacts" };
 
-			xui::setting miss_log{ true, {}, "miss logs", "impacts" };
+			xui::setting miss_log{ true,{}, "miss logs", "impacts" };
 			config::val<float> miss_log_duration{ 4.5f, "impacts", "miss log duration" };
-			xui::setting vote_log{ true, {}, "vote logs", "impacts" };
+			xui::setting vote_log{ true,{}, "vote logs", "impacts" };
 
-			xui::setting hit_sound{ true, {}, "hit sound", "impacts" };
+			xui::setting hit_sound{ true,{}, "hit sound", "impacts" };
 			config::enm<sound_type> hit_sound_type{ sound_type::killcard, "impacts", "hit sound type" };
 			config::val<float> hit_sound_volume{ 25.0f, "impacts", "hit sound volume" };
 			config::str custom_hit_sound{ "hit.wav", "impacts", "custom hit sound" };
 
-			xui::setting death_sound{ true, {}, "death sound", "impacts" };
+			xui::setting death_sound{ true,{}, "death sound", "impacts" };
 			config::enm<sound_type> death_sound_type{ sound_type::bell, "impacts", "death sound type" };
 			config::val<float> death_sound_volume{ 20.0f, "impacts", "death sound volume" };
 			config::str custom_death_sound{ "kill.wav", "impacts", "custom death sound" };
 
-			xui::setting hit_effect{ true, {}, "hit effect", "impacts" };
+			xui::setting hit_effect{ true,{}, "hit effect", "impacts" };
 			config::col hit_effect_color{ { 173, 192, 255, 255 }, "impacts", "hit effect color" };
 			config::val<float> hit_effect_duration{ 0.75f, "impacts", "hit effect duration" };
 			config::val<float> hit_effect_strength{ 60.0f, "impacts", "hit effect strength" };
 
-			xui::setting death_effect{ true, {}, "death effect", "impacts" };
+			xui::setting death_effect{ true,{}, "death effect", "impacts" };
 			config::col death_effect_color{ { 173, 192, 255, 255 }, "impacts", "death effect color" };
 
-			xui::setting bullet_impact_effect{ true, {}, "bullet impacts", "impacts" };
+			xui::setting bullet_impact_effect{ true,{}, "bullet impacts", "impacts" };
 			config::enm<bullet_impact_type> bullet_impact_effect_type{ bullet_impact_type::overlay, "impacts", "bullet impact type" };
 			config::col bullet_impact_effect_fill_color{ { 173, 192, 255, 85 }, "impacts", "bullet impact fill color" };
 			config::col bullet_impact_effect_edge_color{ { 173, 192, 255, 255 }, "impacts", "bullet impact edge color" };
 			config::col bullet_impact_effect_color_spark{ { 173, 192, 255, 255 }, "impacts", "bullet impact spark color" };
 			config::val<float> bullet_impact_effect_duration{ 2.5f, "impacts", "bullet impact duration" };
-			xui::setting bullet_impact_effect_glow{ true, {}, "glow", "bullet impacts" };
+			xui::setting bullet_impact_effect_glow{ true,{}, "glow", "bullet impacts" };
 			config::val<float> bullet_impact_effect_glow_strength{ 1.0f, "bullet impacts", "glow strength" };
 
-			xui::setting bullet_tracers{ false, {}, "bullet tracers", "impacts" };
+			xui::setting bullet_tracers{ false,{}, "bullet tracers", "impacts" };
 			config::col bullet_tracer_color{ { 173, 192, 255, 255 }, "impacts", "bullet tracer color" };
 			config::val<float> bullet_tracer_duration{ 0.5f, "impacts", "bullet tracer duration" };
 
-			xui::setting hit_marker{ true, {}, "hit marker", "impacts" };
+			xui::setting hit_marker{ true,{}, "hit marker", "impacts" };
 			config::enm<marker_type> hit_marker_type{ marker_type::classic, "impacts", "hit marker type" };
 			config::val<float> hit_marker_duration{ 2.5f, "impacts", "hit marker duration" };
 			config::col hit_marker_color{ { 255, 255, 255, 255 }, "impacts", "hit marker color" };
-			xui::setting hit_marker_glow{ true, {}, "glow", "hit marker" };
+			xui::setting hit_marker_glow{ true,{}, "glow", "hit marker" };
 			config::val<float> hit_marker_glow_strength{ 1.0f, "hit marker", "glow strength" };
 		} m_impacts{};
 
 		struct removals
 		{
-			xui::setting crosshair{ true, {}, "remove crosshair", "removals" };
-			xui::setting scope{ true, {}, "remove scope", "removals" };
-			xui::setting skybox_fog{ true, {}, "remove skybox fog", "removals" };
-			xui::setting overhead{ true, {}, "remove overhead", "removals" };
-			xui::setting legs{ true, {}, "remove legs", "removals" };
-			xui::setting skybox_3d{ true, {}, "remove 3d skybox", "removals" };
-			xui::setting recoil{ true, {}, "remove recoil", "removals" };
-			xui::setting decals{ true, {}, "remove decals", "removals" };
-			xui::setting smoke{ true, {}, "remove smoke", "removals" };
+			xui::setting crosshair{ true,{}, "remove crosshair", "removals" };
+			xui::setting scope{ true,{}, "remove scope", "removals" };
+			xui::setting skybox_fog{ true,{}, "remove skybox fog", "removals" };
+			xui::setting overhead{ true,{}, "remove overhead", "removals" };
+			xui::setting legs{ true,{}, "remove legs", "removals" };
+			xui::setting skybox_3d{ true,{}, "remove 3d skybox", "removals" };
+			xui::setting recoil{ true,{}, "remove recoil", "removals" };
+			xui::setting decals{ true,{}, "remove decals", "removals" };
+			xui::setting smoke{ true,{}, "remove smoke", "removals" };
 			config::val<float> flash_alpha{ 25.0f, "removals", "flash alpha" };
 		} m_removals{};
 
 		struct camera
 		{
-			xui::setting change_fov{ true, {}, "custom fov", "camera" };
+			xui::setting change_fov{ true,{}, "custom fov", "camera" };
 			config::val<float> fov{ 115.0f, "camera", "fov" };
 
-			xui::setting scoped_fov_override{ false, {}, "scoped fov override", "camera" };
+			xui::setting scoped_fov_override{ false,{}, "scoped fov override", "camera" };
 			config::val<float> scoped_fov{ 40.0f, "camera", "scoped fov" };
 
-			xui::setting thirdperson{ true, { VK_MBUTTON, xui::bind_mode::toggle }, "thirdperson", "camera" };
+			xui::setting thirdperson{ true,{ VK_MBUTTON, xui::bind_mode::toggle }, "thirdperson", "camera" };
 			config::val<float> thirdperson_distance{ 85.0f, "camera", "thirdperson distance" };
 			config::val<float> thirdperson_hull_size{ 12.0f, "camera", "thirdperson hull size" };
-			xui::setting spectator_thirdperson{ true, {}, "spectator thirdperson", "camera" };
+			xui::setting spectator_thirdperson{ true,{}, "spectator thirdperson", "camera" };
 
-			xui::setting freecam{ false, {}, "freecam", "camera" };
+			xui::setting freecam{ false,{}, "freecam", "camera" };
 			config::val<float> freecam_speed{ 1000.0f, "camera", "freecam speed" };
-			xui::setting freecam_block_input{ true, {}, "freecam block input", "camera" };
+			xui::setting freecam_block_input{ true,{}, "freecam block input", "camera" };
 
-			xui::setting unlock_spectating{ true, {}, "unlock spectating", "camera" };
+			xui::setting unlock_spectating{ true,{}, "unlock spectating", "camera" };
 
-			xui::setting change_aspect_ratio{ false, {}, "custom aspect ratio", "camera" };
+			xui::setting change_aspect_ratio{ false,{}, "custom aspect ratio", "camera" };
 			config::val<float> aspect_ratio{ 1.333f, "camera", "aspect ratio" };
 		} m_camera{};
 
 		struct motion_blur
 		{
-			xui::setting enabled{ false, {}, "motion blur", "camera" };
+			xui::setting enabled{ false,{}, "motion blur", "camera" };
 			config::val<float> strength{ 1.0f, "motion blur", "strength" };
 			config::val<float> smoothness{ 16.0f, "motion blur", "smoothness" };
 			config::val<int> samples{ 12, "motion blur", "samples" };
 			config::val<float> center_protection{ 0.20f, "motion blur", "center protection" };
-			xui::setting movement_blur{ false, {}, "movement blur", "motion blur" };
+			xui::setting movement_blur{ false,{}, "movement blur", "motion blur" };
 		} m_motion_blur{};
 
 		struct viewmodel_adjust
 		{
-			xui::setting enabled{ false, {}, "viewmodel adjust", "viewmodel" };
+			xui::setting enabled{ false,{}, "viewmodel adjust", "viewmodel" };
 			config::val<float> offset_x{ 2.5f, "viewmodel", "offset x" };
 			config::val<float> offset_y{ 0.0f, "viewmodel", "offset y" };
 			config::val<float> offset_z{ -1.5f, "viewmodel", "offset z" };
@@ -1375,7 +1375,7 @@ namespace settings {
 		{
 			struct crosshair
 			{
-				xui::setting enabled{ true, {}, "crosshair overlay", "crosshair" };
+				xui::setting enabled{ true,{}, "crosshair overlay", "crosshair" };
 				config::val<float> size{ 1.0f, "crosshair", "size" };
 				config::val<float> outline{ 1.0f, "crosshair", "outline" };
 				config::col color{ { 173, 192, 255, 255 }, "crosshair", "color" };
@@ -1384,15 +1384,15 @@ namespace settings {
 
 			struct scope
 			{
-				xui::setting enabled{ true, {}, "scope overlay", "scope overlay" };
+				xui::setting enabled{ true,{}, "scope overlay", "scope overlay" };
 				config::val<float> line_length{ 125.0f, "scope overlay", "line length" };
 				config::val<float> gap{ 8.0f, "scope overlay", "gap" };
 				config::val<float> thickness{ 0.5f, "scope overlay", "thickness" };
 				config::val<float> anim_speed{ 10.0f, "scope overlay", "anim speed" };
 				config::col color{ { 173, 192, 255, 255 }, "scope overlay", "color" };
-				xui::setting fade_in{ true, {}, "fade in", "scope overlay" };
+				xui::setting fade_in{ true,{}, "fade in", "scope overlay" };
 
-				xui::setting glow{ true, {}, "glow", "scope overlay" };
+				xui::setting glow{ true,{}, "glow", "scope overlay" };
 				config::val<float> glow_strength{ 1.0f, "scope overlay", "glow strength" };
 			} m_scope{};
 
@@ -1400,18 +1400,18 @@ namespace settings {
 			{
 				enum class hat_type : std::uint8_t { kasa, bucket };
 
-				xui::setting enabled{ false, {}, "hat", "hat" };
+				xui::setting enabled{ false,{}, "hat", "hat" };
 				config::enm<hat_type> type{ hat_type::kasa, "hat", "type" };
 				config::col color{ { 255, 171, 234, 160 }, "hat", "color" };
 				config::col secondary_color{ { 173, 192, 255, 160 }, "hat", "secondary color" };
-				xui::setting glow{ true, {}, "glow", "hat" };
+				xui::setting glow{ true,{}, "glow", "hat" };
 				config::val<float> glow_strength{ 1.0f, "hat", "glow strength" };
 			} m_hat{};
 
 			struct velocity
 			{
-				xui::setting counter{ false, {}, "velocity counter", "velocity hud" };
-				xui::setting chart{ false, {}, "velocity chart", "velocity hud" };
+				xui::setting counter{ false,{}, "velocity counter", "velocity hud" };
+				xui::setting chart{ false,{}, "velocity chart", "velocity hud" };
 				config::col color{ { 173, 192, 255, 255 }, "velocity hud", "color" };
 				config::val<float> bottom_offset{ 80.0f, "velocity hud", "bottom offset" };
 				config::val<float> chart_width{ 200.0f, "velocity hud", "chart width" };
@@ -1423,14 +1423,14 @@ namespace settings {
 		{
 			struct chromatic_aberration
 			{
-				xui::setting enabled{ false, {}, "chromatic aberration", "post process" };
+				xui::setting enabled{ false,{}, "chromatic aberration", "post process" };
 				config::val<float> intensity{ 0.003f, "post process", "chromatic aberration intensity" };
 			} m_chromatic_aberration{};
 		} m_post_process{};
 
 		struct dlight
 		{
-			xui::setting enabled{ false, {}, "dynamic light", "misc" };
+			xui::setting enabled{ false,{}, "dynamic light", "misc" };
 			config::col color{ { 255, 255, 255, 255 }, "dlight", "color" };
 			config::val<float> radius{ 300.0f, "dlight", "radius" };
 			config::val<float> z_offset{ 2.0f, "dlight", "z offset" };
@@ -1438,58 +1438,58 @@ namespace settings {
 
 		struct autobuy
 		{
-			xui::setting enabled{ true, {}, "auto buy", "autobuy" };
+			xui::setting enabled{ true,{}, "auto buy", "autobuy" };
 			config::val<int> primary_weapon{ 3, "autobuy", "primary weapon" };
 			config::val<int> secondary_weapon{ 3, "autobuy", "secondary weapon" };
-			xui::setting armor{ true, {}, "armor", "autobuy" };
-			xui::setting defuser{ true, {}, "defuser", "autobuy" };
-			xui::setting taser{ true, {}, "taser", "autobuy" };
+			xui::setting armor{ true,{}, "armor", "autobuy" };
+			xui::setting defuser{ true,{}, "defuser", "autobuy" };
+			xui::setting taser{ true,{}, "taser", "autobuy" };
 			config::bools<5> grenades{ { true, true, true, false, false }, "autobuy", "grenades" };
 		} m_autobuy{};
 
 		struct kill_say
 		{
-			xui::setting enabled{ false, {}, "kill say", "misc" };
+			xui::setting enabled{ false,{}, "kill say", "misc" };
 			config::str message{ "1", "misc", "kill say message" };
 		} m_kill_say{};
 
 		struct chat_spam
 		{
-			xui::setting enabled{ false, {}, "chat spam", "misc" };
+			xui::setting enabled{ false,{}, "chat spam", "misc" };
 			config::str message{ "", "misc", "chat spam message" };
 			config::val<float> delay{ 1.0f, "misc", "chat spam delay" };
 			config::bools<2> targets{ { true, false }, "misc", "chat spam targets" };
 		} m_chat_spam{};
 
-		xui::setting preserve_killfeed{ true, {}, "preserve killfeed", "misc" };
-		xui::setting reveal_radar{ true, {}, "reveal radar", "misc" };
-		xui::setting disable_game_logs{ true, {}, "disable game logs", "misc" };
-		xui::setting vote_kick_self{ false, {}, "vote kick self", "misc" };
-		xui::setting auto_accept{ false, {}, "auto accept", "misc" };
+		xui::setting preserve_killfeed{ true,{}, "preserve killfeed", "misc" };
+		xui::setting reveal_radar{ true,{}, "reveal radar", "misc" };
+		xui::setting disable_game_logs{ true,{}, "disable game logs", "misc" };
+		xui::setting vote_kick_self{ false,{}, "vote kick self", "misc" };
+		xui::setting auto_accept{ false,{}, "auto accept", "misc" };
 		config::val<int> menu_key{ VK_INSERT, "misc", "menu key" };
 		config::val<int> menu_palette{ 0, "interface", "color palette" };
 
 		struct watermark_cfg
 		{
-			xui::setting enabled  { true, {}, "watermark",       "watermark" };
-			xui::setting show_fps { true, {}, "show fps",        "watermark" };
-			xui::setting show_ping{ true, {}, "show ping",       "watermark" };
-			xui::setting show_time{ true, {}, "show time",       "watermark" };
-			xui::setting show_user{ true, {}, "show user",       "watermark" };
-			xui::setting show_map { true, {}, "show map",        "watermark" };
-			xui::setting show_tick{ true, {}, "show tick",       "watermark" };
-			xui::setting show_velocity{ true, {}, "show velocity", "watermark" };
+			xui::setting enabled{ true,{}, "watermark",       "watermark" };
+			xui::setting show_fps{ true,{}, "show fps",        "watermark" };
+			xui::setting show_ping{ true,{}, "show ping",       "watermark" };
+			xui::setting show_time{ true,{}, "show time",       "watermark" };
+			xui::setting show_user{ true,{}, "show user",       "watermark" };
+			xui::setting show_map{ true,{}, "show map",        "watermark" };
+			xui::setting show_tick{ true,{}, "show tick",       "watermark" };
+			xui::setting show_velocity{ true,{}, "show velocity", "watermark" };
 			config::val<float> opacity{ 100.0f, "watermark", "opacity" };
 			config::val<int>   position{ 2, "watermark", "position" }; // 0=top-left, 1=top-center, 2=top-right, 3=bottom-left, 4=bottom-center, 5=bottom-right
 		} m_watermark{};
 
 		struct widgets_cfg
 		{
-			xui::setting keybinds_list{ true, {}, "keybinds list", "widgets" };
+			xui::setting keybinds_list{ true,{}, "keybinds list", "widgets" };
 			config::val<float> keybinds_x{ -1.0f, "widgets", "keybinds x" };
 			config::val<float> keybinds_y{ -1.0f, "widgets", "keybinds y" };
 
-			xui::setting spectator_list{ true, {}, "spectator list", "widgets" };
+			xui::setting spectator_list{ true,{}, "spectator list", "widgets" };
 			config::val<float> spectator_x{ -1.0f, "widgets", "spectator x" };
 			config::val<float> spectator_y{ -1.0f, "widgets", "spectator y" };
 
@@ -1501,7 +1501,7 @@ namespace settings {
 			{
 				config::col text_color{ { 235, 238, 248, 255 }, "glass widget", "text color" };
 				config::col icon_color{ { 173, 192, 255, 255 }, "glass widget", "icon color" };
-				xui::setting per_stat_icon_colors{ false, {}, "per stat icon colors", "glass widget" };
+				xui::setting per_stat_icon_colors{ false,{}, "per stat icon colors", "glass widget" };
 				config::col logo_icon_color{ { 173, 192, 255, 255 }, "glass widget", "logo icon color" };
 				config::col fps_icon_color{ { 173, 192, 255, 255 }, "glass widget", "fps icon color" };
 				config::col ping_icon_color{ { 173, 192, 255, 255 }, "glass widget", "ping icon color" };
@@ -1520,39 +1520,39 @@ namespace settings {
 				config::val<float> pill_height{ 32.0f, "glass widget", "pill height" };
 				config::val<float> section_gap{ 16.0f, "glass widget", "section gap" };
 				config::val<float> pad_x{ 14.0f, "glass widget", "padding x" };
-				xui::setting show_avatar{ true, {}, "show avatar", "glass widget" };
+				xui::setting show_avatar{ true,{}, "show avatar", "glass widget" };
 			} m_glass{};
 		} m_widgets{};
 	};
 
 	struct movement
 	{
-		xui::setting bhop{ true, {}, "bhop", "movement" };
-		xui::setting airstrafe{ true, {}, "airstrafe", "movement" };
-		xui::setting airstrafe_fully_directional{ true, {}, "fully directional", "movement - airstrafe" };
-		xui::setting jumpbug{ true, {}, "jumpbug", "movement" };
-		xui::setting fastladder{ true, {}, "fastladder", "movement" };
-		xui::setting edgejump{ false, { 'E', xui::bind_mode::hold_on}, "edgejump", "movement" };
-		xui::setting edgestop{ false, { 'N', xui::bind_mode::hold_on}, "edgestop", "movement" };
-		xui::setting edgebug{ false, {}, "edgebug", "movement" };
+		xui::setting bhop{ true,{}, "bhop", "movement" };
+		xui::setting airstrafe{ true,{}, "airstrafe", "movement" };
+		xui::setting airstrafe_fully_directional{ true,{}, "fully directional", "movement - airstrafe" };
+		xui::setting jumpbug{ true,{}, "jumpbug", "movement" };
+		xui::setting fastladder{ true,{}, "fastladder", "movement" };
+		xui::setting edgejump{ false,{ 'E', xui::bind_mode::hold_on }, "edgejump", "movement" };
+		xui::setting edgestop{ false,{ 'N', xui::bind_mode::hold_on }, "edgestop", "movement" };
+		xui::setting edgebug{ false,{}, "edgebug", "movement" };
 		/// 0..4 — matches jmp table order around \c loc_C80A3A in dump (mode dword selects case before the active path).
 		config::val<int> edgebug_mode{ 1, "movement", "edgebug mode" };
 		/// Analog of \c xmmword_E22CA4+0xC — extra subtick duck cycles (each cycle = press+release pair).
 		config::val<int> edgebug_passes{ 1, "movement", "edgebug passes" };
 		/// Adds jump up/down subticks like jumpbug after duck sequence (not in every dump path; optional).
-		xui::setting edgebug_include_jump_steps{ false, {}, "edgebug jump steps", "movement" };
-		xui::setting slowwalk{ false, {}, "slowwalk", "movement" };
+		xui::setting edgebug_include_jump_steps{ false,{}, "edgebug jump steps", "movement" };
+		xui::setting slowwalk{ false,{}, "slowwalk", "movement" };
 		config::val<float> slowwalk_speed{ 33.0f, "movement", "slowwalk speed" };
 
 		struct test_strafer
 		{
-			xui::setting enabled{ false, {}, "test strafer", "movement" };
+			xui::setting enabled{ false,{}, "astrafer", "movement" };
 		} m_test_strafer{};
 
 		struct velocity_debug
 		{
-			xui::setting enabled{ false, {}, "velocity debug", "movement" };
-			xui::setting reset_on_land{ true, {}, "reset peak on land", "movement - velocity debug" };
+			xui::setting enabled{ false,{}, "velocity debug", "movement" };
+			xui::setting reset_on_land{ true,{}, "reset peak on land", "movement - velocity debug" };
 		} m_velocity_debug{};
 	};
 
@@ -1581,22 +1581,22 @@ namespace settings {
 			config::val<float> wind_direction;
 			config::val<float> wind_turbulence;
 
-			weather( std::string_view cat = "weather" )
-				: enabled{ true, {}, "weather", std::string( cat ) },
-				  type{ weather_type::snow, cat, "type" },
-				  color{ { 117, 120, 142, 144 }, cat, "color" },
-				  fog_enabled{ true, {}, "fog", std::string( cat ) },
-				  fog_density{ 0.5f, cat, "fog density" },
-				  fog_anisotropy{ 0.5f, cat, "fog anisotropy" },
-				  fog_draw_distance{ 8000.0f, cat, "fog draw distance" },
-				  fog_color{ { 160, 175, 210, 255 }, cat, "fog color" },
-				  wetness{ false, {}, "wetness", std::string( cat ) },
-				  wetness_density{ 1.8f, cat, "wetness density" },
-				  wetness_speed{ 0.8f, cat, "wetness speed" },
-				  wind{ true, {}, "wind", std::string( cat ) },
-				  wind_strength{ 3.0f, cat, "wind strength" },
-				  wind_direction{ 0.0f, cat, "wind direction" },
-				  wind_turbulence{ 1.0f, cat, "wind turbulence" }
+			weather(std::string_view cat = "weather")
+				: enabled{ true,{}, "weather", std::string(cat) },
+				type{ weather_type::snow, cat, "type" },
+				color{ { 117, 120, 142, 144 }, cat, "color" },
+				fog_enabled{ true,{}, "fog", std::string(cat) },
+				fog_density{ 0.5f, cat, "fog density" },
+				fog_anisotropy{ 0.5f, cat, "fog anisotropy" },
+				fog_draw_distance{ 8000.0f, cat, "fog draw distance" },
+				fog_color{ { 160, 175, 210, 255 }, cat, "fog color" },
+				wetness{ false,{}, "wetness", std::string(cat) },
+				wetness_density{ 1.8f, cat, "wetness density" },
+				wetness_speed{ 0.8f, cat, "wetness speed" },
+				wind{ true,{}, "wind", std::string(cat) },
+				wind_strength{ 3.0f, cat, "wind strength" },
+				wind_direction{ 0.0f, cat, "wind direction" },
+				wind_turbulence{ 1.0f, cat, "wind turbulence" }
 			{
 			}
 		};
@@ -1613,13 +1613,13 @@ namespace settings {
 				config::col cloud_color;
 				config::col sun_color;
 
-				skyboxing( std::string_view cat = "scene" )
-					: custom_skybox{ true, {}, "skybox material", std::string( cat ) },
-					  selected_skybox{ 0, cat, "selected skybox" },
-					  custom_color{ true, {}, "skybox color", std::string( cat ) },
-					  skybox_color{ { 249, 103, 206, 255 }, cat, "skybox color value" },
-					  cloud_color{ { 173, 192, 255, 0 }, cat, "cloud color" },
-					  sun_color{ { 173, 192, 255, 0 }, cat, "sun color" }
+				skyboxing(std::string_view cat = "scene")
+					: custom_skybox{ true,{}, "skybox material", std::string(cat) },
+					selected_skybox{ 0, cat, "selected skybox" },
+					custom_color{ true,{}, "skybox color", std::string(cat) },
+					skybox_color{ { 249, 103, 206, 255 }, cat, "skybox color value" },
+					cloud_color{ { 173, 192, 255, 0 }, cat, "cloud color" },
+					sun_color{ { 173, 192, 255, 0 }, cat, "sun color" }
 				{
 				}
 			};
@@ -1650,26 +1650,26 @@ namespace settings {
 			config::col ambient_color;
 			config::val<float> ambient_intensity;
 
-			scene( std::string_view cat = "scene" )
+			scene(std::string_view cat = "scene")
 				: skybox{ cat },
-				  lighting{ true, {}, "lighting", std::string( cat ) },
-				  lighting_color{ { 173, 192, 255, 255 }, cat, "lighting color" },
-				  lighting_intensity{ 0.85f, cat, "lighting intensity" },
-				  lighting_rotation{ { -0.9f, 0.3f, 0.2f }, cat, "lighting rotation" },
-				  world_setting{ true, {}, "world color", std::string( cat ) },
-				  world_color{ { 115, 125, 160, 255 }, cat, "world color value" },
-				  bloom{ true, {}, "bloom", std::string( cat ) },
-				  bloom_value{ 2.0f, cat, "bloom value" },
-				  gamma{ true, {}, "gamma", std::string( cat ) },
-				  gamma_value{ 2.2f, cat, "gamma value" },
-				  dof{ true, {}, "depth of field", std::string( cat ) },
-				  dof_near_blurry{ 0.0f, cat, "dof near blurry" },
-				  dof_near_crisp{ 5.0f, cat, "dof near crisp" },
-				  dof_far_crisp{ 600.0f, cat, "dof far crisp" },
-				  dof_far_blurry{ 1400.0f, cat, "dof far blurry" },
-				  ambient{ true, {}, "ambient", std::string( cat ) },
-				  ambient_color{ { 233, 145, 255, 255 }, cat, "ambient color" },
-				  ambient_intensity{ 1.1f, cat, "ambient intensity" }
+				lighting{ true,{}, "lighting", std::string(cat) },
+				lighting_color{ { 173, 192, 255, 255 }, cat, "lighting color" },
+				lighting_intensity{ 0.85f, cat, "lighting intensity" },
+				lighting_rotation{ { -0.9f, 0.3f, 0.2f }, cat, "lighting rotation" },
+				world_setting{ true,{}, "world color", std::string(cat) },
+				world_color{ { 115, 125, 160, 255 }, cat, "world color value" },
+				bloom{ true,{}, "bloom", std::string(cat) },
+				bloom_value{ 2.0f, cat, "bloom value" },
+				gamma{ true,{}, "gamma", std::string(cat) },
+				gamma_value{ 2.2f, cat, "gamma value" },
+				dof{ true,{}, "depth of field", std::string(cat) },
+				dof_near_blurry{ 0.0f, cat, "dof near blurry" },
+				dof_near_crisp{ 5.0f, cat, "dof near crisp" },
+				dof_far_crisp{ 600.0f, cat, "dof far crisp" },
+				dof_far_blurry{ 1400.0f, cat, "dof far blurry" },
+				ambient{ true,{}, "ambient", std::string(cat) },
+				ambient_color{ { 233, 145, 255, 255 }, cat, "ambient color" },
+				ambient_intensity{ 1.1f, cat, "ambient intensity" }
 			{
 			}
 		};
@@ -1699,17 +1699,17 @@ namespace settings {
 			xdraw::color grad_bot;
 		};
 
-		static constexpr map_entry k_map_entries[ 11 ]{
+		static constexpr map_entry k_map_entries[11]{
 			{ "",            "All maps", "★",   xdraw::color{ 52,  34,  98, 255 }, xdraw::color{ 16,  12,  34, 255 } },
 			{ "de_dust2",    "Dust II",  "D2",  xdraw::color{ 198, 132,  48, 255 }, xdraw::color{ 68,  34,  10, 255 } },
 			{ "de_mirage",   "Mirage",   "MRG", xdraw::color{ 188,  62,  94, 255 }, xdraw::color{ 58,  18,  50, 255 } },
 			{ "de_inferno",  "Inferno",  "INF", xdraw::color{ 192,  56,  42, 255 }, xdraw::color{ 68,  18,  14, 255 } },
-			{ "de_nuke",     "Nuke",     "NUK", xdraw::color{  28, 138, 142, 255 }, xdraw::color{ 10,  36,  48, 255 } },
-			{ "de_overpass", "Overpass", "OVP", xdraw::color{  46, 132,  68, 255 }, xdraw::color{ 14,  46,  26, 255 } },
-			{ "de_vertigo",  "Vertigo",  "VTG", xdraw::color{  36, 102, 222, 255 }, xdraw::color{ 14,  28,  72, 255 } },
-			{ "de_ancient",  "Ancient",  "ANC", xdraw::color{  32, 108,  52, 255 }, xdraw::color{ 10,  36,  16, 255 } },
-			{ "de_anubis",   "Anubis",   "ANB", xdraw::color{  30,  72, 148, 255 }, xdraw::color{ 148,  98,  30, 255 } },
-			{ "cs_office",   "Office",   "OFF", xdraw::color{  62, 152, 222, 255 }, xdraw::color{ 20,  36,  56, 255 } },
+			{ "de_nuke",     "Nuke",     "NUK", xdraw::color{ 28, 138, 142, 255 }, xdraw::color{ 10,  36,  48, 255 } },
+			{ "de_overpass", "Overpass", "OVP", xdraw::color{ 46, 132,  68, 255 }, xdraw::color{ 14,  46,  26, 255 } },
+			{ "de_vertigo",  "Vertigo",  "VTG", xdraw::color{ 36, 102, 222, 255 }, xdraw::color{ 14,  28,  72, 255 } },
+			{ "de_ancient",  "Ancient",  "ANC", xdraw::color{ 32, 108,  52, 255 }, xdraw::color{ 10,  36,  16, 255 } },
+			{ "de_anubis",   "Anubis",   "ANB", xdraw::color{ 30,  72, 148, 255 }, xdraw::color{ 148,  98,  30, 255 } },
+			{ "cs_office",   "Office",   "OFF", xdraw::color{ 62, 152, 222, 255 }, xdraw::color{ 20,  36,  56, 255 } },
 			{ "cs_italy",    "Italy",    "ITL", xdraw::color{ 202,  82,  42, 255 }, xdraw::color{ 72,  28,  14, 255 } }
 		};
 
@@ -1719,15 +1719,15 @@ namespace settings {
 			scene m_scene;
 			weather m_weather;
 
-			map_preset( std::string_view scene_cat, std::string_view weather_cat, std::string_view name )
-				: override_map{ false, {}, "override " + std::string( name ), std::string( scene_cat ) },
-				  m_scene{ scene_cat },
-				  m_weather{ weather_cat }
+			map_preset(std::string_view scene_cat, std::string_view weather_cat, std::string_view name)
+				: override_map{ false,{}, "override " + std::string(name), std::string(scene_cat) },
+				m_scene{ scene_cat },
+				m_weather{ weather_cat }
 			{
 			}
 		};
 
-		static void copy_scene( scene& dst, const scene& src )
+		static void copy_scene(scene& dst, const scene& src)
 		{
 			dst.skybox.custom_skybox.value = src.skybox.custom_skybox.value;
 			dst.skybox.selected_skybox.value = src.skybox.selected_skybox.value;
@@ -1761,7 +1761,7 @@ namespace settings {
 			dst.ambient_intensity.value = src.ambient_intensity.value;
 		}
 
-		static void copy_weather( weather& dst, const weather& src )
+		static void copy_weather(weather& dst, const weather& src)
 		{
 			dst.enabled.value = src.enabled.value;
 			dst.type.value = src.type.value;
@@ -1784,17 +1784,17 @@ namespace settings {
 		}
 
 		// Global fallback preset (uses standard "scene" & "weather" categories for config backwards-compatibility)
-		map_preset m_global  { "scene",           "weather",           "global" };
-		map_preset m_dust2   { "scene_dust2",     "weather_dust2",     "dust2" };
-		map_preset m_mirage  { "scene_mirage",    "weather_mirage",    "mirage" };
-		map_preset m_inferno { "scene_inferno",   "weather_inferno",   "inferno" };
-		map_preset m_nuke    { "scene_nuke",      "weather_nuke",      "nuke" };
+		map_preset m_global{ "scene",           "weather",           "global" };
+		map_preset m_dust2{ "scene_dust2",     "weather_dust2",     "dust2" };
+		map_preset m_mirage{ "scene_mirage",    "weather_mirage",    "mirage" };
+		map_preset m_inferno{ "scene_inferno",   "weather_inferno",   "inferno" };
+		map_preset m_nuke{ "scene_nuke",      "weather_nuke",      "nuke" };
 		map_preset m_overpass{ "scene_overpass",  "weather_overpass",  "overpass" };
-		map_preset m_vertigo { "scene_vertigo",   "weather_vertigo",   "vertigo" };
-		map_preset m_ancient { "scene_ancient",   "weather_ancient",   "ancient" };
-		map_preset m_anubis  { "scene_anubis",    "weather_anubis",    "anubis" };
-		map_preset m_office  { "scene_office",    "weather_office",    "office" };
-		map_preset m_italy   { "scene_italy",     "weather_italy",     "italy" };
+		map_preset m_vertigo{ "scene_vertigo",   "weather_vertigo",   "vertigo" };
+		map_preset m_ancient{ "scene_ancient",   "weather_ancient",   "ancient" };
+		map_preset m_anubis{ "scene_anubis",    "weather_anubis",    "anubis" };
+		map_preset m_office{ "scene_office",    "weather_office",    "office" };
+		map_preset m_italy{ "scene_italy",     "weather_italy",     "italy" };
 
 		std::array<map_preset*, 11> presets{
 			&m_global, &m_dust2, &m_mirage, &m_inferno, &m_nuke,
@@ -1805,19 +1805,19 @@ namespace settings {
 		scene m_scene{ "active_scene" };
 		weather m_weather{ "active_weather" };
 
-		void update_active( const std::string& current_map )
+		void update_active(const std::string& current_map)
 		{
 			int matched_idx = -1;
-			if ( !current_map.empty() )
+			if (!current_map.empty())
 			{
 				std::string lower = current_map;
-				for ( char& c : lower ) c = static_cast<char>( std::tolower( static_cast<unsigned char>( c ) ) );
+				for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-				for ( int i = 1; i < static_cast<int>( map_max ); ++i )
+				for (int i = 1; i < static_cast<int>(map_max); ++i)
 				{
-					const char* id = k_map_entries[ i ].id_name;
-					if ( lower.find( id ) != std::string::npos ||
-					     ( std::strlen( id ) > 3 && lower.find( id + 3 ) != std::string::npos ) )
+					const char* id = k_map_entries[i].id_name;
+					if (lower.find(id) != std::string::npos ||
+						(std::strlen(id) > 3 && lower.find(id + 3) != std::string::npos))
 					{
 						matched_idx = i;
 						break;
@@ -1826,18 +1826,18 @@ namespace settings {
 			}
 
 			const map_preset* source = &m_global;
-			if ( matched_idx > 0 && presets[ matched_idx ]->override_map.value )
+			if (matched_idx > 0 && presets[matched_idx]->override_map.value)
 			{
-				source = presets[ matched_idx ];
+				source = presets[matched_idx];
 			}
 
-			copy_scene( this->m_scene, source->m_scene );
-			copy_weather( this->m_weather, source->m_weather );
+			copy_scene(this->m_scene, source->m_scene);
+			copy_weather(this->m_weather, source->m_weather);
 		}
 
 		world()
 		{
-			update_active( "" );
+			update_active("");
 		}
 	};
 
@@ -1848,13 +1848,13 @@ namespace settings {
 	inline movement g_movement{};
 	inline world g_world{};
 
-	inline void finalize_binds( )
+	inline void finalize_binds()
 	{
 		auto& aa = g_combat.m_antiaim;
 		aa.manual_left.bind.excludes = &aa.manual_right;
 		aa.manual_right.bind.excludes = &aa.manual_left;
 
-		if ( aa.manual_left.value && aa.manual_right.value )
+		if (aa.manual_left.value && aa.manual_right.value)
 		{
 			aa.manual_right.value = false;
 			aa.manual_right.bind.active = false;

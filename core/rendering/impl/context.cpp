@@ -2,7 +2,6 @@
 #include <core/systems/systems.hpp>
 #include <core/hooks/hooks.hpp>
 #include <core/features/features.hpp>
-#include <core/features/changer/inspect_preview.hpp>
 
 #include "../rendering.hpp"
 
@@ -112,7 +111,6 @@ namespace rendering {
 
 		xdraw::begin_frame( true );
 		g_menu.update_ui_state( );
-		features::changer::g_inspect_preview.on_render_frame( g_menu.is_open( ) );
 		{
 			auto& dl = xdraw::get( xdraw::layer::bottom );
 

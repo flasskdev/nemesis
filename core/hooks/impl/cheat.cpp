@@ -9,7 +9,6 @@
 #include <core/rendering/rendering.hpp>
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
-#include <core/features/changer/inspect_preview.hpp>
 #include <protection/game_addresses.hpp>
 #include <external/xdraw/xui/xui.hpp>
 #include "../hooks.hpp"
@@ -99,9 +98,6 @@ namespace hooks {
 			}
 		}
 
-		features::changer::g_inspect_preview.set_available( m_frame_stage_notify.is_enabled( ) );
-
-
 		if (unavailable_hooks) {
 			logging::console::print (
 				xs ("feature hooks initialized with {} unavailable"),
@@ -113,7 +109,6 @@ namespace hooks {
 
 	void cheat::shutdown( )
 	{
-		features::changer::g_inspect_preview.set_available( false );
 		m_wnd_proc.reset( );
 		m_present.reset( );
 		m_resize_buffers.reset( );
@@ -255,9 +250,6 @@ namespace hooks {
 
 	void __fastcall cheat::frame_stage_notify( std::uintptr_t thisptr, int stage )
 	{
-		// Inspect also works outside a match, before the local-player early return.
-		features::changer::g_inspect_preview.on_frame_stage_notify( );
-
 		const auto local_player_controller = memory::safe_read<std::uintptr_t>( addresses::globals::local_player_controller ).value_or( 0 );
 		if ( !local_player_controller )
 		{
@@ -1035,7 +1027,6 @@ namespace hooks {
 
 	void cheat::do_level_shutdown( bool release_engine_resources )
 	{
-		features::changer::g_inspect_preview.cancel( );
 		// LevelShutdown and the controller-loss fallback share one cleanup state.
 		if ( m_level_shutting_down.exchange( true, std::memory_order_acq_rel ) )
 		{

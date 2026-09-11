@@ -516,6 +516,11 @@ namespace features::combat {
 		[[nodiscard]] bool has_target( ) const noexcept { return this->m_target.has_target( ); }
 
 	private:
+		float m_current_smooth_fov = 0.0f;
+		float m_target_smooth_fov = 0.0f;
+
+		float get_scope_multiplier() const;
+		void update_smooth_fov(float target_fov, float frametime);
 		struct scan_point
 		{
 			math::vector3 position{};
@@ -528,6 +533,7 @@ namespace features::combat {
 			bool visible{};
 			bool is_center{};
 			bool valid{};
+
 		};
 
 		struct target_result
