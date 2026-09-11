@@ -524,7 +524,6 @@ namespace features::misc {
 		void send_player_weapons (
 			std::uintptr_t controller,
 			std::span<const systems::entities::cached> items);
-		void send_profile_override (std::uintptr_t controller);
 		[[nodiscard]] bool send_clear (std::uint64_t steamid);
 		void clear_all ();
 

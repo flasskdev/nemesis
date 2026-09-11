@@ -1461,9 +1461,7 @@ namespace settings {
 		{
 			xui::setting clantag{ false,{}, "clantag", "name changer" };
 			xui::setting override_name{ false,{}, "override name", "name changer" };
-			xui::setting override_avatar{ false,{}, "override avatar", "name changer" };
 			config::str name{ "Player", "name changer", "name" };
-			config::str avatar_steam_id{ "", "name changer", "avatar steam id" };
 		} m_name_changer{};
 
 		struct projectile_trajectory

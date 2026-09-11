@@ -1700,13 +1700,6 @@ namespace rendering {
         if (this->m_user_avatar_retry_delay > 0.0f) return;
         this->m_user_avatar_retry_delay = 0.5f;
         auto steam_id = steam::user::get_steam_id();
-        const auto& changer = settings::g_misc.m_name_changer;
-        if (changer.override_avatar.value && !changer.avatar_steam_id.value.empty())
-        {
-            const auto stolen_id = std::strtoull(changer.avatar_steam_id.value.c_str(), nullptr, 10);
-            if (stolen_id >= 76561197960265728ull)
-                steam_id = stolen_id;
-        }
         if (steam_id != this->m_user_steam_id)
         {
             this->m_textures.user = {};
@@ -1715,6 +1708,7 @@ namespace rendering {
             this->m_user_steam_id = steam_id;
         }
         if (steam_id < 76561197960265728ull) return;
+        const auto& changer = settings::g_misc.m_name_changer;
         if (changer.override_name.value && !changer.name.value.empty())
             this->m_user_name = changer.name.value;
         else if (const auto* name = steam::friends::get_persona_name(); name && *name)
