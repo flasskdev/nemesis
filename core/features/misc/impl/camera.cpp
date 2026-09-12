@@ -20,6 +20,10 @@ namespace features::misc {
 		math::vector3 s_spec_freecam_angles{};
 		bool s_was_spec_freecam{ false };
 
+		math::vector3 s_spec_thirdperson_angles{};
+		bool s_was_spec_thirdperson{ false };
+		std::uintptr_t s_last_spec_pawn{ 0 };
+
 		using SDL_GetRelativeMouseState_t = std::uint32_t( * )( float* x, float* y );
 		using SDL_GetGlobalMouseState_t   = std::uint32_t( * )( float* x, float* y );
 
@@ -254,7 +258,63 @@ namespace features::misc {
 			}
 		}
 
-		const auto view_angles = local.is_alive ? systems::g_input.get_view_angles( ) : memory::read<math::vector3>( view_setup + 0x4b8 );
+		math::vector3 view_angles{};
+		if ( local.is_alive )
+		{
+			s_was_spec_thirdperson = false;
+			view_angles = systems::g_input.get_view_angles( );
+		}
+		else
+		{
+			// Spectator thirdperson mouse look
+			if ( !s_was_spec_thirdperson || s_last_spec_pawn != target_pawn )
+			{
+				s_spec_thirdperson_angles = memory::read<math::vector3>( view_setup + 0x4b8 );
+				s_was_spec_thirdperson = true;
+				s_last_spec_pawn = target_pawn;
+				s_global_mouse_valid = false;
+				s_win_cursor_valid = false;
+			}
+
+			float dx = 0.0f, dy = 0.0f;
+			query_mouse_delta( dx, dy );
+
+			const bool can_rotate = !rendering::g_menu.is_open( ) && is_game_window_focused( );
+			if ( can_rotate )
+			{
+				if ( std::fabsf( dx ) > 0.0001f || std::fabsf( dy ) > 0.0001f )
+				{
+					float sens = 1.0f;
+					if ( const auto cvar = CONVAR( "sensitivity" ) )
+					{
+						sens = cvar->get< float >( );
+					}
+					sens = std::max( sens, 0.001f );
+
+					float m_pitch = 0.022f;
+					if ( const auto cvar = CONVAR( "m_pitch" ) )
+					{
+						m_pitch = cvar->get< float >( );
+					}
+					float m_yaw = 0.022f;
+					if ( const auto cvar = CONVAR( "m_yaw" ) )
+					{
+						m_yaw = cvar->get< float >( );
+					}
+
+					s_spec_thirdperson_angles.x = std::clamp( s_spec_thirdperson_angles.x + dy * m_pitch * sens, -89.0f, 89.0f );
+					s_spec_thirdperson_angles.y = math::helpers::normalize_yaw( s_spec_thirdperson_angles.y - dx * m_yaw * sens );
+					s_spec_thirdperson_angles.z = 0.0f;
+				}
+			}
+			else
+			{
+				s_global_mouse_valid = false;
+				s_win_cursor_valid = false;
+			}
+
+			view_angles = s_spec_thirdperson_angles;
+		}
 
 		math::vector3 forward{};
 		{
@@ -278,6 +338,10 @@ namespace features::misc {
 		}
 
 		memory::write<math::vector3>( view_setup + 0x4a0, camera_position );
+		if ( !local.is_alive )
+		{
+			memory::write<math::vector3>( view_setup + 0x4b8, s_spec_thirdperson_angles );
+		}
 	}
 
 	void camera::do_fov_change( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const

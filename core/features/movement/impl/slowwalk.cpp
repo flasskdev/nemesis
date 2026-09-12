@@ -73,18 +73,8 @@ namespace features::movement {
 			return;
 		}
 
-		// 2. Adjust for camera vs cmd viewangle differences (e.g., Anti-Aim rotation)
-		const auto view_angles = systems::g_input.get_view_angles( );
-		const auto cmd_angles = base->viewangles( );
-		const auto yaw_delta_rad = cmd_angles
-			? ( view_angles.y - cmd_angles->y( ) ) * ( std::numbers::pi_v<float> / 180.0f )
-			: 0.0f;
-
-		const auto cos_delta = std::cosf( yaw_delta_rad );
-		const auto sin_delta = std::sinf( yaw_delta_rad );
-
-		const auto cmd_fwd = ( forward_input * cos_delta - left_input * sin_delta ) / input_len;
-		const auto cmd_left = ( forward_input * sin_delta + left_input * cos_delta ) / input_len;
+		const auto cmd_fwd = forward_input / input_len;
+		const auto cmd_left = left_input / input_len;
 
 		// 3. Obtain maximum movement speed & target speed
 		const auto movement_services = memory::read<std::uintptr_t>( local.pawn + SCHEMA( "C_BasePlayerPawn", "m_pMovementServices"_hash ) );
@@ -111,12 +101,11 @@ namespace features::movement {
 			const auto wish_x = -prestate.networked_velocity.x / current_speed;
 			const auto wish_y = -prestate.networked_velocity.y / current_speed;
 
-			const auto cmd_yaw_rad = cmd_angles
-				? cmd_angles->y( ) * ( std::numbers::pi_v<float> / 180.0f )
-				: view_angles.y * ( std::numbers::pi_v<float> / 180.0f );
+			const auto view_angles = systems::g_input.get_view_angles( );
+			const auto yaw_rad = view_angles.y * ( std::numbers::pi_v<float> / 180.0f );
 
-			const auto sy = std::sinf( cmd_yaw_rad );
-			const auto cy = std::cosf( cmd_yaw_rad );
+			const auto sy = std::sinf( yaw_rad );
+			const auto cy = std::cosf( yaw_rad );
 
 			final_fwd = std::clamp( wish_x * cy + wish_y * sy, -1.0f, 1.0f );
 			final_left = std::clamp( -( wish_x * sy - wish_y * cy ), -1.0f, 1.0f );

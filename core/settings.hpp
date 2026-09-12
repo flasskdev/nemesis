@@ -1584,6 +1584,8 @@ namespace settings {
 			config::val<int> samples{ 12, "motion blur", "samples" };
 			config::val<float> center_protection{ 0.20f, "motion blur", "center protection" };
 			xui::setting movement_blur{ false,{}, "movement blur", "motion blur" };
+			xui::setting ignore_hud{ true,{}, "ignore hud", "motion blur" };
+			xui::setting ignore_viewmodel{ true,{}, "ignore viewmodel", "motion blur" };
 		} m_motion_blur{};
 
 		struct viewmodel_adjust

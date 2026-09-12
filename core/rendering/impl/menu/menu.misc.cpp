@@ -329,6 +329,8 @@ namespace rendering {
 					xui::slider_int( "samples##mb", m.m_motion_blur.samples.value, 4, 24 );
 					xui::slider_float( "center clarity##mb", m.m_motion_blur.center_protection, 0.0f, 1.0f, "%.2f" );
 					xui::checkbox( "movement blur##mb", m.m_motion_blur.movement_blur );
+					xui::checkbox( "ignore HUD##mb", m.m_motion_blur.ignore_hud );
+					xui::checkbox( "ignore viewmodel##mb", m.m_motion_blur.ignore_viewmodel );
 					xui::end_popup( );
 				}
 

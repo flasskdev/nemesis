@@ -441,49 +441,43 @@ namespace hooks {
 				diag::set_exception_phase( "create_move: shared update" );
 				features::combat::g_shared.update( );
 
-				diag::set_exception_phase( "create_move: combat misc" );
-				features::combat::g_misc.antiaim( ).on_create_move( current_cmd );
-				features::combat::g_misc.autostop( ).on_create_move( current_cmd );
-			}
-			if ( trace )
-			{
-				diag::step( "create_move: shared and combat misc ready" );
-			}
-
-			{
 				diag::set_exception_phase( "create_move: pre-combat movement" );
 				features::movement::g_slowwalk.on_create_move( current_cmd );
 				features::movement::g_edgejump.on_create_move( current_cmd );
 				features::movement::g_quickstop.on_create_move( current_cmd );
 				features::movement::g_bhop.on_create_move( current_cmd );
 				features::movement::g_fastladder.on_create_move( current_cmd );
+
+				diag::set_exception_phase( "create_move: combat misc" );
+				features::combat::g_misc.antiaim( ).on_create_move( current_cmd );
+				features::combat::g_misc.autostop( ).on_create_move( current_cmd );
+			}
+			if ( trace )
+			{
+				diag::step( "create_move: shared, movement and combat misc ready" );
+				diag::step( "create_move: rage begin" );
+			}
+
+			{
+				diag::set_exception_phase( "create_move: rage" );
+				features::combat::g_rage.on_create_move( current_cmd );
 				if ( trace )
 				{
-					diag::step( "create_move: pre-combat movement end" );
-					diag::step( "create_move: rage begin" );
+					diag::step( "create_move: rage end" );
+					diag::step( "create_move: legit begin" );
 				}
-
+				diag::set_exception_phase( "create_move: legit" );
+				features::combat::g_legit.on_create_move( current_cmd );
+				if ( trace )
 				{
-					diag::set_exception_phase( "create_move: rage" );
-					features::combat::g_rage.on_create_move( current_cmd );
-					if ( trace )
-					{
-						diag::step( "create_move: rage end" );
-						diag::step( "create_move: legit begin" );
-					}
-					diag::set_exception_phase( "create_move: legit" );
-					features::combat::g_legit.on_create_move( current_cmd );
-					if ( trace )
-					{
-						diag::step( "create_move: legit end" );
-					}
+					diag::step( "create_move: legit end" );
 				}
-
-				diag::set_exception_phase( "create_move: post-combat movement" );
-				features::combat::g_misc.duckpeek( ).on_create_move( current_cmd );
-				features::movement::g_test_strafer.on_create_move( current_cmd );
-				features::misc::g_projectile_trajectory.on_create_move( current_cmd );
 			}
+
+			diag::set_exception_phase( "create_move: post-combat movement" );
+			features::combat::g_misc.duckpeek( ).on_create_move( current_cmd );
+			features::movement::g_test_strafer.on_create_move( current_cmd );
+			features::misc::g_projectile_trajectory.on_create_move( current_cmd );
 			if ( trace )
 			{
 				diag::step( "create_move: post-combat movement end" );

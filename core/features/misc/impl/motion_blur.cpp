@@ -4,7 +4,8 @@
 #include <utilities/addresses/addresses.hpp>
 #include <core/settings.hpp>
 #include <core/systems/systems.hpp>
-#include <core/rendering/rendering.hpp>
+#include <core/features/features.hpp>
+#include <protection/game_addresses.hpp>
 #include "../misc.hpp"
 #include "../motion_blur_shaders.hpp"
 
@@ -19,6 +20,10 @@ namespace features::misc {
 			int   sample_count{ 12 };
 			float aspect_ratio{ 1.777f };
 			float screen_res[ 2 ]{ 1920.0f, 1080.0f };
+			float ignore_hud{ 1.0f };
+			float ignore_viewmodel{ 1.0f };
+			float viewmodel_handedness{ 1.0f };
+			float pad{ 0.0f };
 		};
 
 		static_assert( sizeof( motion_blur_cb ) % 16 == 0, "Constant buffer must be 16-byte aligned" );
@@ -354,6 +359,38 @@ namespace features::misc {
 			cb->aspect_ratio = ( viewport.Height > 0.0f ) ? ( viewport.Width / viewport.Height ) : 1.777f;
 			cb->screen_res[ 0 ] = viewport.Width;
 			cb->screen_res[ 1 ] = viewport.Height;
+
+			const auto local = systems::g_local.get( );
+			bool in_thirdperson = settings::g_misc.m_camera.thirdperson.value || features::misc::g_camera.is_freecam_active( );
+			if ( !local.is_alive && local.observer_pawn )
+			{
+				in_thirdperson = in_thirdperson || settings::g_misc.m_camera.spectator_thirdperson.value;
+			}
+
+			bool is_scoped = false;
+			if ( local.pawn )
+			{
+				is_scoped = memory::read<bool>( local.pawn + SCHEMA( "C_CSPlayerPawn", "m_bIsScoped"_hash ) );
+			}
+
+			float vm_handedness = 1.0f;
+			if ( in_thirdperson || is_scoped )
+			{
+				vm_handedness = 0.0f;
+			}
+			else
+			{
+				if ( const auto cvar = CONVAR( "cl_righthand" ) )
+				{
+					vm_handedness = cvar->get<bool>( ) ? 1.0f : -1.0f;
+				}
+			}
+
+			cb->ignore_hud = settings::g_misc.m_motion_blur.ignore_hud.value ? 1.0f : 0.0f;
+			cb->ignore_viewmodel = settings::g_misc.m_motion_blur.ignore_viewmodel.value ? 1.0f : 0.0f;
+			cb->viewmodel_handedness = vm_handedness;
+			cb->pad = 0.0f;
+
 			context->Unmap( this->m_constant_buffer, 0 );
 		}
 

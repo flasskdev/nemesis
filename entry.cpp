@@ -374,10 +374,34 @@ namespace {
 		const auto module_handle = resolve_self_module( static_cast<HMODULE>( param ) );
 
 		diag::step( "stage: thread start" );
-		if (loader_session::connect())
-			diag::step( "stage: loader subscription received (protocol v1)" );
+		const bool connected = loader_session::connect();
+		if ( connected )
+			diag::step( "stage: loader session connected (protocol v1)" );
 		else
-			diag::write( diag::level::warning, "loader session unavailable; no subscription data received" );
+			diag::write( diag::level::warning, "loader session unavailable" );
+
+		const auto access = loader_session::check_access();
+		if ( access != loader_session::access_status::granted )
+		{
+			const char* err_msg = "Отсутствует активная подписка или dev доступ.";
+			if ( access == loader_session::access_status::subscription_expired )
+				err_msg = "Срок действия вашей подписки истек.";
+			else if ( access == loader_session::access_status::no_session )
+				err_msg = "Запуск разрешен только через официальный лоадер.";
+
+			diag::writef( diag::level::fatal, "startup blocked: %s", err_msg );
+			loader_session::fail( err_msg );
+#if !defined( DEV )
+			if ( access == loader_session::access_status::subscription_expired )
+				MessageBoxA( nullptr, xs( "Срок действия вашей подписки истек." ), xs( "Mintaly" ), MB_ICONERROR );
+			else if ( access == loader_session::access_status::no_session )
+				MessageBoxA( nullptr, xs( "Запуск разрешен только через официальный лоадер." ), xs( "Mintaly" ), MB_ICONERROR );
+			else
+				MessageBoxA( nullptr, xs( "Отсутствует активная подписка или dev доступ." ), xs( "Mintaly" ), MB_ICONERROR );
+#endif
+			return 0;
+		}
+
 		diag::initialize_crash_dumps( );
 
 		g_previous_exception_filter.store(

@@ -54,7 +54,13 @@ inline void rendered() {
     }
 }
 inline std::string subscription_text() {
-    if (!available.load(std::memory_order_acquire)) return "Subscription unavailable";
+    if (!available.load(std::memory_order_acquire)) {
+#if defined( DEV )
+        return "Developer build";
+#else
+        return "Subscription unavailable";
+#endif
+    }
     if (payload.flags & mintaly_session::developer) return "Developer access";
     if (payload.flags & mintaly_session::has_expiry_epoch) {
         const auto remaining = payload.expires_at_unix - mintaly_session::now_unix();
@@ -71,6 +77,48 @@ inline std::string subscription_text() {
     }
     return "Active subscription";
 }
+
+enum class access_status {
+    granted,
+    no_session,
+    no_subscription_or_dev,
+    subscription_expired
+};
+
+inline access_status check_access() {
+    if (available.load(std::memory_order_acquire)) {
+        if (payload.flags & mintaly_session::developer) {
+            return access_status::granted;
+        }
+
+        if (!(payload.flags & mintaly_session::subscription_active)) {
+            return access_status::no_subscription_or_dev;
+        }
+
+        if (payload.flags & mintaly_session::has_expiry_epoch) {
+            if (payload.expires_at_unix <= mintaly_session::now_unix()) {
+                return access_status::subscription_expired;
+            }
+        }
+
+        if (std::isfinite(payload.days_left) && payload.days_left <= 0.0 && !payload.sub_to[0]) {
+            return access_status::subscription_expired;
+        }
+
+        return access_status::granted;
+    }
+
+#if defined( DEV )
+    return access_status::granted;
+#else
+    return access_status::no_session;
+#endif
+}
+
+inline bool has_access() {
+    return check_access() == access_status::granted;
+}
+
 // Connection remains alive until process exit. Do not unmap from a render callback
 // or under the loader lock while another thread may be acknowledging startup.
 }
