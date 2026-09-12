@@ -1751,17 +1751,17 @@ namespace settings {
 		xui::setting bhop{ true,{}, "bhop", "movement" };
 		xui::setting airstrafe{ true,{}, "airstrafe", "movement" };
 		xui::setting airstrafe_fully_directional{ true,{}, "fully directional", "movement - airstrafe" };
-		xui::setting jumpbug{ true,{}, "jumpbug", "movement" };
 		xui::setting fastladder{ true,{}, "fastladder", "movement" };
 		xui::setting edgejump{ false,{ 'E', xui::bind_mode::hold_on }, "edgejump", "movement" };
 		xui::setting quickstop{ false,{ 'N', xui::bind_mode::hold_on }, "quick stop", "movement" };
-		xui::setting edgebug{ false,{}, "edgebug", "movement" };
+		// Legacy edgebug keys intentionally preserve the previous feature settings.
+		xui::setting jumpbug{ false,{}, "edgebug", "movement" };
 		/// 0: auto / adaptive, 1: edge trace, 2: no jump held, 3: min speed, 4: strict vz
-		config::val<int> edgebug_mode{ 0, "movement", "edgebug mode" };
+		config::val<int> jumpbug_mode{ 0, "movement", "edgebug mode" };
 		/// 0: auto / dynamic (simulates ahead up to 64 ticks), 1..64: custom tick count
-		config::val<int> edgebug_passes{ 0, "movement", "edgebug passes" };
-		/// Adds jump up/down subticks like jumpbug to prevent fall damage on landing
-		xui::setting edgebug_include_jump_steps{ true,{}, "edgebug jump steps", "movement" };
+		config::val<int> jumpbug_passes{ 0, "movement", "edgebug passes" };
+		/// Optional timed landing jump; not a guarantee of avoiding server fall damage
+		xui::setting jumpbug_include_jump_steps{ true,{}, "edgebug jump steps", "movement" };
 		xui::setting slowwalk{ false,{}, "slowwalk", "movement" };
 		config::val<float> slowwalk_speed{ 33.0f, "movement", "slowwalk speed" };
 

@@ -16,6 +16,7 @@
 #include <core/rendering/rendering.hpp>
 
 #include <utilities/diag.hpp>
+#include <utilities/loader_session.hpp>
 
 namespace {
 
@@ -298,6 +299,7 @@ namespace {
 	#define INIT_FAIL( msg ) \
 		do { \
 			diag::write( diag::level::error, msg ); \
+			loader_session::fail( msg ); \
 			return 0; \
 		} while ( 0 )
 
@@ -306,6 +308,7 @@ namespace {
 	#define INIT_FAIL( msg ) \
 		do { \
 			diag::write( diag::level::error, msg ); \
+			loader_session::fail( msg ); \
 			MessageBoxA( nullptr, xs( msg ), xs( "..." ), MB_ICONERROR ); \
 			return 0; \
 		} while ( 0 )
@@ -318,6 +321,10 @@ namespace {
 		const auto module_handle = static_cast<HMODULE>( param );
 
 		diag::step( "stage: thread start" );
+		if (loader_session::connect())
+			diag::step( "stage: loader subscription received (protocol v1)" );
+		else
+			diag::write( diag::level::warning, "loader session unavailable; no subscription data received" );
 		diag::initialize_crash_dumps( );
 
 		g_previous_exception_filter.store(
@@ -488,6 +495,7 @@ namespace {
 		features::world::g_scene.discover_skyboxes( );
 
 		diag::step( "stage: done" );
+		loader_session::ready();
 		return 1;
 	}
 
@@ -497,6 +505,7 @@ namespace {
 		_snprintf_s( buf, sizeof( buf ), _TRUNCATE, "EXCEPTION 0x%08lX at 0x%p", info->ExceptionRecord->ExceptionCode, info->ExceptionRecord->ExceptionAddress );
 		diag::write( diag::level::fatal, buf );
 		diag::record_crash( info, "initialization thread" );
+		loader_session::fail( buf );
 		return EXCEPTION_EXECUTE_HANDLER;
 	}
 

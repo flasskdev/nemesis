@@ -159,12 +159,7 @@ namespace memory {
 	} // namespace detail
 
 	std::uintptr_t get_module_base (std::string_view module_name) {
-		char buf[260];
-		if (module_name.empty() || module_name.size() >= sizeof(buf))
-			return 0;
-		memcpy(buf, module_name.data(), module_name.size());
-		buf[module_name.size()] = '\0';
-		return reinterpret_cast<std::uintptr_t>(GetModuleHandleA (buf));
+		return reinterpret_cast<std::uintptr_t>(GetModuleHandleA (std::string (module_name).c_str ()));
 	}
 
 	std::uintptr_t get_module_export (std::string_view export_name) {
@@ -222,12 +217,7 @@ namespace memory {
 	}
 
 	std::uintptr_t get_module_export_with_base(std::uintptr_t module_base, std::string_view export_name) {
-		char buf[260];
-		if (!module_base || export_name.empty() || export_name.size() >= sizeof(buf))
-			return 0;
-		memcpy(buf, export_name.data(), export_name.size());
-		buf[export_name.size()] = '\0';
-		return reinterpret_cast<std::uintptr_t>(GetProcAddress (reinterpret_cast<HMODULE>(module_base), buf));
+		return reinterpret_cast<std::uintptr_t>(GetProcAddress (reinterpret_cast<HMODULE>(module_base), std::string (export_name).c_str ()));
 	}
 
 	std::uintptr_t get_module_interface (std::string_view interface_name) {

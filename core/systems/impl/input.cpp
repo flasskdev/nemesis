@@ -20,6 +20,24 @@ namespace systems {
 		this->m_current_cmd = this->get_current_cmd( local_controller );
 	}
 
+	bool input::has_analog_subticks( proto::base_usercmd_pb* base ) const
+	{
+		if ( !base )
+		{
+			return false;
+		}
+		for ( int i = 0; i < base->subtick_moves_size( ); ++i )
+		{
+			const auto step = base->mutable_subtick_moves( i );
+			if ( step && ( ( step->m_has_bits.test( 0x8 ) && step->analog_forward_delta( ) != 0.0f ) ||
+				( step->m_has_bits.test( 0x10 ) && step->analog_left_delta( ) != 0.0f ) ) )
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void input::apply( )
 	{
 		const auto local = systems::g_local.get ();
@@ -33,23 +51,10 @@ namespace systems {
 			return;
 		}
 
-		auto has_move_subticks = [] (proto::base_usercmd_pb* base_cmd) {
-			// just use protobufs atp
-			for (size_t i = 0; i < base_cmd->subtick_moves_size (); i++) {
-				proto::subtick_move_step* step = base_cmd->mutable_subtick_moves (i);
-				if (step->m_has_bits.test (0x8) || step->m_has_bits.test (0x10))
-					return true;
-
-				if (step->m_has_bits.test (0x1))
-					return true;
-			}
-
-			return false;
-		};
 
 		// fix movement for ag2
 		diag::set_exception_phase( "input apply: subtick movement" );
-		if (!has_move_subticks (base)) {
+		if (!this->has_analog_subticks(base)) {
 			if (const auto step = systems::g_input.acquire_subtick_step (base->mutable_subtick_moves ())) {
 
 				const auto movement_services = local.pawn ? memory::read<std::uintptr_t> (local.pawn + SCHEMA ("C_BasePlayerPawn", "m_pMovementServices"_hash)) : 0;
@@ -61,6 +66,20 @@ namespace systems {
 					step->set_analog_left_delta (base->leftmove () - memory::read<float> (movement_services + SCHEMA ("CPlayer_MovementServices", "m_flCmdLeftMove"_hash)));
 				}
 			}
+		}
+
+		// A later feature may append an event at time zero. Serialize chronologically.
+		const auto moves = base->mutable_subtick_moves( );
+		if ( moves && moves->m_rep && moves->m_current_size > 1 )
+		{
+			std::stable_sort( moves->m_rep->elements,
+				moves->m_rep->elements + moves->m_current_size,
+				[]( void* lhs, void* rhs )
+				{
+					const auto left = proto::impl_ptr<proto::subtick_move_step>( lhs );
+					const auto right = proto::impl_ptr<proto::subtick_move_step>( rhs );
+					return ( left ? left->when( ) : 0.0f ) < ( right ? right->when( ) : 0.0f );
+				} );
 		}
 
 		diag::set_exception_phase( "input apply: buttons" );

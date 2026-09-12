@@ -1,4 +1,5 @@
 #include <pch/pch.hpp>
+#include <utilities/loader_session.hpp>
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <core/settings.hpp>
@@ -1682,7 +1683,8 @@ namespace rendering {
         dl.text(text_x, profile_rect.y + 8.0f, theme::fit_text(this->m_user_name, text_w),
             (profile_hovered || this->m_user_popup_open) ? tokens::col_accent : tokens::col_text);
         xdraw::pop_font();
-        dl.text(text_x, profile_rect.y + 25.0f, "Steam", tokens::col_text_dim);
+        dl.text(text_x, profile_rect.y + 25.0f,
+            theme::fit_text(loader_session::subscription_text(), text_w), tokens::col_text_dim);
         // Options indicator icon (three dots)
         const auto opt_cx = profile_rect.x + profile_rect.w - 12.0f;
         const auto opt_cy = profile_rect.y + profile_rect.h * 0.5f;
@@ -2011,15 +2013,13 @@ namespace rendering {
         xui::layout::set_cursor(right_x - wx, body_y + k_header_h - wy);
         if (xui::begin_child("##movement_assist", col_w, body_h - k_header_h, true))
         {
-            xui::toggle("Jump Bug", mov.jumpbug);
-            xui::layout::spacing(3.0f);
-            xui::toggle("Edge Bug", mov.edgebug);
+            xui::toggle("Edge Bug", mov.jumpbug);
             if (xui::begin_popup("##edgebug_popup", 240.0f))
             {
                 static const char* edgebug_modes[] = { "0: auto / adaptive", "1: edge trace", "2: no jump held", "3: min speed", "4: strict vz" };
-                xui::combo("mode##eb", mov.edgebug_mode.value, edgebug_modes, 5);
-                xui::slider_int("passes##eb", mov.edgebug_passes, 0, 64, mov.edgebug_passes.value == 0 ? "auto (dynamic)" : "%d ticks");
-                xui::checkbox("jump steps##eb", mov.edgebug_include_jump_steps);
+                xui::combo("mode##eb", mov.jumpbug_mode.value, edgebug_modes, 5);
+                xui::slider_int("passes##eb", mov.jumpbug_passes.value, 0, 64, mov.jumpbug_passes.value == 0 ? "auto (dynamic)" : "%d ticks");
+                xui::checkbox("jump steps##eb", mov.jumpbug_include_jump_steps);
                 xui::end_popup();
             }
             xui::layout::spacing(3.0f);

@@ -426,6 +426,7 @@ namespace hooks {
 				diag::step( "create_move: feature pipeline begin" );
 			}
 
+			const auto original_movement_buttons = current_cmd->buttons.value | current_cmd->buttons.value_scroll;
 			systems::g_input.desubtick( current_cmd );
 			systems::g_prediction.capture_prestate( local.pawn, movement_services );
 
@@ -452,10 +453,8 @@ namespace hooks {
 			{
 				diag::set_exception_phase( "create_move: pre-combat movement" );
 				features::movement::g_slowwalk.on_create_move( current_cmd );
-				features::movement::g_edgebug.on_create_move( current_cmd );
 				features::movement::g_edgejump.on_create_move( current_cmd );
 				features::movement::g_quickstop.on_create_move( current_cmd );
-				features::movement::g_jumpbug.on_create_move( current_cmd );
 				features::movement::g_bhop.on_create_move( current_cmd );
 				features::movement::g_fastladder.on_create_move( current_cmd );
 				if ( trace )
@@ -498,9 +497,12 @@ namespace hooks {
 				diag::step( "create_move: final subtick begin" );
 			}
 
+			// Run last: duckpeek, bhop and strafing must not overwrite this command.
+			features::movement::g_jumpbug.on_create_move( current_cmd, original_movement_buttons );
+
 			diag::set_exception_phase( "create_move: final subtick" );
 			const auto final_base = current_cmd->csgo_user_cmd.mutable_base( );
-			if ( final_base && final_base->subtick_moves_size( ) > 0
+			if ( final_base && systems::g_input.has_analog_subticks( final_base )
 				&& !features::movement::g_test_strafer.handled_this_tick( )
 				&& !features::movement::g_slowwalk.active_this_tick( ) )
 			{

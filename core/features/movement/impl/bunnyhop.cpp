@@ -117,11 +117,6 @@ namespace features::movement {
 			return;
 		}
 
-		if (features::movement::g_jumpbug.active_this_tick())
-		{
-			return;
-		}
-
 		const auto local = systems::g_local.get();
 		if (!local.pawn)
 		{

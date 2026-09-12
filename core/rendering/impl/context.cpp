@@ -1,4 +1,5 @@
 #include <pch/pch.hpp>
+#include <utilities/loader_session.hpp>
 #include <core/systems/systems.hpp>
 #include <core/hooks/hooks.hpp>
 #include <core/features/features.hpp>
@@ -118,7 +119,6 @@ namespace rendering {
 			{
 				features::misc::g_impacts.on_render_early( dl );
 				features::combat::g_misc.antiaim( ).on_render( dl );
-				features::movement::g_edgebug.on_render( dl );
 				features::esp::item::g_overlay.on_render( dl );
 				features::esp::projectile::g_overlay.on_render( dl, xdraw::get( xdraw::layer::middle ) );
 				features::esp::player::g_overlay.on_render( dl );
@@ -139,6 +139,7 @@ namespace rendering {
 			}
 		}
 		xdraw::end_frame( );
+		loader_session::rendered();
 	}
 
 	void context::on_resize_buffers( )

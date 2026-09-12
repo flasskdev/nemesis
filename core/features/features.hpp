@@ -75,7 +75,6 @@ namespace features {
 		inline fastladder g_fastladder{};
 		inline edgejump g_edgejump{};
 		inline quickstop g_quickstop{};
-		inline edgebug g_edgebug{};
 		inline slowwalk g_slowwalk{};
 
 	} // namespace movement

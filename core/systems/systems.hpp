@@ -126,6 +126,7 @@ namespace systems {
 
 		void update( );
 		void apply( );
+		[[nodiscard]] bool has_analog_subticks( proto::base_usercmd_pb* base ) const;
 
 		[[nodiscard]] usercmd* get( ) const { return this->m_current_cmd; }
 		[[nodiscard]] usercmd* get_current_cmd( std::uintptr_t local_controller ) const;
