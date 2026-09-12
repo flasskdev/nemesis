@@ -1,4 +1,6 @@
 #include <pch/pch.hpp>
+#include <wincodec.h>
+#pragma comment( lib, "windowscodecs.lib" )
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
@@ -65,6 +67,8 @@ namespace features::changer {
 			return false;
 		}
 
+		this->parse_music_kits( schema );
+
 		this->build_indices( );
 		this->resolve_localized_names( );
 
@@ -99,6 +103,17 @@ namespace features::changer {
 		}
 
 		return &this->m_paint_kits[ it->second ];
+	}
+
+	const econ_item_system::music_kit* econ_item_system::find_music_kit( int id ) const
+	{
+		const auto it = this->m_music_kit_map.find( id );
+		if ( it == this->m_music_kit_map.end( ) )
+		{
+			return nullptr;
+		}
+
+		return &this->m_music_kits[ it->second ];
 	}
 
 	const econ_item_system::skin_image* econ_item_system::get_skin_image( const std::string& image_inventory )
@@ -316,6 +331,232 @@ namespace features::changer {
 		return !this->m_paint_kits.empty( );
 	}
 
+	namespace {
+		bool decode_image_wic(
+			const std::uint8_t* compressed_data,
+			std::size_t compressed_size,
+			std::vector<std::uint8_t>& out_pixels,
+			std::uint32_t& out_w,
+			std::uint32_t& out_h )
+		{
+			const auto hr_init = CoInitializeEx( nullptr, COINIT_MULTITHREADED );
+			const bool uninit_needed = SUCCEEDED( hr_init );
+
+			auto cleanup = [ & ]( )
+			{
+				if ( uninit_needed )
+				{
+					CoUninitialize( );
+				}
+			};
+
+			Microsoft::WRL::ComPtr<IWICImagingFactory> factory{};
+			if ( FAILED( CoCreateInstance( CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &factory ) ) ) || !factory )
+			{
+				cleanup( );
+				return false;
+			}
+
+			Microsoft::WRL::ComPtr<IWICStream> stream{};
+			if ( FAILED( factory->CreateStream( &stream ) ) )
+			{
+				cleanup( );
+				return false;
+			}
+
+			if ( FAILED( stream->InitializeFromMemory( const_cast< BYTE* >( compressed_data ), static_cast< DWORD >( compressed_size ) ) ) )
+			{
+				cleanup( );
+				return false;
+			}
+
+			Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder{};
+			if ( FAILED( factory->CreateDecoderFromStream( stream.Get( ), nullptr, WICDecodeMetadataCacheOnDemand, &decoder ) ) )
+			{
+				cleanup( );
+				return false;
+			}
+
+			Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame{};
+			if ( FAILED( decoder->GetFrame( 0, &frame ) ) )
+			{
+				cleanup( );
+				return false;
+			}
+
+			std::uint32_t width{}, height{};
+			if ( FAILED( frame->GetSize( &width, &height ) ) || width == 0 || height == 0 )
+			{
+				cleanup( );
+				return false;
+			}
+
+			Microsoft::WRL::ComPtr<IWICFormatConverter> converter{};
+			if ( FAILED( factory->CreateFormatConverter( &converter ) ) )
+			{
+				cleanup( );
+				return false;
+			}
+
+			if ( FAILED( converter->Initialize( frame.Get( ), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom ) ) )
+			{
+				cleanup( );
+				return false;
+			}
+
+			out_pixels.resize( static_cast< std::size_t >( width ) * height * 4 );
+			if ( FAILED( converter->CopyPixels( nullptr, width * 4, static_cast< std::uint32_t >( out_pixels.size( ) ), out_pixels.data( ) ) ) )
+			{
+				out_pixels.clear( );
+				cleanup( );
+				return false;
+			}
+
+			out_w = width;
+			out_h = height;
+			cleanup( );
+			return true;
+		}
+
+// Auto-generated 101 CS2 Music Kits from items_game.txt + csgo_english.txt
+struct fallback_music_kit
+{
+	int id;
+	const char* name;
+	const char* loc_name;
+	const char* loc_desc;
+	const char* image_inventory;
+	const char* fallback_title;
+	std::uint8_t rarity;
+};
+
+static constexpr fallback_music_kit k_fallback_kits[] = {
+	{ 1, "valve_cs2_01", "#musickit_valve_cs2_01", "#musickit_valve_cs2_01_desc", "econ/music_kits/valve_cs2_01", "Valve, Counter-Strike 2", 3 },
+	{ 2, "valve_02", "#musickit_valve_csgo_02", "#musickit_valve_csgo_02_desc", "econ/music_kits/valve_02", "valve_02", 3 },
+	{ 3, "danielsadowski_01", "#musickit_danielsadowski_01", "#musickit_danielsadowski_01_desc", "econ/music_kits/danielsadowski_01", "Daniel Sadowski, Crimson Assault", 3 },
+	{ 4, "noisia_01", "#musickit_noisia_01", "#musickit_noisia_01_desc", "econ/music_kits/noisia_01", "Noisia, Sharpened", 3 },
+	{ 5, "robertallaire_01", "#musickit_robertallaire_01", "#musickit_robertallaire_01_desc", "econ/music_kits/robertallaire_01", "Robert Allaire, Insurgency", 3 },
+	{ 6, "seanmurray_01", "#musickit_seanmurray_01", "#musickit_seanmurray_01_desc", "econ/music_kits/seanmurray_01", "Sean Murray, A*D*8", 3 },
+	{ 7, "feedme_01", "#musickit_feedme_01", "#musickit_feedme_01_desc", "econ/music_kits/feedme_01", "Feed Me, High Noon", 3 },
+	{ 8, "dren_01", "#musickit_dren_01", "#musickit_dren_01_desc", "econ/music_kits/dren_01", "Dren, Death's Head Demolition", 3 },
+	{ 9, "austinwintory_01", "#musickit_austinwintory_01", "#musickit_austinwintory_01_desc", "econ/music_kits/austinwintory_01", "Austin Wintory, Desert Fire", 3 },
+	{ 10, "sasha_01", "#musickit_sasha_01", "#musickit_sasha_01_desc", "econ/music_kits/sasha_01", "Sasha, LNOE", 3 },
+	{ 11, "skog_01", "#musickit_skog_01", "#musickit_skog_01_desc", "econ/music_kits/skog_01", "Skog, Metal", 3 },
+	{ 12, "midnightriders_01", "#musickit_midnightriders_01", "#musickit_midnightriders_01_desc", "econ/music_kits/midnightriders_01", "Midnight Riders, All I Want for Christmas", 3 },
+	{ 13, "mattlange_01", "#musickit_mattlange_01", "#musickit_mattlange_01_desc", "econ/music_kits/mattlange_01", "Matt Lange, IsoRhythm", 3 },
+	{ 14, "mateomessina_01", "#musickit_mateomessina_01", "#musickit_mateomessina_01_desc", "econ/music_kits/mateomessina_01", "Mateo Messina, For No Mankind", 3 },
+	{ 15, "hotlinemiami_01", "#musickit_hotlinemiami_01", "#musickit_hotlinemiami_01_desc", "econ/music_kits/hotlinemiami_01", "Various Artists, Hotline Miami", 3 },
+	{ 16, "danielsadowski_02", "#musickit_danielsadowski_02", "#musickit_danielsadowski_02_desc", "econ/music_kits/danielsadowski_02", "Daniel Sadowski, Total Domination", 3 },
+	{ 17, "damjanmravunac_01", "#musickit_damjanmravunac_01", "#musickit_damjanmravunac_01_desc", "econ/music_kits/damjanmravunac_01", "Damjan Mravunac, The Talos Principle", 3 },
+	{ 18, "proxy_01", "#musickit_proxy_01", "#musickit_proxy_01_desc", "econ/music_kits/proxy_01", "Proxy, Battlepack", 3 },
+	{ 19, "kitheory_01", "#musickit_kitheory_01", "#musickit_kitheory_01_desc", "econ/music_kits/kitheory_01", "Ki:Theory, MOLOTOV", 3 },
+	{ 20, "troelsfolmann_01", "#musickit_troelsfolmann_01", "#musickit_troelsfolmann_01_desc", "econ/music_kits/troelsfolmann_01", "Troels Folmann, Uber Blasto Phone", 3 },
+	{ 21, "kellybailey_01", "#musickit_kellybailey_01", "#musickit_kellybailey_01_desc", "econ/music_kits/kellybailey_01", "Kelly Bailey, Hazardous Environments", 3 },
+	{ 22, "skog_02", "#musickit_skog_02", "#musickit_skog_02_desc", "econ/music_kits/skog_02", "Skog, II-Headshot", 3 },
+	{ 23, "danielsadowski_03", "#musickit_danielsadowski_03", "#musickit_danielsadowski_03_desc", "econ/music_kits/danielsadowski_03", "Daniel Sadowski, The 8-Bit Kit", 3 },
+	{ 24, "awolnation_01", "#musickit_awolnation_01", "#musickit_awolnation_01_desc", "econ/music_kits/awolnation_01", "AWOLNATION, I Am", 3 },
+	{ 25, "mordfustang_01", "#musickit_mordfustang_01", "#musickit_mordfustang_01_desc", "econ/music_kits/mordfustang_01", "Mord Fustang, Diamonds", 3 },
+	{ 26, "michaelbross_01", "#musickit_michaelbross_01", "#musickit_michaelbross_01_desc", "econ/music_kits/michaelbross_01", "Michael Bross, Invasion!", 3 },
+	{ 27, "ianhultquist_01", "#musickit_ianhultquist_01", "#musickit_ianhultquist_01_desc", "econ/music_kits/ianhultquist_01", "Ian Hultquist, Lion's Mouth", 3 },
+	{ 28, "newbeatfund_01", "#musickit_newbeatfund_01", "#musickit_newbeatfund_01_desc", "econ/music_kits/newbeatfund_01", "New Beat Fund, Sponge Fingerz", 3 },
+	{ 29, "beartooth_01", "#musickit_beartooth_01", "#musickit_beartooth_01_desc", "econ/music_kits/beartooth_01", "Beartooth, Disgusting", 3 },
+	{ 30, "lenniemoore_01", "#musickit_lenniemoore_01", "#musickit_lenniemoore_01_desc", "econ/music_kits/lenniemoore_01", "Lennie Moore, Java Havana Funkaloo", 3 },
+	{ 31, "darude_01", "#musickit_darude_01", "#musickit_darude_01_desc", "econ/music_kits/darude_01", "Darude, Moments CSGO", 3 },
+	{ 32, "beartooth_02", "#musickit_beartooth_02", "#musickit_beartooth_02_desc", "econ/music_kits/beartooth_02", "Beartooth, Aggressive", 3 },
+	{ 33, "blitzkids_01", "#musickit_blitzkids_01", "#musickit_blitzkids_01_desc", "econ/music_kits/blitzkids_01", "Blitz Kids, The Good Youth", 3 },
+	{ 34, "hundredth_01", "#musickit_hundredth_01", "#musickit_hundredth_01_desc", "econ/music_kits/hundredth_01", "Hundredth, FREE", 3 },
+	{ 35, "neckdeep_01", "#musickit_neckdeep_01", "#musickit_neckdeep_01_desc", "econ/music_kits/neckdeep_01", "Neck Deep, Life's Not Out To Get You", 3 },
+	{ 36, "roam_01", "#musickit_roam_01", "#musickit_roam_01_desc", "econ/music_kits/roam_01", "Roam, Backbone", 3 },
+	{ 37, "twinatlantic_01", "#musickit_twinatlantic_01", "#musickit_twinatlantic_01_desc", "econ/music_kits/twinatlantic_01", "Twin Atlantic, GLA", 3 },
+	{ 38, "skog_03", "#musickit_skog_03", "#musickit_skog_03_desc", "econ/music_kits/skog_03", "Skog, III-Arena", 3 },
+	{ 39, "theverkkars_01", "#musickit_theverkkars_01", "#musickit_theverkkars_01_desc", "econ/music_kits/theverkkars_01", "The Verkkars, EZ4ENCE", 3 },
+	{ 40, "halo_01", "#musickit_halo_01", "#musickit_halo_01_desc", "econ/music_kits/halo_01", "Halo, The Master Chief Collection", 3 },
+	{ 41, "scarlxrd_01", "#musickit_scarlxrd_01", "#musickit_scarlxrd_01_desc", "econ/music_kits/scarlxrd_01", "Scarlxrd: King, Scar", 3 },
+	{ 42, "hlalyx_01", "#musickit_hlalyx_01", "#musickit_hlalyx_01_desc", "econ/music_kits/hlalyx_01", "Half-Life: Alyx, Anti-Citizen", 3 },
+	{ 43, "austinwintory_02", "#musickit_austinwintory_02", "#musickit_austinwintory_02_desc", "econ/music_kits/austinwintory_02", "Austin Wintory, Bachram", 3 },
+	{ 44, "dren_02", "#musickit_dren_02", "#musickit_dren_02_desc", "econ/music_kits/dren_02", "Dren, Gunman Taco Truck", 3 },
+	{ 45, "danielsadowski_04", "#musickit_danielsadowski_04", "#musickit_danielsadowski_04_desc", "econ/music_kits/danielsadowski_04", "Daniel Sadowski, Eye of the Dragon", 3 },
+	{ 46, "treeadams_benbromfield_01", "#musickit_treeadams_benbromfield_01", "#musickit_treeadams_benbromfield_01_desc", "econ/music_kits/treeadams_benbromfield_01", "Tree Adams and Ben Bromfield, M.U.D.D. FORCE", 3 },
+	{ 47, "timhuling_01", "#musickit_timhuling_01", "#musickit_timhuling_01_desc", "econ/music_kits/timhuling_01", "Tim Huling, Neo Noir", 3 },
+	{ 48, "sammarshall_01", "#musickit_sammarshall_01", "#musickit_sammarshall_01_desc", "econ/music_kits/sammarshall_01", "Sam Marshall, Bodacious", 3 },
+	{ 49, "mattlevine_01", "#musickit_mattlevine_01", "#musickit_mattlevine_01_desc", "econ/music_kits/mattlevine_01", "Matt Levine, Drifter", 3 },
+	{ 50, "amontobin_01", "#musickit_amontobin_01", "#musickit_amontobin_01_desc", "econ/music_kits/amontobin_01", "Amon Tobin, All for Dust", 3 },
+	{ 51, "hades_01", "#musickit_hades_01", "#musickit_hades_01_desc", "econ/music_kits/hades_01", "Darren Korb, Hades Music Kit", 3 },
+	{ 52, "neckdeep_02", "#musickit_neckdeep_02", "#musickit_neckdeep_02_desc", "econ/music_kits/neckdeep_02", "Neck Deep, The Lowlife Pack", 3 },
+	{ 53, "scarlxrd_02", "#musickit_scarlxrd_02", "#musickit_scarlxrd_02_desc", "econ/music_kits/scarlxrd_02", "Scarlxrd, CHAIN$AW.LXADXUT.", 3 },
+	{ 54, "austinwintory_03", "#musickit_austinwintory_03", "#musickit_austinwintory_03_desc", "econ/music_kits/austinwintory_03", "Austin Wintory, Mocha Petal", 3 },
+	{ 55, "chipzel_01", "#musickit_chipzel_01", "#musickit_chipzel_01_desc", "econ/music_kits/chipzel_01", "Chipzel, Yellow Magic", 3 },
+	{ 56, "freakydna_01", "#musickit_freakydna_01", "#musickit_freakydna_01_desc", "econ/music_kits/freakydna_01", "Freaky DNA, Vici", 3 },
+	{ 57, "jesseharlin_01", "#musickit_jesseharlin_01", "#musickit_jesseharlin_01_desc", "econ/music_kits/jesseharlin_01", "Jesse Harlin, Astro Bellum", 3 },
+	{ 58, "laurashigihara_01", "#musickit_laurashigihara_01", "#musickit_laurashigihara_01_desc", "econ/music_kits/laurashigihara_01", "Laura Shigihara: Work Hard, Play Hard", 3 },
+	{ 59, "sarahschachner_01", "#musickit_sarahschachner_01", "#musickit_sarahschachner_01_desc", "econ/music_kits/sarahschachner_01", "Sarah Schachner, KOLIBRI", 3 },
+	{ 60, "bbnos_01", "#musickit_bbnos_01", "#musickit_bbnos_01_desc", "econ/music_kits/bbnos_01", "bbno$, u mad!", 3 },
+	{ 61, "theverkkars_02", "#musickit_theverkkars_02", "#musickit_theverkkars_02_desc", "econ/music_kits/theverkkars_02", "The Verkkars & n0thing, Flashbang Dance", 3 },
+	{ 62, "3kliksphilip_01", "#musickit_3kliksphilip_01", "#musickit_3kliksphilip_01_desc", "econ/music_kits/3kliksphilip_01", "3kliksphilip, Heading for the Source", 3 },
+	{ 63, "hlb_01", "#musickit_hlb_01", "#musickit_hlb_01_desc", "econ/music_kits/hlb_01", "Humanity's Last Breath, Void", 3 },
+	{ 64, "juelz_01", "#musickit_juelz_01", "#musickit_juelz_01_desc", "econ/music_kits/juelz_01", "Juelz, Shooters", 3 },
+	{ 65, "knock2_01", "#musickit_knock2_01", "#musickit_knock2_01_desc", "econ/music_kits/knock2_01", "Knock2, dashstar*", 3 },
+	{ 66, "meechydarko_01", "#musickit_meechydarko_01", "#musickit_meechydarko_01_desc", "econ/music_kits/meechydarko_01", "Meechy Darko, Gothic Luxury", 3 },
+	{ 67, "sullivanking_01", "#musickit_sullivanking_01", "#musickit_sullivanking_01_desc", "econ/music_kits/sullivanking_01", "Sullivan King, Lock Me Up", 3 },
+	{ 68, "perfectworld_01", "#musickit_perfectworld_01", "#musickit_perfectworld_01_desc", "econ/music_kits/perfectworld_01", "Perfect World, Hua Lian (Painted Face)", 3 },
+	{ 69, "denzelcurry_01", "#musickit_denzelcurry_01", "#musickit_denzelcurry_01_desc", "econ/music_kits/denzelcurry_01", "Denzel Curry, ULTIMATE", 3 },
+	{ 70, "valve_01", "#musickit_valve_csgo_01", "#musickit_valve_csgo_01_desc", "econ/music_kits/valve_01", "Valve, CS:GO", 3 },
+	{ 71, "dryden_01", "#musickit_dryden_01", "#musickit_dryden_01_desc", "econ/music_kits/dryden_01", "DRYDEN, Feel The Power", 3 },
+	{ 72, "isoxo_01", "#musickit_isoxo_01", "#musickit_isoxo_01_desc", "econ/music_kits/isoxo_01", "ISOxo, inhuman", 3 },
+	{ 73, "killscript_01", "#musickit_killscript_01", "#musickit_killscript_01_desc", "econ/music_kits/killscript_01", "KILL SCRIPT, All Night", 3 },
+	{ 74, "knock2_02", "#musickit_knock2_02", "#musickit_knock2_02_desc", "econ/music_kits/knock2_02", "Knock2, Make U SWEAT!", 3 },
+	{ 75, "radcat_01", "#musickit_radcat_01", "#musickit_radcat_01_desc", "econ/music_kits/radcat_01", "Rad Cat, Reason", 3 },
+	{ 76, "twerl_01", "#musickit_twerl_01", "#musickit_twerl_01_desc", "econ/music_kits/twerl_01", "TWERL and Ekko & Sidetrack, Under Bright Lights", 3 },
+	{ 78, "austinwintory_04", "#MusicKit_austinwintory_04", "#MusicKit_austinwintory_04_desc", "econ/music_kits/austinwintory_04", "Austin Wintory, The Devil Went Clubbing in Georgia", 3 },
+	{ 79, "benbromfield_01", "#MusicKit_benbromfield_01", "#MusicKit_benbromfield_01_desc", "econ/music_kits/benbromfield_01", "Ben Bromfield, Rabbit Hole", 3 },
+	{ 80, "danielsadowski_05", "#MusicKit_danielsadowski_05", "#MusicKit_danielsadowski_05_desc", "econ/music_kits/danielsadowski_05", "Daniel Sadowski, Dead Shot", 3 },
+	{ 81, "dren_03", "#MusicKit_dren_03", "#MusicKit_dren_03_desc", "econ/music_kits/dren_03", "Dren McDonald, Coffee! Kofe! Kahveh!", 3 },
+	{ 82, "mattlevine_02", "#MusicKit_mattlevine_02", "#MusicKit_mattlevine_02_desc", "econ/music_kits/mattlevine_02", "Matt Levine, Agency", 3 },
+	{ 83, "sammarshall_02", "#MusicKit_sammarshall_02", "#MusicKit_sammarshall_02_desc", "econ/music_kits/sammarshall_02", "Sam Marshall, Clutch", 3 },
+	{ 84, "timhuling_02", "#MusicKit_timhuling_02", "#MusicKit_timhuling_02_desc", "econ/music_kits/timhuling_02", "Tim Huling, Devil's Paintbrush", 3 },
+	{ 85, "treeadams_01", "#MusicKit_treeadams_01", "#MusicKit_treeadams_01_desc", "econ/music_kits/treeadams_01", "Tree Adams, Seventh Moon", 3 },
+	{ 86, "perfectworld_02", "#MusicKit_perfectworld_02", "#MusicKit_perfectworld_02_desc", "econ/music_kits/perfectworld_02", "Perfect World, Ay Hey", 3 },
+	{ 87, "adambeyer_01", "#MusicKit_adambeyer_01", "#MusicKit_adambeyer_01_desc", "econ/music_kits/adambeyer_01", "Adam Beyer, Red Room", 3 },
+	{ 88, "ghost_01", "#MusicKit_ghost_01", "#MusicKit_ghost_01_desc", "econ/music_kits/ghost_01", "Ghost, Skeleta", 3 },
+	{ 89, "health_01", "#MusicKit_health_01", "#MusicKit_health_01_desc", "econ/music_kits/health_01", "HEALTH, RAT WARS", 3 },
+	{ 90, "jamesandthecoldgun_01", "#MusicKit_jamesandthecoldgun_01", "#MusicKit_jamesandthecoldgun_01_desc", "econ/music_kits/jamesandthecoldgun_01", "James and the Cold Gun, Chewing Glass", 3 },
+	{ 91, "jonathanyoung_01", "#MusicKit_jonathanyoung_01", "#MusicKit_jonathanyoung_01_desc", "econ/music_kits/jonathanyoung_01", "Jonathan Young, Starship Velociraptor", 3 },
+	{ 92, "juelz_02", "#MusicKit_juelz_02", "#MusicKit_juelz_02_desc", "econ/music_kits/juelz_02", "Juelz, Floorspace", 3 },
+	{ 93, "killermike_01", "#MusicKit_killermike_01", "#MusicKit_killermike_01_desc", "econ/music_kits/killermike_01", "Killer Mike, MICHAEL", 3 },
+	{ 94, "pvris_01", "#MusicKit_pvris_01", "#MusicKit_pvris_01_desc", "econ/music_kits/pvris_01", "PVRIS, Evergreen", 3 },
+	{ 95, "selectiveresponse_01", "#MusicKit_selectiveresponse_01", "#MusicKit_selectiveresponse_01_desc", "econ/music_kits/selectiveresponse_01", "Selective Response, No Love Only Pleasure", 3 },
+	{ 96, "tigercub_01", "#MusicKit_tigercub_01", "#MusicKit_tigercub_01_desc", "econ/music_kits/tigercub_01", "Tigercub, The Perfume of Decay", 3 },
+	{ 98, "alrt_01", "#MusicKit_alrt_01", "#MusicKit_alrt_01_desc", "econ/music_kits/alrt_01", "ALRT, DOPAMINE HIT", 3 },
+	{ 99, "altare_01", "#MusicKit_altare_01", "#MusicKit_altare_01_desc", "econ/music_kits/altare_01", "Altare, Change My Mind", 3 },
+	{ 100, "borne_01", "#MusicKit_borne_01", "#MusicKit_borne_01_desc", "econ/music_kits/borne_01", "borne, Give It To Me", 3 },
+	{ 101, "pirapus_01", "#MusicKit_pirapus_01", "#MusicKit_pirapus_01_desc", "econ/music_kits/pirapus_01", "Pirapus, EVERYNITE", 3 },
+	{ 102, "repiet_01", "#MusicKit_repiet_01", "#MusicKit_repiet_01_desc", "econ/music_kits/repiet_01", "Repiet & Julia Kleijn, On And On", 3 },
+	{ 103, "shockone_01", "#MusicKit_shockone_01", "#MusicKit_shockone_01_desc", "econ/music_kits/shockone_01", "ShockOne, Voices", 3 },
+};
+	} // namespace
+
+	bool econ_item_system::parse_music_kits( std::uintptr_t /*schema*/ )
+	{
+		this->m_music_kits.clear( );
+		this->m_music_kits.reserve( sizeof( k_fallback_kits ) / sizeof( k_fallback_kits[ 0 ] ) );
+
+		for ( const auto& fb : k_fallback_kits )
+		{
+			music_kit mk{};
+			mk.id = fb.id;
+			mk.name = fb.name;
+			mk.loc_name = fb.loc_name;
+			mk.loc_desc = fb.loc_desc;
+			mk.image_inventory = fb.image_inventory;
+			mk.rarity = fb.rarity;
+			mk.localized_name = fb.fallback_title;
+
+			this->m_music_kits.push_back( std::move( mk ) );
+		}
+
+		return !this->m_music_kits.empty( );
+	}
+
 	void econ_item_system::build_indices( )
 	{
 		for ( auto i = 0ull; i < this->m_item_defs.size( ); i++ )
@@ -346,6 +587,11 @@ namespace features::changer {
 		{
 			this->m_paint_kit_map[ this->m_paint_kits[ i ].id ] = i;
 		}
+
+		for ( auto i = 0ull; i < this->m_music_kits.size( ); i++ )
+		{
+			this->m_music_kit_map[ this->m_music_kits[ i ].id ] = i;
+		}
 	}
 
 	void econ_item_system::resolve_localized_names( )
@@ -368,6 +614,32 @@ namespace features::changer {
 
 			pk.localized_name = pk.name;
 			fallback++;
+		}
+
+		for ( auto& mk : this->m_music_kits )
+		{
+			if ( addresses::globals::localize && !mk.loc_name.empty( ) )
+			{
+				const auto localized = memory::call_vfunc<const char*>( addresses::globals::localize, 17, mk.loc_name.c_str( ) );
+				if ( localized && *localized && std::strcmp( localized, mk.loc_name.c_str( ) ) != 0 )
+				{
+					mk.localized_name = localized;
+				}
+			}
+
+			if ( mk.localized_name.empty( ) )
+			{
+				mk.localized_name = mk.name;
+			}
+
+			if ( addresses::globals::localize && !mk.loc_desc.empty( ) )
+			{
+				const auto localized_desc = memory::call_vfunc<const char*>( addresses::globals::localize, 17, mk.loc_desc.c_str( ) );
+				if ( localized_desc && *localized_desc && std::strcmp( localized_desc, mk.loc_desc.c_str( ) ) != 0 )
+				{
+					mk.localized_desc = localized_desc;
+				}
+			}
 		}
 	}
 
@@ -814,6 +1086,32 @@ namespace features::changer {
 			return false;
 		}
 
+		const auto pixel_start = static_cast< std::size_t >( file_size );
+		if ( pixel_start >= size )
+		{
+			return false;
+		}
+
+		if ( format == 15 || format == 16 || format == 29 ||
+			 ( size - pixel_start >= 8 && ( std::memcmp( raw + pixel_start, "\x89PNG\r\n\x1a\n", 8 ) == 0 || std::memcmp( raw + pixel_start, "\xFF\xD8\xFF", 3 ) == 0 ) ) )
+		{
+			std::vector<std::uint8_t> decoded_pixels;
+			std::uint32_t decoded_w{};
+			std::uint32_t decoded_h{};
+
+			if ( !decode_image_wic( raw + pixel_start, size - pixel_start, decoded_pixels, decoded_w, decoded_h ) )
+			{
+				return false;
+			}
+
+			out.mip_buffers.clear( );
+			out.mip_buffers.push_back( std::move( decoded_pixels ) );
+			out.width = decoded_w ? decoded_w : width;
+			out.height = decoded_h ? decoded_h : height;
+			out.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			return true;
+		}
+
 		auto dxgi_format{ DXGI_FORMAT_UNKNOWN };
 		auto block_bytes{ 0u };
 		auto bytes_per_pixel{ 0u };
@@ -916,12 +1214,6 @@ namespace features::changer {
 				compressed_sizes_count = mips_count_in_table;
 				break;
 			}
-		}
-
-		const auto pixel_start = static_cast< std::size_t >( file_size );
-		if ( pixel_start >= size )
-		{
-			return false;
 		}
 
 		auto on_disk_size_for = [ & ]( std::uint32_t mip_level ) -> std::uint32_t

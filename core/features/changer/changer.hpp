@@ -32,6 +32,18 @@ namespace features::changer {
 			std::uint8_t rarity{};
 		};
 
+		struct music_kit
+		{
+			int id{};
+			std::string name{};
+			std::string loc_name{};
+			std::string loc_desc{};
+			std::string localized_name{};
+			std::string localized_desc{};
+			std::string image_inventory{};
+			std::uint8_t rarity{ 3 };
+		};
+
 		struct item_def
 		{
 			std::int16_t def_index{};
@@ -89,9 +101,11 @@ namespace features::changer {
 		[[nodiscard]] const std::vector<const item_def*>& agents( ) const { return this->m_agents; }
 		[[nodiscard]] const std::vector<const item_def*>& guns( ) const { return this->m_guns; }
 		[[nodiscard]] const std::vector<skin_entry>& skins( ) const { return this->m_skins; }
+		[[nodiscard]] const std::vector<music_kit>& music_kits( ) const { return this->m_music_kits; }
 
 		[[nodiscard]] const item_def* find_def( std::int16_t def_index ) const;
 		[[nodiscard]] const paint_kit* find_paint_kit( int id ) const;
+		[[nodiscard]] const music_kit* find_music_kit( int id ) const;
 		[[nodiscard]] const skin_image* get_skin_image( const std::string& image_inventory );
 		[[nodiscard]] const skin_image* get_skin_image( std::int16_t def_index, int paint_kit_id );
 
@@ -121,6 +135,7 @@ namespace features::changer {
 
 		bool parse_item_defs( std::uintptr_t schema );
 		bool parse_paint_kits( std::uintptr_t schema );
+		bool parse_music_kits( std::uintptr_t schema );
 		void build_indices( );
 		void resolve_localized_names( );
 		bool build_vpk_index( );
@@ -142,9 +157,11 @@ namespace features::changer {
 		std::vector<const item_def*> m_agents{};
 		std::vector<const item_def*> m_guns{};
 		std::vector<skin_entry> m_skins{};
+		std::vector<music_kit> m_music_kits{};
 
 		std::unordered_map<std::int16_t, std::size_t> m_def_index_map{};
 		std::unordered_map<int, std::size_t> m_paint_kit_map{};
+		std::unordered_map<int, std::size_t> m_music_kit_map{};
 
 		struct vpk_file_entry
 		{
@@ -289,6 +306,25 @@ namespace features::changer {
 		bool m_overridden{};
 		std::uintptr_t m_pending_hud_iv{};
 		std::chrono::steady_clock::time_point m_hud_clear_time{};
+	};
+
+	class music
+	{
+	public:
+		void on_frame_stage_notify( );
+		void reset( );
+		void on_round_mvp( void* event );
+		[[nodiscard]] bool is_local_mvp( ) const;
+
+	private:
+		std::uint16_t m_original_music{};
+		std::int32_t m_original_music_kit_id{};
+		bool m_original_mvp_no_music{};
+		std::int32_t m_original_music_kit_mvps{};
+		bool m_captured{};
+		std::uintptr_t m_last_controller{};
+		std::atomic_bool m_local_won_last_mvp{ false };
+		std::chrono::steady_clock::time_point m_last_mvp_time{};
 	};
 
 } // namespace features::changer

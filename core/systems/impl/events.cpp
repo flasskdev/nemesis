@@ -78,6 +78,11 @@ namespace systems {
 			return false;
 		}
 
+		if ( !register_listener( xs( "round_mvp" ), [ ]( void* event ) { features::changer::g_music.on_round_mvp( event ); } ) )
+		{
+			return false;
+		}
+
 		return true;
 	}
 

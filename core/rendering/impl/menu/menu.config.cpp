@@ -222,6 +222,7 @@ namespace rendering {
 					features::changer::g_guns.reset( );
 					features::changer::g_knives.reset( );
 					features::changer::g_gloves.reset( );
+					features::changer::g_music.reset( );
 					settings::finalize_binds( );
 					settings::g_world.update_active( rendering::g_widgets.s_map_name );
 				}

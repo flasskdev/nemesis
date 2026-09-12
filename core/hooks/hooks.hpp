@@ -65,6 +65,7 @@ namespace hooks {
 		static void __fastcall vote_failed( void* panel, std::uintptr_t msg );
 		static void* __fastcall panorama_event( void* thisptr, const char* event_name, void* p1, void* p2 );
 		static int __fastcall collect_attached_entities( std::uintptr_t entity, std::uintptr_t out_vec );
+		static void __fastcall play_music( void* thisptr, int track_type, std::uint16_t music_kit_id, float volume );
 
 	private:
 		inline static hooking::jmp m_present{};
@@ -120,6 +121,7 @@ namespace hooks {
 		inline static hooking::jmp m_draw_flash_effect{};
 		inline static hooking::jmp m_set_info{};
 		inline static hooking::jmp m_collect_attached_entities{};
+		inline static hooking::jmp m_play_music{};
 	};
 
 	class utility

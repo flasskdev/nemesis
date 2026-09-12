@@ -78,6 +78,10 @@ namespace rendering {
             {
                 return { 3, 0 };
             }
+            if (category_lower.find("music") != std::string::npos)
+            {
+                return { 4, 4 };
+            }
             if (category_lower.find("skin") != std::string::npos || category_lower.find("changer") != std::string::npos)
             {
                 return { 4, 0 };

@@ -1439,13 +1439,36 @@ namespace settings {
 			}
 		};
 
+		struct music_field : config::custom_field
+		{
+			int id{};
+
+			nlohmann::json serialize() const override
+			{
+				return nlohmann::json{ { "id", id } };
+			}
+
+			void deserialize(const nlohmann::json& j) override
+			{
+				if (!j.is_object())
+				{
+					id = 0;
+					return;
+				}
+
+				id = j.value("id", 0);
+			}
+		};
+
 		skin_map_field skins{};
 		agent_selection_field agents{};
+		music_field music{};
 
 		changer()
 		{
 			config::detail::register_field({ .key = config::detail::make_key("changer", "applied skins"), .type = config::field_type::custom, .ptr = &skins, .count = 1 });
 			config::detail::register_field({ .key = config::detail::make_key("changer", "agents"), .type = config::field_type::custom, .ptr = &agents, .count = 1 });
+			config::detail::register_field({ .key = config::detail::make_key("changer", "music"), .type = config::field_type::custom, .ptr = &music, .count = 1 });
 		}
 	};
 

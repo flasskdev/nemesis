@@ -585,6 +585,11 @@ namespace patterns {
 		::protection::addresses::address_type::pattern,
 		"client.dll:48895C24??48896C24??48897424??48894C24??5741544155415641574883EC20486302");
 
+	const ::protection::addresses::address_t& play_music = ADDRESS_IMPL(
+		::protection::addresses::hash("client.dll:40555357488DAC24F0FEFFFF4881EC100200004863DA410FB7F8"),
+		::protection::addresses::address_type::pattern,
+		"client.dll:40555357488DAC24F0FEFFFF4881EC100200004863DA410FB7F8");
+
 	const ::protection::addresses::address_t& play_sound = ADDRESS_IMPL(
 		::protection::addresses::hash("soundsystem.dll:4C8BDC55415541564157"),
 		::protection::addresses::address_type::pattern,

@@ -991,6 +991,124 @@ namespace rendering {
 			}
 		}
 
+		static inline void draw_music_tile( const xui::rect& card, const features::changer::econ_item_system::music_kit* kit, bool is_equipped, float fade_alpha )
+		{
+			auto& econ = features::changer::g_econ_item_system;
+			auto& dl = xui::draw::current( );
+			const auto& input = xui::ctx( ).input;
+
+			const auto image_h = std::floor( card.h * k_image_h_ratio );
+
+			const auto hovered = !xui::ctx( ).overlay_blocking( ) && input.in_rect( card );
+			const auto hover_id = xui::fnv1a( "mtile" ) + ( kit ? static_cast< std::uintptr_t >( kit->id ) : 0 );
+			const auto hover_anim = xui::anim::lerp( hover_id, hovered ? 1.0f : 0.0f, 14.0f );
+
+			auto card_bg = tokens::col_card;
+			card_bg = xui::lerp( card_bg, xui::lighten( card_bg, 1.4f ), hover_anim * 0.5f );
+			card_bg.a = static_cast< std::uint8_t >( card_bg.a * fade_alpha );
+			dl.rect_filled( card.x, card.y, card.w, card.h, card_bg, xdraw::corner_radius{ tokens::btn_rounding } );
+
+			if ( is_equipped )
+			{
+				auto bcol = tokens::col_accent;
+				bcol.a = static_cast< std::uint8_t >( bcol.a * fade_alpha );
+				dl.rect( card.x, card.y, card.w, card.h, bcol, xdraw::corner_radius{ tokens::btn_rounding }, 1.5f );
+			}
+
+			if ( kit )
+			{
+				const auto img = econ.get_skin_image( kit->image_inventory );
+				if ( img )
+				{
+					const auto target_h = image_h - 12.0f;
+					const auto aspect = static_cast< float >( img->width ) / static_cast< float >( img->height );
+					auto iw = target_h * aspect;
+					auto ih = target_h;
+
+					if ( iw > card.w - 12.0f )
+					{
+						iw = card.w - 12.0f;
+						ih = iw / aspect;
+					}
+
+					const auto ix = std::floor( card.x + ( card.w - iw ) * 0.5f );
+					const auto iy = std::floor( card.y + ( image_h - ih ) * 0.5f );
+					const auto tint = xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
+
+					dl.image( ix, iy, iw, ih, img->srv.Get( ), tint );
+				}
+				else
+				{
+					const auto cx = card.x + card.w * 0.5f;
+					const auto cy = card.y + image_h * 0.5f;
+					const auto icon_col = xui::lerp( tokens::col_text_dim, tokens::col_accent, hover_anim ).alpha( static_cast< std::uint8_t >( 200.0f * fade_alpha ) );
+					dl.circle_filled( cx - 7.0f, cy + 6.0f, 3.5f, icon_col );
+					dl.circle_filled( cx + 7.0f, cy + 3.0f, 3.5f, icon_col );
+					dl.line( cx - 4.0f, cy + 6.0f, cx - 4.0f, cy - 7.0f, icon_col, 2.0f );
+					dl.line( cx + 10.0f, cy + 3.0f, cx + 10.0f, cy - 10.0f, icon_col, 2.0f );
+					dl.line( cx - 4.0f, cy - 7.0f, cx + 10.0f, cy - 10.0f, icon_col, 2.5f );
+				}
+			}
+			else
+			{
+				const auto cx = card.x + card.w * 0.5f;
+				const auto cy = card.y + image_h * 0.5f;
+				const auto icon_col = xui::lerp( tokens::col_text_dim, tokens::col_accent, hover_anim ).alpha( static_cast< std::uint8_t >( 200.0f * fade_alpha ) );
+				dl.circle( cx, cy, 12.0f, icon_col, 1.5f );
+				dl.circle_filled( cx, cy, 3.0f, icon_col );
+			}
+
+			const auto r_idx = kit ? std::clamp( static_cast< int >( kit->rarity ), 0, 7 ) : 1;
+			auto rcol = k_rarity_colors[ r_idx ];
+			rcol.a = static_cast< std::uint8_t >( rcol.a * fade_alpha );
+			dl.rect_filled( card.x, card.bottom( ) - k_rarity_bar_h, card.w, k_rarity_bar_h, rcol, xdraw::corner_radius::bottom( tokens::btn_rounding ) );
+
+			const auto name_y = card.y + image_h + 4.0f;
+			auto ncol = xui::lerp( tokens::col_text_dim, tokens::col_text, hover_anim );
+			ncol.a = static_cast< std::uint8_t >( ncol.a * fade_alpha );
+
+			const auto title = kit ? kit->localized_name : "Default";
+			const auto ntrunc = xui::truncate( title, card.w - 12.0f );
+			const auto [ nw, nh ] = xdraw::measure_text( ntrunc );
+			dl.text( std::floor( card.x + ( card.w - nw ) * 0.5f ), std::floor( name_y ), ntrunc, ncol );
+
+			if ( is_equipped )
+			{
+				constexpr auto badge{ 14.0f };
+				const auto bx = card.right( ) - badge - 4.0f;
+				const auto by = card.y + 4.0f;
+
+				auto badge_bg = tokens::col_accent;
+				badge_bg.a = static_cast< std::uint8_t >( badge_bg.a * fade_alpha );
+				dl.rect_filled( bx, by, badge, badge, badge_bg, xdraw::corner_radius{ badge * 0.5f } );
+
+				const auto cx = bx + badge * 0.5f;
+				const auto cy = by + badge * 0.5f;
+				const auto check = xdraw::color{ tokens::col_dark.r, tokens::col_dark.g, tokens::col_dark.b, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
+
+				const std::array<float, 6> pts
+				{
+					cx - badge * 0.20f, cy,
+					cx - badge * 0.05f, cy + badge * 0.18f,
+					cx + badge * 0.25f, cy - badge * 0.18f
+				};
+
+				dl.polyline( pts, check, false, 1.5f );
+			}
+
+			if ( hovered && input.mouse_clicked )
+			{
+				if ( !kit || is_equipped )
+				{
+					settings::g_changer.music.id = 0;
+				}
+				else
+				{
+					settings::g_changer.music.id = kit->id;
+				}
+			}
+		}
+
 		static void integer_input( const char* label, int& value, int minimum, int maximum )
 		{
 			// xui text-input state must outlive a frame and be unique per item/field.
@@ -1268,6 +1386,88 @@ namespace rendering {
 				detail::draw_agent_team_card( t_card, 2, fade_alpha );
 
 				xui::layout::item( inner_w, card_h );
+				xui::end_child( );
+				return;
+			}
+
+			if ( this->m_subtab == 4 )
+			{
+				constexpr auto bar_h{ 26.0f };
+				const auto bar_x = win->bounds.x + s.window_pad_x;
+				const auto bar_y = win->bounds.y + s.window_pad_y - win->scroll_y;
+
+				xui::layout::set_cursor( s.window_pad_x, s.window_pad_y - win->scroll_y );
+				xui::text_input( "##music_search", detail::skins_ui.search_buf, 64, "search music kits..." );
+
+				const auto grid_top_y = bar_y + bar_h + 12.0f;
+				const auto base_x = win->bounds.x + s.window_pad_x + offset_x;
+
+				std::string search_lower = detail::skins_ui.search_buf;
+				for ( auto& c : search_lower )
+				{
+					c = static_cast< char >( std::tolower( c ) );
+				}
+
+				std::vector<const features::changer::econ_item_system::music_kit*> kits;
+				kits.reserve( econ.music_kits( ).size( ) );
+
+				for ( const auto& mk : econ.music_kits( ) )
+				{
+					if ( !search_lower.empty( ) )
+					{
+						std::string n = mk.localized_name;
+						for ( auto& c : n ) c = static_cast< char >( std::tolower( c ) );
+						std::string d = mk.localized_desc;
+						for ( auto& c : d ) c = static_cast< char >( std::tolower( c ) );
+						std::string raw_n = mk.name;
+						for ( auto& c : raw_n ) c = static_cast< char >( std::tolower( c ) );
+
+						if ( n.find( search_lower ) == std::string::npos &&
+							 d.find( search_lower ) == std::string::npos &&
+							 raw_n.find( search_lower ) == std::string::npos )
+						{
+							continue;
+						}
+					}
+
+					kits.push_back( &mk );
+				}
+
+				const auto total_tiles = static_cast< int >( kits.size( ) ) + 1;
+				const auto rows = ( total_tiles + detail::k_columns - 1 ) / detail::k_columns;
+				const auto grid_h = rows * card_h + ( rows > 0 ? ( rows - 1 ) * detail::k_card_gap : 0.0f );
+
+				xui::layout::set_cursor( s.window_pad_x, s.window_pad_y );
+				xui::layout::item( inner_w, ( bar_h + 12.0f ) + grid_h );
+
+				const auto current_music_id = settings::g_changer.music.id;
+
+				for ( auto i = 0; i < total_tiles; ++i )
+				{
+					const auto col = i % detail::k_columns;
+					const auto row = i / detail::k_columns;
+
+					const auto cx = std::floor( base_x + col * ( card_w + detail::k_card_gap ) );
+					const auto cy = std::floor( grid_top_y + row * ( card_h + detail::k_card_gap ) );
+
+					if ( cy + card_h < win->bounds.y || cy > win->bounds.bottom( ) )
+					{
+						continue;
+					}
+
+					const auto card = xui::rect{ cx, cy, card_w, card_h };
+					if ( i == 0 )
+					{
+						detail::draw_music_tile( card, nullptr, current_music_id == 0, fade_alpha );
+					}
+					else
+					{
+						const auto* mk = kits[ i - 1 ];
+						detail::draw_music_tile( card, mk, current_music_id == mk->id, fade_alpha );
+					}
+				}
+
+				win->content_h = ( s.window_pad_y + bar_h + 12.0f + grid_h ) - win->scroll_y;
 				xui::end_child( );
 				return;
 			}

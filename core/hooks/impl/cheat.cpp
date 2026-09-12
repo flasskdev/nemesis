@@ -87,7 +87,8 @@ namespace hooks {
 			{ &m_set_info, &set_info, xs ("set_info"), PATTERN (patterns::set_info) },
 			{ &m_calculate_viewmodel, &calculate_viewmodel, xs ("calculate_viewmodel"), PATTERN (patterns::calculate_viewmodel) },
 			{ &m_spec_cmds_handler, &spec_cmds_handler, xs ("spec_cmds_handler"), PATTERN (patterns::spec_cmds_handler) },
-			{ &m_collect_attached_entities, &collect_attached_entities, xs ("collect_attached_entities"), PATTERN (patterns::collect_attached_entities) }
+			{ &m_collect_attached_entities, &collect_attached_entities, xs ("collect_attached_entities"), PATTERN (patterns::collect_attached_entities) },
+			{ &m_play_music, &play_music, xs ("play_music"), PATTERN (patterns::play_music) }
 		};
 
 		auto unavailable_hooks = 0u;
@@ -159,6 +160,7 @@ namespace hooks {
 		m_calculate_viewmodel.reset( );
 		m_spec_cmds_handler.reset( );
 		m_collect_attached_entities.reset( );
+		m_play_music.reset( );
 	}
 
 	HRESULT __fastcall cheat::present( IDXGISwapChain* thisptr, UINT sync_interval, UINT flags )
@@ -292,6 +294,11 @@ namespace hooks {
 			if ( stage == 6 )
 			{
 				features::changer::g_guns.on_frame_stage_notify( );
+			}
+
+			if ( stage == 6 || stage == 7 )
+			{
+				features::changer::g_music.on_frame_stage_notify( );
 			}
 
 			if ( stage == 7 )
@@ -1071,6 +1078,7 @@ namespace hooks {
 		features::changer::g_knives.reset( );
 		features::changer::g_gloves.reset( );
 		features::changer::g_agents.reset( );
+		features::changer::g_music.reset( );
 		systems::g_entities.reset( );
 		features::combat::g_shared.lc( ).clear( );
 		detail::g_vm_anim.initialized = false;
@@ -1509,6 +1517,30 @@ namespace hooks {
 		}
 
 		return m_collect_attached_entities.call<int>( entity, out_vec );
+	}
+
+	void __fastcall cheat::play_music( void* thisptr, int track_type, std::uint16_t music_kit_id, float volume )
+	{
+		const auto custom_kit = static_cast< std::uint16_t >( settings::g_changer.music.id );
+		if ( custom_kit > 0 )
+		{
+			if ( track_type == 11 ) // Music.MVPAnthem
+			{
+				if ( features::changer::g_music.is_local_mvp( ) || music_kit_id == 0 || music_kit_id == 0xffff )
+				{
+					music_kit_id = custom_kit;
+				}
+			}
+			else
+			{
+				if ( music_kit_id == 0xffff || music_kit_id == 0 )
+				{
+					music_kit_id = custom_kit;
+				}
+			}
+		}
+
+		m_play_music.call<void>( thisptr, track_type, music_kit_id, volume );
 	}
 
 } // namespace hooks

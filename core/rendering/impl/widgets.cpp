@@ -253,6 +253,7 @@ namespace rendering {
 			animation::fade alpha;
 			animation::spring offset_y;
 			bool active_this_frame{ false };
+			float last_w{ 0.0f };
 		};
 
 		static std::map<std::string, row_anim_t> row_states;
@@ -274,23 +275,50 @@ namespace rendering {
 		constexpr auto icon_size{ 20.0f };
 		constexpr auto icon_inner_pad{ 4.0f };
 
+		constexpr std::size_t k_max_entries = 64;
 		struct bind_entry
 		{
-			const char* name;
-			char value[ 32 ];
-			bool has_value_pill;
-			xui::bind_mode mode;
+			char name[ 64 ]{};
+			char value[ 32 ]{};
+			bool has_value_pill{ false };
+			xui::bind_mode mode{ xui::bind_mode::toggle };
 		};
 
-		bind_entry entries[ 32 ]{};
+		bind_entry entries[ k_max_entries ]{};
 		auto count{ 0 };
 
 		const auto& ctx = features::combat::g_shared.ctx( );
 		const auto has_weapon = ctx.valid && ctx.weapon_type >= cstypes::weapon_type::pistol && ctx.weapon_type <= cstypes::weapon_type::lmg;
 
+		static const settings::combat::ragebot::weapon_group* s_last_rage_group = &settings::g_combat.m_ragebot.groups[ 2 ];
+		static const settings::combat::legitbot::weapon_group* s_last_legit_group = &settings::g_combat.m_legitbot.groups[ 2 ];
+
+		if ( has_weapon )
+		{
+			s_last_rage_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type, ctx.item_def_idx );
+			s_last_legit_group = &settings::g_combat.m_legitbot.get_group( ctx.weapon_type, ctx.item_def_idx );
+		}
+
+		const auto active_rage_group = s_last_rage_group ? s_last_rage_group : &settings::g_combat.m_ragebot.groups[ 2 ];
+		const auto active_legit_group = s_last_legit_group ? s_last_legit_group : &settings::g_combat.m_legitbot.groups[ 2 ];
+
+		const auto is_in_rage_group = []( const xui::setting* s, const settings::combat::ragebot::weapon_group& wg ) {
+			return s == &wg.min_damage_override || s == &wg.hitchance_override ||
+				s == &wg.force_shot || s == &wg.force_shot_air || s == &wg.body_aim ||
+				s == &wg.silent || s == &wg.no_spread || s == &wg.autostop ||
+				s == &wg.dynamic_pointscale || s == &wg.debug_multipoints;
+		};
+
+		const auto is_in_legit_group = []( const xui::setting* s, const settings::combat::legitbot::weapon_group& wg ) {
+			return s == &wg.aimbot || s == &wg.rcs || s == &wg.standalone_rcs ||
+				s == &wg.triggerbot || s == &wg.trigger_head_only || s == &wg.give_me_your_seed ||
+				s == &wg.autowall || s == &wg.smoke_check || s == &wg.scope_check ||
+				s == &wg.flash_check || s == &wg.ground_check || s == &wg.visualize_fov;
+		};
+
 		for ( const auto setting : xui::binds::all( ) )
 		{
-			if ( !setting || setting->bind.key == 0 || !setting->bind.active || count >= 32 )
+			if ( !setting || setting->bind.key == 0 || !setting->bind.active || count >= k_max_entries )
 			{
 				continue;
 			}
@@ -298,52 +326,97 @@ namespace rendering {
 			auto is_rage_group{ false };
 			for ( auto i = 0u; i < settings::combat::ragebot::k_group_count; ++i )
 			{
-				const auto& g = settings::g_combat.m_ragebot.groups[ i ];
-				if ( setting == &g.min_damage_override || setting == &g.hitchance_override || setting == &g.force_shot || setting == &g.force_shot_air || setting == &g.body_aim || setting == &g.silent || setting == &g.no_spread )
+				if ( is_in_rage_group( setting, settings::g_combat.m_ragebot.groups[ i ] ) )
 				{
 					is_rage_group = true;
 					break;
 				}
 			}
+			if ( !is_rage_group )
+			{
+				for ( auto i = 0u; i < settings::combat::ragebot::k_weapon_count; ++i )
+				{
+					if ( is_in_rage_group( setting, settings::g_combat.m_ragebot.weapons[ i ].cfg ) )
+					{
+						is_rage_group = true;
+						break;
+					}
+				}
+			}
 
 			if ( is_rage_group )
 			{
-				if ( !settings::g_combat.m_ragebot.enabled || !has_weapon )
+				if ( !settings::g_combat.m_ragebot.enabled )
 				{
 					continue;
 				}
 
-				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type, ctx.item_def_idx );
-				auto is_active{ false };
-
-				if ( setting == &active_group->min_damage_override || setting == &active_group->hitchance_override || setting == &active_group->force_shot || setting == &active_group->force_shot_air || setting == &active_group->body_aim )
+				if ( ctx.valid )
 				{
-					is_active = true;
+					if ( !is_in_rage_group( setting, *active_rage_group ) )
+					{
+						continue;
+					}
 				}
 
-				if ( !is_active )
+				std::string clean_name = setting->name;
+				if ( clean_name.empty( ) || clean_name == "enabled" )
+				{
+					if ( !setting->category.empty( ) )
+						clean_name = setting->category;
+					else
+						clean_name = "ragebot";
+				}
+
+				bool duplicate = false;
+				for ( auto j = 0; j < count; ++j )
+				{
+					if ( std::strcmp( entries[ j ].name, clean_name.c_str( ) ) == 0 )
+					{
+						duplicate = true;
+						break;
+					}
+				}
+				if ( duplicate )
 				{
 					continue;
 				}
 
 				auto& e = entries[ count++ ];
-				e.name = setting->name.c_str( );
+				std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
+				e.name[ sizeof( e.name ) - 1 ] = '\0';
 				e.mode = setting->bind.mode;
 
-				if ( setting == &active_group->min_damage_override )
+				const auto matched_group = is_in_rage_group( setting, *active_rage_group ) ? active_rage_group : &settings::g_combat.m_ragebot.groups[ 2 ];
+
+				if ( setting == &matched_group->min_damage_override )
 				{
-					std::snprintf( e.value, sizeof( e.value ), "%d", active_group->min_damage_override_value.value );
+					std::snprintf( e.value, sizeof( e.value ), "%d", matched_group->min_damage_override_value.value );
 					e.has_value_pill = true;
 				}
-				else if ( setting == &active_group->hitchance_override )
+				else if ( setting == &matched_group->hitchance_override )
 				{
-					std::snprintf( e.value, sizeof( e.value ), "%d%%", active_group->hitchance_override_value.value );
+					std::snprintf( e.value, sizeof( e.value ), "%d%%", matched_group->hitchance_override_value.value );
 					e.has_value_pill = true;
 				}
 				else
 				{
-					e.value[ 0 ] = '\0';
 					e.has_value_pill = false;
+					switch ( e.mode )
+					{
+					case xui::bind_mode::toggle:
+						std::snprintf( e.value, sizeof( e.value ), "toggle" );
+						break;
+					case xui::bind_mode::hold_on:
+						std::snprintf( e.value, sizeof( e.value ), "hold" );
+						break;
+					case xui::bind_mode::hold_off:
+						std::snprintf( e.value, sizeof( e.value ), "release" );
+						break;
+					default:
+						std::snprintf( e.value, sizeof( e.value ), "on" );
+						break;
+					}
 				}
 				continue;
 			}
@@ -351,48 +424,92 @@ namespace rendering {
 			auto is_legit_group{ false };
 			for ( auto i = 0u; i < settings::combat::legitbot::k_group_count; ++i )
 			{
-				const auto& g = settings::g_combat.m_legitbot.groups[ i ];
-				if ( setting == &g.aimbot || setting == &g.rcs || setting == &g.standalone_rcs || setting == &g.triggerbot || setting == &g.autowall || setting == &g.visualize_fov || setting == &g.trigger_head_only || setting == &g.give_me_your_seed )
+				if ( is_in_legit_group( setting, settings::g_combat.m_legitbot.groups[ i ] ) )
 				{
 					is_legit_group = true;
 					break;
 				}
 			}
+			if ( !is_legit_group )
+			{
+				for ( auto i = 0u; i < settings::combat::legitbot::k_weapon_count; ++i )
+				{
+					if ( is_in_legit_group( setting, settings::g_combat.m_legitbot.weapons[ i ].cfg ) )
+					{
+						is_legit_group = true;
+						break;
+					}
+				}
+			}
 
 			if ( is_legit_group )
 			{
-				if ( !settings::g_combat.m_legitbot.enabled.value || !has_weapon )
+				if ( !settings::g_combat.m_legitbot.enabled.value )
 				{
 					continue;
 				}
 
-				const auto* active_group = &settings::g_combat.m_legitbot.get_group( ctx.weapon_type, ctx.item_def_idx );
-				auto is_active{ false };
-
-				if ( setting == &active_group->aimbot || setting == &active_group->rcs || setting == &active_group->standalone_rcs || setting == &active_group->triggerbot || setting == &active_group->autowall || setting == &active_group->visualize_fov || setting == &active_group->trigger_head_only || setting == &active_group->give_me_your_seed )
+				if ( ctx.valid )
 				{
-					is_active = true;
+					if ( !is_in_legit_group( setting, *active_legit_group ) )
+					{
+						continue;
+					}
 				}
 
-				if ( is_active && setting == &active_group->give_me_your_seed && !active_group->triggerbot.value )
+				if ( setting == &active_legit_group->give_me_your_seed && !active_legit_group->triggerbot.value )
 				{
-					is_active = false;
+					continue;
 				}
 
-				if ( !is_active )
+				std::string clean_name = setting->name;
+				if ( clean_name.empty( ) || clean_name == "enabled" )
+				{
+					if ( !setting->category.empty( ) )
+						clean_name = setting->category;
+					else
+						clean_name = "legitbot";
+				}
+
+				bool duplicate = false;
+				for ( auto j = 0; j < count; ++j )
+				{
+					if ( std::strcmp( entries[ j ].name, clean_name.c_str( ) ) == 0 )
+					{
+						duplicate = true;
+						break;
+					}
+				}
+				if ( duplicate )
 				{
 					continue;
 				}
 
 				auto& e = entries[ count++ ];
-				e.name = setting->name.c_str( );
+				std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
+				e.name[ sizeof( e.name ) - 1 ] = '\0';
 				e.mode = setting->bind.mode;
-				e.value[ 0 ] = '\0';
 				e.has_value_pill = false;
+
+				switch ( e.mode )
+				{
+				case xui::bind_mode::toggle:
+					std::snprintf( e.value, sizeof( e.value ), "toggle" );
+					break;
+				case xui::bind_mode::hold_on:
+					std::snprintf( e.value, sizeof( e.value ), "hold" );
+					break;
+				case xui::bind_mode::hold_off:
+					std::snprintf( e.value, sizeof( e.value ), "release" );
+					break;
+				default:
+					std::snprintf( e.value, sizeof( e.value ), "on" );
+					break;
+				}
 				continue;
 			}
 
-			if ( setting == &settings::g_combat.m_antiaim.enabled || setting == &settings::g_combat.m_antiaim.manual_left || setting == &settings::g_combat.m_antiaim.manual_right || setting == &settings::g_combat.m_antiaim.hide_shots || setting == &settings::g_combat.m_antiaim.avoid_backstab || setting == &settings::g_combat.m_antiaim.direction_indicator )
+			if ( setting == &settings::g_combat.m_antiaim.manual_left || setting == &settings::g_combat.m_antiaim.manual_right || setting == &settings::g_combat.m_antiaim.hide_shots || setting == &settings::g_combat.m_antiaim.avoid_backstab || setting == &settings::g_combat.m_antiaim.direction_indicator )
 			{
 				if ( !settings::g_combat.m_antiaim.enabled.value )
 				{
@@ -400,14 +517,52 @@ namespace rendering {
 				}
 			}
 
+			std::string clean_name = setting->name;
+			if ( clean_name.empty( ) || clean_name == "enabled" )
+			{
+				if ( !setting->category.empty( ) )
+					clean_name = setting->category;
+				else
+					clean_name = "unnamed";
+			}
+
+			bool duplicate = false;
+			for ( auto j = 0; j < count; ++j )
+			{
+				if ( std::strcmp( entries[ j ].name, clean_name.c_str( ) ) == 0 )
+				{
+					duplicate = true;
+					break;
+				}
+			}
+			if ( duplicate )
+			{
+				continue;
+			}
+
 			auto& e = entries[ count++ ];
-			e.name = setting->name.c_str( );
+			std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
+			e.name[ sizeof( e.name ) - 1 ] = '\0';
 			e.mode = setting->bind.mode;
-			e.value[ 0 ] = '\0';
 			e.has_value_pill = false;
+
+			switch ( e.mode )
+			{
+			case xui::bind_mode::toggle:
+				std::snprintf( e.value, sizeof( e.value ), "toggle" );
+				break;
+			case xui::bind_mode::hold_on:
+				std::snprintf( e.value, sizeof( e.value ), "hold" );
+				break;
+			case xui::bind_mode::hold_off:
+				std::snprintf( e.value, sizeof( e.value ), "release" );
+				break;
+			default:
+				std::snprintf( e.value, sizeof( e.value ), "on" );
+				break;
+			}
 		}
 
-		static char slider_names[ 32 ][ 64 ];
 		for ( const auto entry : xui::slider_binds::all( ) )
 		{
 			if ( !entry )
@@ -423,37 +578,60 @@ namespace rendering {
 					break;
 				}
 			}
+			if ( !is_rage_group )
+			{
+				for ( auto i = 0u; i < settings::combat::ragebot::k_weapon_count; ++i )
+				{
+					const auto& w = settings::g_combat.m_ragebot.weapons[ i ].cfg;
+					if ( entry->ptr == &w.hitchance.value || entry->ptr == &w.min_damage.value || entry->ptr == &w.max_fov.value || entry->ptr == &w.pointscale.value )
+					{
+						is_rage_group = true;
+						break;
+					}
+				}
+			}
 
 			if ( is_rage_group )
 			{
-				if ( !settings::g_combat.m_ragebot.enabled || !has_weapon )
+				if ( !settings::g_combat.m_ragebot.enabled )
 				{
 					continue;
 				}
 
-				const auto active_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type, ctx.item_def_idx );
-				if ( entry->ptr != &active_group->hitchance.value && entry->ptr != &active_group->min_damage.value && entry->ptr != &active_group->max_fov.value && entry->ptr != &active_group->pointscale.value )
+				if ( ctx.valid )
 				{
-					continue;
+					if ( entry->ptr != &active_rage_group->hitchance.value && entry->ptr != &active_rage_group->min_damage.value && entry->ptr != &active_rage_group->max_fov.value && entry->ptr != &active_rage_group->pointscale.value )
+					{
+						continue;
+					}
 				}
 			}
 
 			for ( std::size_t i = 0; i < entry->count; ++i )
 			{
 				const auto& b = entry->binds[ i ];
-				if ( b.key == 0 || !b.active || count >= 32 )
+				if ( b.key == 0 || !b.active || count >= k_max_entries )
+					continue;
+
+				const auto hash_pos = entry->label.find( "##" );
+				const auto name_len = ( hash_pos != std::string::npos ) ? hash_pos : entry->label.size( );
+				std::string clean_name = entry->label.substr( 0, name_len );
+
+				bool duplicate = false;
+				for ( auto j = 0; j < count; ++j )
+				{
+					if ( std::strcmp( entries[ j ].name, clean_name.c_str( ) ) == 0 )
+					{
+						duplicate = true;
+						break;
+					}
+				}
+				if ( duplicate )
 					continue;
 
 				auto& e = entries[ count++ ];
-
-				const auto hash_pos = entry->label.find( "##" );
-				auto& clean_name = slider_names[ count - 1 ];
-				const auto name_len = ( hash_pos != std::string::npos ) ? hash_pos : entry->label.size( );
-				const auto copy_len = std::min( name_len, sizeof( clean_name ) - 1 );
-				std::memcpy( clean_name, entry->label.data( ), copy_len );
-				clean_name[ copy_len ] = '\0';
-
-				e.name = clean_name;
+				std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
+				e.name[ sizeof( e.name ) - 1 ] = '\0';
 				e.mode = b.mode;
 
 				if ( entry->is_integral )
@@ -498,12 +676,8 @@ namespace rendering {
 		{
 			const auto& e = entries[ i ];
 			const auto [nw, nh] = xdraw::measure_text( e.name );
-			float row_w = inner_pad + ( nw + text_pad_x * 2.0f ) + inner_pad;
-			if ( e.has_value_pill )
-			{
-				const auto [vw, vh] = xdraw::measure_text( e.value );
-				row_w += ( vw + text_pad_x * 2.0f ) + inner_pad;
-			}
+			const auto [vw, vh] = xdraw::measure_text( e.value );
+			const float row_w = inner_pad + ( nw + text_pad_x * 2.0f ) + inner_pad + ( vw + text_pad_x * 2.0f ) + inner_pad;
 			if ( row_w > max_w )
 			{
 				max_w = row_w;
@@ -632,34 +806,29 @@ namespace rendering {
 			const auto row_alpha = anim.alpha.alpha( ) * master_alpha;
 			const auto draw_y = base_ry + anim.offset_y.value( );
 			const auto [nw, nh] = xdraw::measure_text( e.name );
+			const auto [vw, vh] = xdraw::measure_text( e.value );
 			const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
 
+			const auto name_pill_w = nw + text_pad_x * 2.0f;
+			const auto value_pill_w = vw + text_pad_x * 2.0f;
+			const auto row_w = inner_pad + name_pill_w + inner_pad + value_pill_w + inner_pad;
+			anim.last_w = row_w;
+
+			draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
+			draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
+			draw_list.rect_filled( x + inner_pad, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
+			draw_list.text( x + inner_pad + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, s.text.alpha( static_cast< std::uint8_t >( s.text.a * row_alpha ) ) );
+
+			const auto vpx = x + inner_pad + name_pill_w + inner_pad;
 			if ( e.has_value_pill )
 			{
-				const auto [vw, vh] = xdraw::measure_text( e.value );
-				const auto name_pill_w = nw + text_pad_x * 2.0f;
-				const auto value_pill_w = vw + text_pad_x * 2.0f;
-				const auto row_w = inner_pad + name_pill_w + inner_pad + value_pill_w + inner_pad;
-
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-				draw_list.rect_filled( x + inner_pad, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( x + inner_pad + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
-
-				const auto vpx = x + inner_pad + name_pill_w + inner_pad;
 				draw_list.rect_filled( vpx, draw_y + inner_pad, value_pill_w, inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
 				draw_list.text( vpx + text_pad_x, draw_y + ( row_h - vh ) * 0.5f + text_nudge, e.value, s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * row_alpha ) ) );
 			}
 			else
 			{
-				const auto name_pill_w = nw + text_pad_x * 2.0f;
-				const auto row_w = inner_pad + name_pill_w + inner_pad;
-				const auto text_col = ( e.mode == xui::bind_mode::toggle ) ? s.text_dim : s.accent;
-
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-				draw_list.rect_filled( x + inner_pad, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( x + inner_pad + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, text_col.alpha( static_cast< std::uint8_t >( text_col.a * row_alpha ) ) );
+				draw_list.rect_filled( vpx, draw_y + inner_pad, value_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
+				draw_list.text( vpx + text_pad_x, draw_y + ( row_h - vh ) * 0.5f + text_nudge, e.value, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
 			}
 
 			current_offset_y += row_h + row_spacing;
@@ -682,8 +851,7 @@ namespace rendering {
 				const auto row_alpha = it->second.alpha.alpha( ) * master_alpha;
 				const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
 				const auto draw_y = base_ry + it->second.offset_y.value( );
-				const auto [nw, nh] = xdraw::measure_text( it->first.c_str( ) );
-				const auto row_w = inner_pad + ( nw + text_pad_x * 2.0f ) + inner_pad;
+				const auto row_w = ( it->second.last_w > 0.0f ) ? it->second.last_w : header_w;
 
 				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
 				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );

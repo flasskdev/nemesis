@@ -160,7 +160,7 @@ namespace rendering {
             { { "general" }, 1 },
             { { "general" }, 1 },
             { { "enemy", "team", "local" }, 3 },
-            { { "guns", "knives", "gloves", "agents" }, 4 },
+            { { "guns", "knives", "gloves", "agents", "music" }, 5 },
             { { "main", "view", "hud", "effects" }, 4 },
             { { "general" }, 1 }
         };
