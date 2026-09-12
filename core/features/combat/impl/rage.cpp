@@ -2,6 +2,7 @@
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
+#include <utilities/diag.hpp>
 #include <utilities/threadpool/threadpool.hpp>
 #include <core/systems/systems.hpp>
 #include <core/features/features.hpp>
@@ -336,10 +337,12 @@ namespace features::combat {
         if (!settings::g_combat.m_ragebot.enabled)
             return false;
 
+        diag::exception_scope rage_scope{ "rage: run_gun / configuration" };
         auto& shared_ctx = g_shared.ctx();
         const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
         const auto autostop_enabled = config.autostop.value;
 
+        diag::set_exception_phase("rage: run_gun / gather_candidates");
         auto candidates = this->gather_candidates(local);
         {
             std::lock_guard lock(m_debug_mtx);
@@ -349,6 +352,7 @@ namespace features::combat {
         if (candidates.empty())
             return false;
 
+        diag::set_exception_phase("rage: run_gun / eye_candidates");
         auto eye_candidates = g_shared.sh().get_candidates();
         if (eye_candidates.count == 0)
         {
@@ -380,6 +384,7 @@ namespace features::combat {
                 return hits_out;
             };
 
+        diag::set_exception_phase("rage: run_gun / movement_and_selection");
         const auto& prestate = systems::g_prediction.pre();
         const auto duckpeek_active = settings::g_combat.m_duckpeek.enabled.value && ctx.on_ground;
         const auto movement_services = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pMovementServices"_hash));
@@ -698,6 +703,7 @@ namespace features::combat {
 
     std::vector<rage::scan_hit> rage::scan_players(const math::vector3& eye, float inaccuracy, const aim_context& ctx, std::vector<candidate>& candidates, const systems::local::snapshot& local) const
     {
+        diag::exception_scope scan_scope{ "rage: scan_players / dispatch" };
         std::vector<std::vector<scan_hit>> per_candidate(candidates.size());
 
         // Parallel processing for performance
@@ -744,14 +750,21 @@ namespace features::combat {
 
     std::vector<rage::scan_hit> rage::scan_player(const math::vector3& eye, float inaccuracy, const aim_context& ctx, candidate& cand, shared::lagcomp::record* record, const systems::local::snapshot& local) const
     {
-        if (!cand.pawn || cand.record_count <= 0 || cand.health <= 0)
+        if (!cand.pawn || cand.record_count <= 0 || cand.health <= 0 ||
+            !record || !record->valid || record->bone_count <= 0)
             return {};
 
         const auto& shared_ctx = g_shared.ctx();
         const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
 
         const auto game_scene_node = memory::read<std::uintptr_t>(cand.pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
+        if (!game_scene_node)
+            return {};
+
         const auto hitbox_set = systems::g_hitboxes.query(game_scene_node);
+        if (hitbox_set.count <= 0)
+            return {};
+
         const auto skeleton = g_shared.lc().get_skeleton(*record);
         const auto pen_ctx = g_shared.pen().prepare_target(cand.pawn, record);
 
@@ -829,7 +842,9 @@ namespace features::combat {
                 }
             }
 
-            if (!hb || hb->bone < 0 || hb->bone >= 28)
+            if (!hb || hb->bone < 0 ||
+                hb->bone >= static_cast<int>(skeleton.size()) ||
+                hb->bone >= record->bone_count)
                 continue;
 
             const auto& bone = skeleton[hb->bone];
@@ -1143,7 +1158,9 @@ namespace features::combat {
                 for (auto i = 0; i < hitbox_set.count; ++i)
                 {
                     const auto& hb = hitbox_set.entries[i];
-                    if (hb.bone < 0 || hb.bone >= 28)
+                    if (hb.bone < 0 ||
+                        hb.bone >= static_cast<int>(skeleton.size()) ||
+                        hb.bone >= record->bone_count)
                         continue;
 
                     const auto& bone = skeleton[hb.bone];
@@ -1261,7 +1278,9 @@ namespace features::combat {
                 for (auto i = 0; i < hitbox_set.count; ++i)
                 {
                     const auto& hb = hitbox_set.entries[i];
-                    if (hb.bone < 0 || hb.bone >= 28)
+                    if (hb.bone < 0 ||
+                        hb.bone >= static_cast<int>(skeleton.size()) ||
+                        hb.bone >= record->bone_count)
                         continue;
 
                     const auto& bone = skeleton[hb.bone];
