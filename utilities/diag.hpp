@@ -266,19 +266,45 @@ namespace diag {
 			writef( level::info, "diagnostics log path=%ls", g_log_path );
 		}
 
-		const auto* dos_header =
-			reinterpret_cast<const IMAGE_DOS_HEADER*>( module_handle );
-		if ( dos_header->e_magic == IMAGE_DOS_SIGNATURE )
+		if ( module_handle )
 		{
-			const auto* nt_headers =
-				reinterpret_cast<const IMAGE_NT_HEADERS*>(
-					reinterpret_cast<std::uintptr_t>( module_handle ) +
-					dos_header->e_lfanew );
-			if ( nt_headers->Signature == IMAGE_NT_SIGNATURE )
+			__try
 			{
-				g_module_end =
-					reinterpret_cast<std::uintptr_t>( module_handle ) +
-					nt_headers->OptionalHeader.SizeOfImage;
+				const auto* dos_header =
+					reinterpret_cast<const IMAGE_DOS_HEADER*>( module_handle );
+				if ( dos_header->e_magic == IMAGE_DOS_SIGNATURE )
+				{
+					const auto* nt_headers =
+						reinterpret_cast<const IMAGE_NT_HEADERS*>(
+							reinterpret_cast<std::uintptr_t>( module_handle ) +
+							dos_header->e_lfanew );
+					if ( nt_headers->Signature == IMAGE_NT_SIGNATURE )
+					{
+						g_module_end =
+							reinterpret_cast<std::uintptr_t>( module_handle ) +
+							nt_headers->OptionalHeader.SizeOfImage;
+					}
+				}
+			}
+			__except ( EXCEPTION_EXECUTE_HANDLER )
+			{
+				g_module_end = 0;
+			}
+
+			if ( !g_module_end )
+			{
+				std::size_t total_size = 0;
+				std::uintptr_t current = reinterpret_cast<std::uintptr_t>( module_handle );
+				MEMORY_BASIC_INFORMATION mbi{};
+				while ( VirtualQuery( reinterpret_cast<const void*>( current ), &mbi, sizeof( mbi ) ) )
+				{
+					if ( reinterpret_cast<std::uintptr_t>( mbi.AllocationBase ) != reinterpret_cast<std::uintptr_t>( module_handle ) || mbi.State == MEM_FREE )
+						break;
+
+					total_size += mbi.RegionSize;
+					current += mbi.RegionSize;
+				}
+				g_module_end = reinterpret_cast<std::uintptr_t>( module_handle ) + ( total_size ? total_size : 0x2000000 );
 			}
 		}
 

@@ -22,6 +22,59 @@ namespace {
 
 	std::atomic<LPTOP_LEVEL_EXCEPTION_FILTER> g_previous_exception_filter{};
 	PVOID g_vectored_exception_handler{};
+	std::atomic<bool> g_is_attached{ false };
+
+	HMODULE resolve_self_module( HMODULE candidate = nullptr )
+	{
+		if ( candidate )
+		{
+			MEMORY_BASIC_INFORMATION mbi{};
+			if ( VirtualQuery( candidate, &mbi, sizeof( mbi ) ) && mbi.State == MEM_COMMIT )
+			{
+				return static_cast<HMODULE>( mbi.AllocationBase );
+			}
+		}
+
+		MEMORY_BASIC_INFORMATION mbi{};
+		if ( VirtualQuery( reinterpret_cast<const void*>( &resolve_self_module ), &mbi, sizeof( mbi ) ) && mbi.AllocationBase )
+		{
+			return static_cast<HMODULE>( mbi.AllocationBase );
+		}
+
+		return candidate;
+	}
+
+	void register_exception_table( HMODULE module_base )
+	{
+		if ( !module_base )
+			return;
+
+		const auto base = reinterpret_cast<std::uintptr_t>( module_base );
+		__try
+		{
+			const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>( base );
+			if ( dos->e_magic != IMAGE_DOS_SIGNATURE )
+				return;
+
+			const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>( base + dos->e_lfanew );
+			if ( nt->Signature != IMAGE_NT_SIGNATURE )
+				return;
+
+			const auto& pdata = nt->OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_EXCEPTION ];
+			if ( pdata.VirtualAddress && pdata.Size )
+			{
+				auto* function_table = reinterpret_cast<PRUNTIME_FUNCTION>( base + pdata.VirtualAddress );
+				const DWORD entry_count = pdata.Size / sizeof( RUNTIME_FUNCTION );
+				if ( entry_count > 0 )
+				{
+					RtlAddFunctionTable( function_table, entry_count, static_cast<DWORD64>( base ) );
+				}
+			}
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+		}
+	}
 
 	LONG WINAPI diag_unhandled_exception_filter( EXCEPTION_POINTERS* info );
 
@@ -318,7 +371,7 @@ namespace {
 
 	DWORD WINAPI init_thread_impl( LPVOID param )
 	{
-		const auto module_handle = static_cast<HMODULE>( param );
+		const auto module_handle = resolve_self_module( static_cast<HMODULE>( param ) );
 
 		diag::step( "stage: thread start" );
 		if (loader_session::connect())
@@ -525,9 +578,24 @@ namespace {
 
 extern "C" int __stdcall entry( HMODULE module_handle, DWORD reason, LPVOID reserved )
 {
-	if ( reason == DLL_PROCESS_ATTACH )
+	module_handle = resolve_self_module( module_handle );
+
+	register_exception_table( module_handle );
+
+	// Support manual mappers that execute entry via CreateRemoteThread(..., entry, base, ...).
+	// In that scenario, reason (RDX) is typically 0 (which numeric-wise equals DLL_PROCESS_DETACH).
+	// If the DLL has not attached yet, treat reason == 0 or DLL_PROCESS_ATTACH as the initial attach.
+	const bool is_initial_attach = !g_is_attached.load( std::memory_order_acquire ) &&
+		( reason == DLL_PROCESS_ATTACH || reason == 0 );
+
+	if ( is_initial_attach )
 	{
-		_CRT_INIT( module_handle, reason, reserved );
+		if ( g_is_attached.exchange( true, std::memory_order_acq_rel ) )
+		{
+			return 1;
+		}
+
+		_CRT_INIT( module_handle, DLL_PROCESS_ATTACH, reserved );
 		DisableThreadLibraryCalls( module_handle );
 
 		diag::set_module( module_handle );
@@ -549,8 +617,10 @@ extern "C" int __stdcall entry( HMODULE module_handle, DWORD reason, LPVOID rese
 		CloseHandle( thread );
 		return 1;
 	}
-	else if ( reason == DLL_PROCESS_DETACH )
+	else if ( reason == DLL_PROCESS_DETACH && g_is_attached.load( std::memory_order_acquire ) )
 	{
+		g_is_attached.store( false, std::memory_order_release );
+
 #if defined( DEV )
 		if ( g_vectored_exception_handler )
 		{
