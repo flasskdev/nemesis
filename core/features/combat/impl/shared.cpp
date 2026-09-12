@@ -951,7 +951,8 @@ namespace features::combat {
 	{
 		math::vector2 out{};
 
-		memory::call<void>(PATTERN (patterns::weapon_calculate_spread), static_cast< std::int16_t >( item_def_idx ), num_bullets, 0, static_cast< std::uint32_t >( seed + 1 ), accuracy, spread, recoil_index, &out.x, &out.y );
+		const auto fire_mode = this->quick_revolver_active( ) ? 1 : 0;
+		memory::call<void>(PATTERN (patterns::weapon_calculate_spread), static_cast< std::int16_t >( item_def_idx ), num_bullets, fire_mode, static_cast< std::uint32_t >( seed + 1 ), accuracy, spread, recoil_index, &out.x, &out.y );
 
 		return out;
 	}
@@ -1257,8 +1258,26 @@ namespace features::combat {
 
 	float shared::get_spread( ) const
 	{
+		const auto mode_offset = SCHEMA( "C_CSWeaponBase", "m_weaponMode"_hash );
+		const auto ask_as_secondary = mode_offset > 0 && this->quick_revolver_active( );
+		const auto previous_mode = ask_as_secondary
+			? memory::read<int>( this->m_ctx.weapon + mode_offset )
+			: 0;
+
+		if ( ask_as_secondary )
+		{
+			memory::write( this->m_ctx.weapon + mode_offset, 1 );
+		}
+
 		static const auto get_spread = PATTERN( patterns::get_spread );
-		return memory::call<float>( get_spread, this->m_ctx.weapon );
+		const auto spread = memory::call<float>( get_spread, this->m_ctx.weapon );
+
+		if ( ask_as_secondary )
+		{
+			memory::write( this->m_ctx.weapon + mode_offset, previous_mode );
+		}
+
+		return spread;
 	}
 
 	float shared::get_inaccuracy( bool update_accuracy_penalty ) const
@@ -1284,10 +1303,26 @@ namespace features::combat {
 			memory::call<void>(PATTERN (patterns::weapon_update_accuracy), this->m_ctx.weapon );
 		}
 
+		const auto mode_offset = SCHEMA( "C_CSWeaponBase", "m_weaponMode"_hash );
+		const auto ask_as_secondary = mode_offset > 0 && this->quick_revolver_active( );
+		const auto previous_mode = ask_as_secondary
+			? memory::read<int>( this->m_ctx.weapon + mode_offset )
+			: 0;
+
+		if ( ask_as_secondary )
+		{
+			memory::write( this->m_ctx.weapon + mode_offset, 1 );
+		}
+
 		static const auto get_inaccuracy = PATTERN( patterns::get_inaccuracy );
 		const auto inaccuracy = memory::call<float>(
 			get_inaccuracy, this->m_ctx.weapon,
 			static_cast<float*>( nullptr ), static_cast<float*>( nullptr ) );
+
+		if ( ask_as_secondary )
+		{
+			memory::write( this->m_ctx.weapon + mode_offset, previous_mode );
+		}
 
 		std::memcpy( reinterpret_cast< void* >( this->m_ctx.weapon + accuracy_state_begin ), backup.data( ), accuracy_state_size );
 
@@ -1320,10 +1355,26 @@ namespace features::combat {
 
 		memory::call<void>(PATTERN (patterns::weapon_update_accuracy), this->m_ctx.weapon );
 
+		const auto mode_offset = SCHEMA( "C_CSWeaponBase", "m_weaponMode"_hash );
+		const auto ask_as_secondary = mode_offset > 0 && this->quick_revolver_active( );
+		const auto previous_mode = ask_as_secondary
+			? memory::read<int>( this->m_ctx.weapon + mode_offset )
+			: 0;
+
+		if ( ask_as_secondary )
+		{
+			memory::write( this->m_ctx.weapon + mode_offset, 1 );
+		}
+
 		static const auto get_inaccuracy = PATTERN( patterns::get_inaccuracy );
 		const auto inaccuracy = memory::call<float>(
 			get_inaccuracy, this->m_ctx.weapon,
 			static_cast<float*>( nullptr ), static_cast<float*>( nullptr ) );
+
+		if ( ask_as_secondary )
+		{
+			memory::write( this->m_ctx.weapon + mode_offset, previous_mode );
+		}
 
 		memory::write( local_pawn + SCHEMA( "C_BaseEntity", "m_vecAbsVelocity"_hash ), old_velocity );
 		memory::write( local_pawn + SCHEMA( "C_BaseEntity", "m_iEFlags"_hash ), old_eflags );
@@ -1371,7 +1422,20 @@ namespace features::combat {
 			return tick_base >= this->m_last_shoot_tick + 2 && ( client_tick >= next_primary || client_tick >= next_secondary );
 		}
 
+		if ( this->m_ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver
+			&& settings::g_combat.m_autos.revolver_quick.value )
+		{
+			const auto next_secondary = memory::read<int>( this->m_ctx.weapon + SCHEMA( "C_BasePlayerWeapon", "m_nNextSecondaryAttackTick"_hash ) );
+			return tick_base >= this->m_last_shoot_tick + 2 && client_tick >= next_primary && client_tick >= next_secondary;
+		}
+
 		return tick_base >= this->m_last_shoot_tick + 2 && client_tick >= next_primary;
+	}
+
+	bool shared::quick_revolver_active( ) const
+	{
+		return this->m_ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver
+			&& settings::g_combat.m_autos.revolver_quick.value;
 	}
 
 	bool shared::is_max_accuracy( float inaccuracy ) const

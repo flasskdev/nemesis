@@ -9,7 +9,7 @@ namespace rendering {
 	namespace detail {
 
 		constexpr const char* hitbox_names_legit[ ]{ "head", "chest", "stomach", "arms", "legs" };
-		inline menu_weapons::weapon_selection weapon_sel_legit{ 2, -1 };
+		using menu_weapons::weapon_sel_legit;
 
 	} // namespace detail
 
@@ -18,12 +18,16 @@ namespace rendering {
 		auto& s = settings::g_combat;
 		auto& lb = s.m_legitbot;
 
-		const auto is_custom_wep = (detail::weapon_sel_legit.weapon_flat_idx >= 0 &&
-			detail::weapon_sel_legit.weapon_flat_idx < static_cast<int>(cstypes::weapons::k_total_weapons));
+		const auto is_custom_wep = (menu_weapons::weapon_sel_legit.weapon_flat_idx >= 0 &&
+			menu_weapons::weapon_sel_legit.weapon_flat_idx < static_cast<int>(cstypes::weapons::k_total_weapons));
 
 		auto& wg = is_custom_wep
-			? lb.weapons[detail::weapon_sel_legit.weapon_flat_idx].cfg
-			: lb.groups[std::clamp(detail::weapon_sel_legit.group_idx, 0, 5)];
+			? lb.weapons[menu_weapons::weapon_sel_legit.weapon_flat_idx].cfg
+			: lb.groups[std::clamp(menu_weapons::weapon_sel_legit.group_idx, 0, 5)];
+
+		const auto sel_scope_id = is_custom_wep
+			? ( static_cast< std::uintptr_t >( 0x4C425F57 ) + static_cast< std::uintptr_t >( menu_weapons::weapon_sel_legit.weapon_flat_idx ) )
+			: ( static_cast< std::uintptr_t >( 0x4C425F47 ) + static_cast< std::uintptr_t >( std::clamp( menu_weapons::weapon_sel_legit.group_idx, 0, 5 ) ) );
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
@@ -50,10 +54,34 @@ namespace rendering {
 		{
 			xui::toggle( "Enable Legitbot", lb.enabled );
 			xui::layout::spacing( 3.0f );
-			menu_weapons::draw_selector( "##lb_weapon_select", detail::weapon_sel_legit, true );
+			menu_weapons::draw_selector( "##lb_weapon_select", menu_weapons::weapon_sel_legit, true );
 			if ( is_custom_wep )
 			{
-				auto& ow = lb.weapons[ detail::weapon_sel_legit.weapon_flat_idx ];
+				auto& ow = lb.weapons[ menu_weapons::weapon_sel_legit.weapon_flat_idx ];
+
+				if ( !ow.override_group.value )
+				{
+					bool has_bind = false;
+					for ( const auto s : { &ow.cfg.aimbot, &ow.cfg.rcs, &ow.cfg.standalone_rcs, &ow.cfg.triggerbot, &ow.cfg.trigger_head_only, &ow.cfg.give_me_your_seed, &ow.cfg.autowall, &ow.cfg.smoke_check, &ow.cfg.scope_check, &ow.cfg.flash_check, &ow.cfg.ground_check, &ow.cfg.visualize_fov } )
+					{
+						if ( s->bind.key != 0 ) { has_bind = true; break; }
+					}
+					if ( !has_bind )
+					{
+						for ( const auto ptr : { ( void* )&ow.cfg.fov.value, ( void* )&ow.cfg.smooth.value, ( void* )&ow.cfg.rcs_min.value, ( void* )&ow.cfg.rcs_max.value, ( void* )&ow.cfg.trigger_delay.value, ( void* )&ow.cfg.trigger_hitchance.value, ( void* )&ow.cfg.standalone_rcs_strength.value, ( void* )&ow.cfg.standalone_rcs_min.value, ( void* )&ow.cfg.standalone_rcs_max.value, ( void* )&ow.cfg.min_damage.value } )
+						{
+							if ( auto* sb = xui::slider_binds::find_by_ptr( ptr ) )
+							{
+								if ( sb->count > 0 ) { has_bind = true; break; }
+							}
+						}
+					}
+					if ( has_bind )
+					{
+						ow.override_group.value = true;
+					}
+				}
+
 				xui::layout::spacing( 2.0f );
 				xui::toggle( "Custom Weapon Settings", ow.override_group );
 				if ( !ow.override_group.value )
@@ -61,11 +89,13 @@ namespace rendering {
 					xui::layout::spacing( 2.0f );
 					if ( xui::button( "Copy Group Settings##lb" ) )
 					{
-						ow.cfg.copy_values_from( lb.groups[ std::clamp( detail::weapon_sel_legit.group_idx, 0, 5 ) ] );
+						ow.cfg.copy_values_from( lb.groups[ std::clamp( menu_weapons::weapon_sel_legit.group_idx, 0, 5 ) ] );
 						ow.override_group.value = true;
 					}
 				}
 			}
+
+			xui::push_id( sel_scope_id );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Aimbot", wg.aimbot );
 			xui::layout::spacing( 3.0f );
@@ -91,6 +121,7 @@ namespace rendering {
 				xui::slider_int( "max##rcs", wg.rcs_max, 50, 150, "%d%%" );
 				xui::end_popup( );
 			}
+			xui::pop_id( );
 
 			xui::end_child( );
 		}
@@ -101,7 +132,7 @@ namespace rendering {
 
 		if ( xui::begin_child( "##legitbot_trigger_accuracy", col_w, body_h - k_header_h, true ) )
 		{
-
+			xui::push_id( sel_scope_id );
 			xui::toggle( "Check Smoke", wg.smoke_check );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Check Scope", wg.scope_check );
@@ -138,6 +169,7 @@ namespace rendering {
 				xui::slider_int( "min damage##aw", wg.min_damage, 1, 125, "%d" );
 				xui::end_popup( );
 			}
+			xui::pop_id( );
 
 			xui::end_child( );
 		}

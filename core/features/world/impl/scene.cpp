@@ -571,7 +571,7 @@ namespace features::world {
 }}
 )VMAT", path, path);
 		const auto material_name = std::format (
-			"velocity_skybox_{:08x}", fnv1a::runtime_hash (path));
+			"mintaly_skybox_{:08x}", fnv1a::runtime_hash (path));
 		const auto material = systems::materials::load (material_source.c_str (), material_name.c_str ());
 		if (!material) {
 			logging::console::print (xs ("failed to create skybox material."));

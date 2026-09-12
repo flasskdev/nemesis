@@ -45,7 +45,7 @@ namespace xdraw {
 			ComPtr<ID3D11Texture2D> white_tex{};
 			ComPtr<ID3D11ShaderResourceView> white_srv{};
 
-			draw_list lists[ 3 ]{};
+			draw_list lists[ static_cast< int >( layer::count ) ]{};
 
 			std::vector<std::unique_ptr<font>> fonts{};
 			std::vector<font*> font_stack{};
@@ -86,7 +86,7 @@ namespace xdraw {
 			ComPtr<ID3D11ShaderResourceView> glow_srv{};
 			ComPtr<ID3D11BlendState> glow_additive_blend{};
 
-			draw_list glow_lists[ 3 ]{};
+			draw_list glow_lists[ static_cast< int >( layer::count ) ]{};
 		};
 
 		static state g{};
@@ -2389,7 +2389,7 @@ namespace xdraw {
 			}
 		}
 
-		for ( auto i = 0; i < 3; ++i )
+		for ( auto i = 0; i < static_cast< int >( layer::count ); ++i )
 		{
 			detail::g.lists[ i ].clear( );
 			detail::g.glow_lists[ i ].clear( );
@@ -2581,7 +2581,7 @@ namespace xdraw {
 
 		auto has_any_glow{ false };
 
-		for ( auto i = 0; i < 3; ++i )
+		for ( auto i = 0; i < static_cast< int >( layer::count ); ++i )
 		{
 			if ( !d.glow_lists[ i ].vertices.empty( ) )
 			{
@@ -2613,7 +2613,7 @@ namespace xdraw {
 			glow_vp.MaxDepth = 1.0f;
 			ctx->RSSetViewports( 1, &glow_vp );
 
-			for ( auto i = 0; i < 3; ++i )
+			for ( auto i = 0; i < static_cast< int >( layer::count ); ++i )
 			{
 				detail::render_draw_list_to_rt( d.glow_lists[ i ], d.blur_cached_w, d.blur_cached_h );
 			}
@@ -2673,9 +2673,10 @@ namespace xdraw {
 			}
 		}
 
-		render_layer( d.lists[ 0 ] );
-		render_layer( d.lists[ 1 ] );
-		render_layer( d.lists[ 2 ] );
+		for ( auto i = 0; i < static_cast< int >( layer::count ); ++i )
+		{
+			render_layer( d.lists[ i ] );
+		}
 	}
 
 	draw_list& get( layer l )

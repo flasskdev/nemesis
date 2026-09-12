@@ -10,7 +10,7 @@ namespace rendering {
 
 		constexpr const char* hitbox_names[ ]{ "head", "chest", "stomach", "arms", "legs", "feet" };
 		constexpr const char* pitch_items[ ]{ "none", "down", "up" };
-		inline menu_weapons::weapon_selection weapon_sel_rage{ 2, -1 };
+		using menu_weapons::weapon_sel_rage;
 
 	} // namespace detail
 
@@ -26,12 +26,16 @@ namespace rendering {
 		auto& autos = s.m_autos;
 		auto& lg = s.m_lagcomp;
 
-		const auto is_custom_wep = (detail::weapon_sel_rage.weapon_flat_idx >= 0 &&
-			detail::weapon_sel_rage.weapon_flat_idx < static_cast<int>(cstypes::weapons::k_total_weapons));
+		const auto is_custom_wep = (menu_weapons::weapon_sel_rage.weapon_flat_idx >= 0 &&
+			menu_weapons::weapon_sel_rage.weapon_flat_idx < static_cast<int>(cstypes::weapons::k_total_weapons));
 
 		auto& wg = is_custom_wep
-			? rb.weapons[detail::weapon_sel_rage.weapon_flat_idx].cfg
-			: rb.groups[std::clamp(detail::weapon_sel_rage.group_idx, 0, 5)];
+			? rb.weapons[menu_weapons::weapon_sel_rage.weapon_flat_idx].cfg
+			: rb.groups[std::clamp(menu_weapons::weapon_sel_rage.group_idx, 0, 5)];
+
+		const auto sel_scope_id = is_custom_wep
+			? ( static_cast< std::uintptr_t >( 0x52425F57 ) + static_cast< std::uintptr_t >( menu_weapons::weapon_sel_rage.weapon_flat_idx ) )
+			: ( static_cast< std::uintptr_t >( 0x52425F47 ) + static_cast< std::uintptr_t >( std::clamp( menu_weapons::weapon_sel_rage.group_idx, 0, 5 ) ) );
 
 		const auto wx = this->m_x;
 		const auto wy = this->m_y;
@@ -59,7 +63,9 @@ namespace rendering {
 			xui::toggle( "Enable Ragebot", rb.enabled );
 			if ( xui::begin_popup( "##rb_popup", 220.0f ) )
 			{
+				xui::push_id( sel_scope_id );
 				xui::checkbox( "Force Bodyaim", wg.body_aim );
+				xui::pop_id( );
 				xui::checkbox( "Extrapolation", lg.extrapolation );
 				if ( lg.extrapolation.value )
 				{
@@ -70,10 +76,35 @@ namespace rendering {
 			}
 
 			xui::layout::spacing( 3.0f );
-			menu_weapons::draw_selector( "##rb_weapon_select", detail::weapon_sel_rage, false );
+			menu_weapons::draw_selector( "##rb_weapon_select", menu_weapons::weapon_sel_rage, false );
 			if ( is_custom_wep )
 			{
-				auto& ow = rb.weapons[ detail::weapon_sel_rage.weapon_flat_idx ];
+				auto& ow = rb.weapons[ menu_weapons::weapon_sel_rage.weapon_flat_idx ];
+
+				// If any keybind or slider bind was set on this weapon, auto-enable override_group
+				if ( !ow.override_group.value )
+				{
+					bool has_bind = false;
+					for ( const auto s : { &ow.cfg.silent, &ow.cfg.no_spread, &ow.cfg.body_aim, &ow.cfg.force_shot, &ow.cfg.force_shot_air, &ow.cfg.autostop, &ow.cfg.min_damage_override, &ow.cfg.hitchance_override, &ow.cfg.dynamic_pointscale, &ow.cfg.debug_multipoints } )
+					{
+						if ( s->bind.key != 0 ) { has_bind = true; break; }
+					}
+					if ( !has_bind )
+					{
+						for ( const auto ptr : { ( void* )&ow.cfg.hitchance.value, ( void* )&ow.cfg.min_damage.value, ( void* )&ow.cfg.max_fov.value, ( void* )&ow.cfg.pointscale.value } )
+						{
+							if ( auto* sb = xui::slider_binds::find_by_ptr( ptr ) )
+							{
+								if ( sb->count > 0 ) { has_bind = true; break; }
+							}
+						}
+					}
+					if ( has_bind )
+					{
+						ow.override_group.value = true;
+					}
+				}
+
 				xui::layout::spacing( 2.0f );
 				xui::toggle( "Custom Weapon Settings", ow.override_group );
 				if ( !ow.override_group.value )
@@ -81,11 +112,13 @@ namespace rendering {
 					xui::layout::spacing( 2.0f );
 					if ( xui::button( "Copy Group Settings##rb" ) )
 					{
-						ow.cfg.copy_values_from( rb.groups[ std::clamp( detail::weapon_sel_rage.group_idx, 0, 5 ) ] );
+						ow.cfg.copy_values_from( rb.groups[ std::clamp( menu_weapons::weapon_sel_rage.group_idx, 0, 5 ) ] );
 						ow.override_group.value = true;
 					}
 				}
 			}
+
+			xui::push_id( sel_scope_id );
 			xui::layout::spacing( 3.0f );
 			xui::toggle("Silent Aim", wg.silent);
 			xui::layout::spacing( 3.0f );
@@ -105,6 +138,7 @@ namespace rendering {
 			xui::slider_float( "Pointscale", wg.pointscale, 0.0f, 100.0f, "%.0f%%" );
 			xui::layout::spacing( 4.0f );
 			xui::multicombo( "Hitboxes", wg.hitboxes, detail::hitbox_names, 6 );
+			xui::pop_id( );
 
 			xui::end_child( );
 		}
@@ -133,8 +167,8 @@ namespace rendering {
 			xui::layout::spacing( 8.0f );
 
 			// Плавная анимация скрытия/появления авторевольвера (только для пистолетов при выключенном No Spread)
-			const auto group_idx = std::clamp( detail::weapon_sel_rage.group_idx, 0, 5 );
-			const bool should_show_revolver = ( group_idx == 0 && !wg.no_spread.value );
+			const auto group_idx = std::clamp( menu_weapons::weapon_sel_rage.group_idx, 0, 5 );
+			const bool should_show_revolver = ( group_idx == 0 );
 
 			auto revolver_anim = xui::anim::lerp(
 				xui::fnv1a( "auto_revolver_menu_anim" ),
@@ -200,6 +234,11 @@ namespace rendering {
 				}
 
 				xui::toggle( "Auto Revolver", autos.revolver );
+				if ( xui::begin_popup( "##revolver_popup", 220.0f ) )
+				{
+					xui::checkbox( "quick shot (rmb)", autos.revolver_quick );
+					xui::end_popup( );
+				}
 
 				input.mouse_clicked = saved_clicked;
 				xui::pop_style_color( 5 );

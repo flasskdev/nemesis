@@ -311,14 +311,14 @@ namespace rendering {
         const float final_x = amb_x + (amb_w - final_w) * 0.5f;
         const float final_y = amb_y + (amb_h - final_h) * 0.5f;
 
-        auto& top_dl = xdraw::get(xdraw::layer::top);
+        auto& modal_dl = xdraw::get(xdraw::layer::modal);
         auto& input_ref = xui::ctx().input;
 
         // Background dimming
         if (amb_reveal > 0.0f)
         {
             const auto vp = xdraw::viewport_size();
-            top_dl.rect_filled(0.0f, 0.0f, static_cast<float>(vp.first), static_cast<float>(vp.second),
+            modal_dl.rect_filled(0.0f, 0.0f, static_cast<float>(vp.first), static_cast<float>(vp.second),
                 xdraw::color{ 0, 0, 0, static_cast<std::uint8_t>(150.0f * amb_reveal) });
         }
 
@@ -373,21 +373,21 @@ namespace rendering {
         }
 
         // Record vertex start for entire modal window (background + children + widgets)
-        const std::size_t modal_vtx_start = top_dl.vertices.size();
+        const std::size_t modal_vtx_start = modal_dl.vertices.size();
 
         // Draw Window Background with Blur/Glass effect (full base opacities, scaled together at end)
         const auto amb_bg = tokens::col_dark.alpha(245);
         const auto amb_border = tokens::col_border.alpha(200);
 
         // Blurred background layer
-        top_dl.rect_filled_blurred(final_x, final_y, final_w, final_h, xdraw::corner_radius{ tokens::window_rounding },
+        modal_dl.rect_filled_blurred(final_x, final_y, final_w, final_h, xdraw::corner_radius{ tokens::window_rounding },
             xdraw::color{ 40, 40, 45, 180 });
 
         // Solid background
-        top_dl.rect_filled(final_x, final_y, final_w, final_h, amb_bg, xdraw::corner_radius{ tokens::window_rounding });
+        modal_dl.rect_filled(final_x, final_y, final_w, final_h, amb_bg, xdraw::corner_radius{ tokens::window_rounding });
 
         // Subtle specular highlight at top rim of modal
-        top_dl.rect_filled_gradient(final_x + 1.0f, final_y + 1.0f, final_w - 2.0f, 28.0f,
+        modal_dl.rect_filled_gradient(final_x + 1.0f, final_y + 1.0f, final_w - 2.0f, 28.0f,
             xdraw::color{ 255, 255, 255, 16 },
             xdraw::color{ 255, 255, 255, 16 },
             xdraw::color{ 255, 255, 255, 1 },
@@ -395,11 +395,11 @@ namespace rendering {
             xdraw::corner_radius::top(tokens::window_rounding));
 
         // Border
-        top_dl.rect(final_x, final_y, final_w, final_h, amb_border, xdraw::corner_radius{ tokens::window_rounding }, 1.0f);
+        modal_dl.rect(final_x, final_y, final_w, final_h, amb_border, xdraw::corner_radius{ tokens::window_rounding }, 1.0f);
 
         // Header: Title "AMBIENCE"
         xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::big]);
-        top_dl.text(final_x + 20.0f, final_y + 11.0f, "AMBIENCE", tokens::col_text);
+        modal_dl.text(final_x + 20.0f, final_y + 11.0f, "AMBIENCE", tokens::col_text);
         xdraw::pop_font();
 
         // Close Button Visual
@@ -408,7 +408,7 @@ namespace rendering {
 
         if (close_anim > 0.01f)
         {
-            top_dl.rect_filled(close_btn_x, close_btn_y, close_btn_size, close_btn_size,
+            modal_dl.rect_filled(close_btn_x, close_btn_y, close_btn_size, close_btn_size,
                 tokens::col_accent.alpha(static_cast<std::uint8_t>(40.0f * close_anim)),
                 xdraw::corner_radius{ 6.0f });
         }
@@ -419,11 +419,11 @@ namespace rendering {
         const float span = 5.0f;
         const auto x_col = xui::lerp(tokens::col_text_dim, tokens::col_text, close_anim);
 
-        top_dl.line(cx - span, cy - span, cx + span, cy + span, x_col, 1.5f);
-        top_dl.line(cx - span, cy + span, cx + span, cy - span, x_col, 1.5f);
+        modal_dl.line(cx - span, cy - span, cx + span, cy + span, x_col, 1.5f);
+        modal_dl.line(cx - span, cy + span, cx + span, cy - span, x_col, 1.5f);
 
         // Separator line under header
-        top_dl.line(final_x + 1.0f, final_y + header_h, final_x + final_w - 1.0f, final_y + header_h,
+        modal_dl.line(final_x + 1.0f, final_y + header_h, final_x + final_w - 1.0f, final_y + header_h,
             tokens::col_border.alpha(120));
 
         // -------------------------------------------------------------
@@ -500,9 +500,10 @@ namespace rendering {
 
         constexpr float k_col_header_h = 22.0f;
 
-        // Push layer to top so all xui widgets inside Ambience draw directly on layer::top
-        top_dl.push_clip(final_x, final_y, final_w, final_h);
-        xui::draw::push_layer(xdraw::layer::top);
+        // Push layer to modal so Ambience child windows and widgets draw on layer::modal,
+        // leaving layer::top free for popups, comboboxes, and color pickers to draw on top cleanly!
+        modal_dl.push_clip(final_x, final_y, final_w, final_h);
+        xui::draw::push_layer(xdraw::layer::modal);
 
         auto draw_col_title = [&](float x, const char* title) {
             auto& dl = xui::draw::current();
@@ -747,15 +748,15 @@ namespace rendering {
         }
 
         xui::draw::pop_layer();
-        top_dl.pop_clip();
+        modal_dl.pop_clip();
 
         // Modulate all vertices emitted for this modal window by amb_reveal for perfectly synchronized fade
-        if (amb_reveal < 0.999f && modal_vtx_start < top_dl.vertices.size())
+        if (amb_reveal < 0.999f && modal_vtx_start < modal_dl.vertices.size())
         {
             const float alpha_factor = std::clamp(amb_reveal, 0.0f, 1.0f);
-            for (std::size_t i = modal_vtx_start; i < top_dl.vertices.size(); ++i)
+            for (std::size_t i = modal_vtx_start; i < modal_dl.vertices.size(); ++i)
             {
-                top_dl.vertices[i].col.a = static_cast<std::uint8_t>(top_dl.vertices[i].col.a * alpha_factor);
+                modal_dl.vertices[i].col.a = static_cast<std::uint8_t>(modal_dl.vertices[i].col.a * alpha_factor);
             }
         }
 

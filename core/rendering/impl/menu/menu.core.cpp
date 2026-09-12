@@ -2003,7 +2003,7 @@ namespace rendering {
             xui::layout::spacing(3.0f);
             xui::toggle("Edge Jump", mov.edgejump);
             xui::layout::spacing(3.0f);
-            xui::toggle("Edge Stop", mov.edgestop);
+            xui::toggle("Quick Stop", mov.quickstop);
             xui::end_child();
         }
         // RIGHT COLUMN: MOVEMENT ASSIST
@@ -2016,9 +2016,9 @@ namespace rendering {
             xui::toggle("Edge Bug", mov.edgebug);
             if (xui::begin_popup("##edgebug_popup", 240.0f))
             {
-                static const char* edgebug_modes[] = { "0: loose", "1: edge trace", "2: no jump held", "3: min speed", "4: strict vz" };
+                static const char* edgebug_modes[] = { "0: auto / adaptive", "1: edge trace", "2: no jump held", "3: min speed", "4: strict vz" };
                 xui::combo("mode##eb", mov.edgebug_mode.value, edgebug_modes, 5);
-                xui::slider_int("passes##eb", mov.edgebug_passes, 1, 5, "%d");
+                xui::slider_int("passes##eb", mov.edgebug_passes, 0, 64, mov.edgebug_passes.value == 0 ? "auto (dynamic)" : "%d ticks");
                 xui::checkbox("jump steps##eb", mov.edgebug_include_jump_steps);
                 xui::end_popup();
             }

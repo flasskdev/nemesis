@@ -34,7 +34,7 @@ namespace features::movement {
 		void on_create_move( systems::input::usercmd* cmd ) const;
 	};
 
-	class edgestop
+	class quickstop
 	{
 	public:
 		void on_create_move( systems::input::usercmd* cmd ) const;

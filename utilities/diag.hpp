@@ -233,12 +233,12 @@ namespace diag {
 			g_log_path,
 			MAX_PATH,
 			directory,
-			L"velocity_init.log" );
+			L"mintaly_init.log" );
 		make_artifact_path(
 			g_previous_log_path,
 			MAX_PATH,
 			directory,
-			L"velocity_init.previous.log" );
+			L"mintaly_init.previous.log" );
 
 		MoveFileExW(
 			g_log_path,
@@ -287,12 +287,12 @@ namespace diag {
 			g_dump_path,
 			MAX_PATH,
 			directory,
-			L"velocity_crash.dmp" );
+			L"mintaly_crash.dmp" );
 		make_artifact_path(
 			g_previous_dump_path,
 			MAX_PATH,
 			directory,
-			L"velocity_crash.previous.dmp" );
+			L"mintaly_crash.previous.dmp" );
 		MoveFileExW(
 			g_dump_path,
 			g_previous_dump_path,

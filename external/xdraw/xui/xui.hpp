@@ -421,7 +421,7 @@ namespace xui {
 	class popup_overlay : public overlay
 	{
 	public:
-		popup_overlay( std::uintptr_t id, const rect& anchor, float width );
+		popup_overlay( std::uintptr_t id, const rect& anchor, float width, const rect& parent_bounds = {} );
 
 		[[nodiscard]] bool hit_test( float x, float y ) const override;
 		bool process_input( const input_state& input ) override;
@@ -429,6 +429,7 @@ namespace xui {
 
 		void tick( );
 		void set_content_h( float h );
+		void update_parent_bounds( const rect& parent_bounds ) { this->m_parent_bounds = parent_bounds; }
 
 		[[nodiscard]] float open_anim( ) const;
 		[[nodiscard]] bool closing( ) const;
@@ -436,6 +437,7 @@ namespace xui {
 
 	private:
 		float m_width{};
+		rect m_parent_bounds{};
 		float m_content_h{ 100.0f };
 		float m_open_anim{};
 	};

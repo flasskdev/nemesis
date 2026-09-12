@@ -959,7 +959,7 @@ namespace xui {
 
 	} // namespace binds
 
-	popup_overlay::popup_overlay( std::uintptr_t id, const rect& anchor, float width ) : overlay{ id, anchor }, m_width{ width } { }
+	popup_overlay::popup_overlay( std::uintptr_t id, const rect& anchor, float width, const rect& parent_bounds ) : overlay{ id, anchor }, m_width{ width }, m_parent_bounds{ parent_bounds } { }
 
 	bool popup_overlay::hit_test( float x, float y ) const
 	{
@@ -1007,11 +1007,38 @@ namespace xui {
 		const auto clamped = std::min( this->m_content_h, 400.0f );
 		const auto [vw, vh] = xdraw::viewport_size( );
 		auto px = this->m_anchor.x;
+		if ( this->m_parent_bounds.w > 0.0f )
+		{
+			if ( px + this->m_width > this->m_parent_bounds.right( ) - 10.0f )
+			{
+				px = this->m_parent_bounds.right( ) - 10.0f - this->m_width;
+			}
+			if ( px < this->m_parent_bounds.x + 10.0f )
+			{
+				px = this->m_parent_bounds.x + 10.0f;
+			}
+		}
+		else if ( vw > 0 && px + this->m_width > static_cast< float >( vw ) - 10.0f )
+		{
+			px = this->m_anchor.right( ) - this->m_width;
+		}
+
 		if ( vw > 0 && px + this->m_width > static_cast< float >( vw ) - 10.0f )
 		{
 			px = static_cast< float >( vw ) - 10.0f - this->m_width;
 		}
-		return { px, this->m_anchor.bottom( ) + 4.0f, this->m_width, clamped };
+		if ( px < 10.0f )
+		{
+			px = 10.0f;
+		}
+
+		auto py = this->m_anchor.bottom( ) + 4.0f;
+		if ( vh > 0 && py + clamped > static_cast< float >( vh ) - 10.0f )
+		{
+			py = this->m_anchor.y - clamped - 4.0f;
+		}
+
+		return { px, py, this->m_width, clamped };
 	}
 
 	namespace overlays {
@@ -1524,7 +1551,7 @@ namespace xui {
 		if ( key >= 0x41 && key <= 0x5A )
 		{
 			static char buf[ 2 ]{};
-			buf[ 0 ] = static_cast< char >( key );
+			buf[ 0 ] = static_cast< char >( std::tolower( key ) );
 			buf[ 1 ] = '\0';
 			return buf;
 		}
@@ -1539,29 +1566,60 @@ namespace xui {
 
 		switch ( key )
 		{
+		// Mouse buttons
 		case VK_LBUTTON: return "lmb";
 		case VK_RBUTTON: return "rmb";
 		case VK_MBUTTON: return "mmb";
 		case VK_XBUTTON1: return "mb4";
 		case VK_XBUTTON2: return "mb5";
+
+		// Common control & edit keys
+		case VK_BACK: return "back";
+		case VK_TAB: return "tab";
+		case VK_RETURN: return "enter";
+		case VK_ESCAPE: return "esc";
+		case VK_SPACE: return "space";
+		case VK_CAPITAL: return "caps";
 		case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT: return "shift";
 		case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL: return "ctrl";
 		case VK_MENU: case VK_LMENU: case VK_RMENU: return "alt";
-		case VK_SPACE: return "space";
-		case VK_RETURN: return "enter";
-		case VK_ESCAPE: return "esc";
-		case VK_TAB: return "tab";
-		case VK_CAPITAL: return "caps";
-		case VK_INSERT: return "insert";
-		case VK_DELETE: return "delete";
-		case VK_HOME: return "home";
-		case VK_END: return "end";
+		case VK_PAUSE: return "pause";
 		case VK_PRIOR: return "pgup";
 		case VK_NEXT: return "pgdn";
+		case VK_END: return "end";
+		case VK_HOME: return "home";
 		case VK_LEFT: return "left";
-		case VK_RIGHT: return "right";
 		case VK_UP: return "up";
+		case VK_RIGHT: return "right";
 		case VK_DOWN: return "down";
+		case VK_SNAPSHOT: return "prtsc";
+		case VK_INSERT: return "insert";
+		case VK_DELETE: return "delete";
+		case VK_LWIN: return "lwin";
+		case VK_RWIN: return "rwin";
+		case VK_APPS: return "apps";
+
+		// Numpad keys
+		case VK_NUMPAD0: return "num0";
+		case VK_NUMPAD1: return "num1";
+		case VK_NUMPAD2: return "num2";
+		case VK_NUMPAD3: return "num3";
+		case VK_NUMPAD4: return "num4";
+		case VK_NUMPAD5: return "num5";
+		case VK_NUMPAD6: return "num6";
+		case VK_NUMPAD7: return "num7";
+		case VK_NUMPAD8: return "num8";
+		case VK_NUMPAD9: return "num9";
+		case VK_MULTIPLY: return "num*";
+		case VK_ADD: return "num+";
+		case VK_SEPARATOR: return "num sep";
+		case VK_SUBTRACT: return "num-";
+		case VK_DECIMAL: return "num.";
+		case VK_DIVIDE: return "num/";
+		case VK_NUMLOCK: return "numlk";
+		case VK_SCROLL: return "scrlk";
+
+		// Function keys
 		case VK_F1: return "f1";
 		case VK_F2: return "f2";
 		case VK_F3: return "f3";
@@ -1574,8 +1632,62 @@ namespace xui {
 		case VK_F10: return "f10";
 		case VK_F11: return "f11";
 		case VK_F12: return "f12";
-		default: return "unknown";
+		case VK_F13: return "f13";
+		case VK_F14: return "f14";
+		case VK_F15: return "f15";
+		case VK_F16: return "f16";
+		case VK_F17: return "f17";
+		case VK_F18: return "f18";
+		case VK_F19: return "f19";
+		case VK_F20: return "f20";
+		case VK_F21: return "f21";
+		case VK_F22: return "f22";
+		case VK_F23: return "f23";
+		case VK_F24: return "f24";
+
+		// Standard OEM punctuation & symbols
+		case VK_OEM_1: return ";";
+		case VK_OEM_PLUS: return "=";
+		case VK_OEM_COMMA: return ",";
+		case VK_OEM_MINUS: return "-";
+		case VK_OEM_PERIOD: return ".";
+		case VK_OEM_2: return "/";
+		case VK_OEM_3: return "~";
+		case VK_OEM_4: return "[";
+		case VK_OEM_5: return "\\";
+		case VK_OEM_6: return "]";
+		case VK_OEM_7: return "'";
+		case VK_OEM_102: return "\\";
 		}
+
+		// Windows API GetKeyNameTextA fallback for any other keyboard layout keys
+		const UINT scan = MapVirtualKeyA( static_cast< UINT >( key ), MAPVK_VK_TO_VSC );
+		if ( scan != 0 )
+		{
+			LONG param = static_cast< LONG >( scan << 16 );
+			if ( key == VK_LEFT || key == VK_UP || key == VK_RIGHT || key == VK_DOWN ||
+				 key == VK_PRIOR || key == VK_NEXT || key == VK_END || key == VK_HOME ||
+				 key == VK_INSERT || key == VK_DELETE || key == VK_DIVIDE || key == VK_NUMLOCK ||
+				 key == VK_RCONTROL || key == VK_RMENU )
+			{
+				param |= ( 1 << 24 );
+			}
+
+			static char sys_name[ 32 ]{};
+			if ( GetKeyNameTextA( param, sys_name, sizeof( sys_name ) ) > 0 )
+			{
+				for ( char* p = sys_name; *p; ++p )
+				{
+					*p = static_cast< char >( std::tolower( static_cast< unsigned char >( *p ) ) );
+				}
+				return sys_name;
+			}
+		}
+
+		// Fallback to hex code if key is unrecognized non-zero
+		static char hex_buf[ 16 ]{};
+		std::snprintf( hex_buf, sizeof( hex_buf ), "vk%02x", key & 0xFF );
+		return hex_buf;
 	}
 
 	bool initialize( HWND hwnd )
@@ -2003,7 +2115,7 @@ namespace xui {
 			{ "auto strafe", "Automatically maneuvers in air to maximize velocity and speed gain" },
 			{ "air strafe", "Automatically maneuvers in air to maximize velocity and speed gain" },
 			{ "fast stop", "Instantly halts movement momentum upon releasing keys for maximum accuracy" },
-			{ "edge stop", "Automatically stops your movement before falling off a ledge or edge" },
+			{ "quick stop", "Instantly halts movement momentum or prevents falling off edges" },
 			{ "edge jump", "Automatically executes a jump right before stepping off an edge" },
 			{ "jump bug", "Exploits jump bug mechanics to preserve velocity without fall damage" },
 			{ "edge bug", "Glides along surface edges to nullify fall damage and preserve velocity" },
@@ -3291,7 +3403,7 @@ namespace xui {
 			}
 			else
 			{
-				overlays::add( std::make_unique<popup_overlay>( id, dot_abs, width ) );
+				overlays::add( std::make_unique<popup_overlay>( id, dot_abs, width, win->bounds ) );
 			}
 		}
 
@@ -3300,6 +3412,7 @@ namespace xui {
 		{
 			overlays::touch( id );
 			ov->update_anchor( dot_abs );
+			ov->update_parent_bounds( win->bounds );
 			ov->tick( );
 
 			const auto popup_rect = ov->get_popup( );
@@ -6773,7 +6886,20 @@ namespace xui {
 				const auto cb_row_h = this->m_filled ? ( bar_spacing + 18.0f ) : 0.0f;
 				const auto w = this->m_show_alpha ? ( pad + sv_size + bar_spacing + bar_w + pad ) : ( pad + sv_size + pad );
 				const auto h = pad + sv_size + bar_spacing + hue_bar_h + cb_row_h + pad;
-				return { this->m_anchor.x, this->m_anchor.bottom( ) + 2.0f, w, h };
+				const auto [vw, vh] = xdraw::viewport_size( );
+				auto px = this->m_anchor.x;
+				if ( vw > 0 && px + w > static_cast< float >( vw ) - 10.0f )
+				{
+					px = static_cast< float >( vw ) - 10.0f - w;
+				}
+				if ( px < 10.0f ) px = 10.0f;
+				auto py = this->m_anchor.bottom( ) + 2.0f;
+				if ( vh > 0 && py + h > static_cast< float >( vh ) - 10.0f )
+				{
+					py = this->m_anchor.y - h - 2.0f;
+				}
+				if ( py < 10.0f ) py = 10.0f;
+				return { px, py, w, h };
 			}
 
 			xdraw::color* m_col{};

@@ -16,7 +16,7 @@ namespace {
 		window_class.cbSize = sizeof( window_class );
 		window_class.lpfnWndProc = DefWindowProcA;
 		window_class.hInstance = GetModuleHandleA( nullptr );
-		window_class.lpszClassName = "velocity_dummy_window";
+		window_class.lpszClassName = "mintaly_dummy_window";
 
 		if ( !RegisterClassExA( &window_class ) )
 		{

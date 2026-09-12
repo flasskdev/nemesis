@@ -17,6 +17,7 @@ namespace xdraw {
 	{
 		bottom,
 		middle,
+		modal,
 		top,
 		count
 	};

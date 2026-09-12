@@ -454,7 +454,7 @@ namespace hooks {
 				features::movement::g_slowwalk.on_create_move( current_cmd );
 				features::movement::g_edgebug.on_create_move( current_cmd );
 				features::movement::g_edgejump.on_create_move( current_cmd );
-				features::movement::g_edgestop.on_create_move( current_cmd );
+				features::movement::g_quickstop.on_create_move( current_cmd );
 				features::movement::g_jumpbug.on_create_move( current_cmd );
 				features::movement::g_bhop.on_create_move( current_cmd );
 				features::movement::g_fastladder.on_create_move( current_cmd );

@@ -189,7 +189,7 @@ namespace {
 				info,
 				diag::g_exception_scope_depth
 					? diag::g_exception_phase
-					: "first-chance fault in velocity DLL" );
+					: "first-chance fault in mintaly DLL" );
 			return EXCEPTION_CONTINUE_SEARCH;
 		}
 

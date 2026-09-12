@@ -14,6 +14,9 @@ namespace rendering::menu_weapons {
         int weapon_flat_idx{ -1 };   // -1 = whole group, 0..33 = specific weapon
     };
 
+    inline weapon_selection weapon_sel_rage{ 2, -1 };
+    inline weapon_selection weapon_sel_legit{ 2, -1 };
+
     class weapon_selector_overlay : public xui::overlay
     {
     public:

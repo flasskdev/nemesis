@@ -228,11 +228,6 @@ namespace rendering {
 				}
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Scoreboard Weapons", m.m_scoreboard_weapons.enabled );
-				if ( xui::begin_popup( "##restore_scoreboard", 250.0f ) )
-				{
-					xui::color_picker( "color##scoreboard", m.m_scoreboard_weapons.color );
-					xui::end_popup( );
-				}
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Auto Buy", m.m_autobuy.enabled );
 				if ( xui::begin_popup( "##restore_autobuy", 250.0f ) )
@@ -422,20 +417,8 @@ namespace rendering {
 				}
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Velocity Counter", m.m_hud.m_velocity.counter );
-				if ( xui::begin_popup( "##restore_velocity", 250.0f ) )
-				{
-					xui::color_picker( "color##velocity", m.m_hud.m_velocity.color );
-					xui::slider_float( "bottom offset##velocity", m.m_hud.m_velocity.bottom_offset, 0.0f, 500.0f, "%.0f" );
-					xui::end_popup( );
-				}
 				xui::layout::spacing( 3.0f );
 				xui::toggle( "Velocity Chart", m.m_hud.m_velocity.chart );
-				if ( xui::begin_popup( "##restore_velocitychart", 250.0f ) )
-				{
-					xui::slider_float( "width##velocity", m.m_hud.m_velocity.chart_width, 50.0f, 600.0f, "%.0f" );
-					xui::slider_float( "height##velocity", m.m_hud.m_velocity.chart_height, 10.0f, 200.0f, "%.0f" );
-					xui::end_popup( );
-				}
 
 				xui::end_child( );
 			}

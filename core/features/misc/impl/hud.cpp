@@ -6,6 +6,8 @@
 #include <protection/game_addresses.hpp>
 #include <utilities//addresses/addresses.hpp>
 #include <external/xdraw/xui/xui.hpp>
+#include <core/rendering/rendering.hpp>
+#include <core/rendering/theme.hpp>
 
 namespace features::misc {
 
@@ -586,66 +588,17 @@ namespace features::misc {
 		this->m_velocity_history_head = ( this->m_velocity_history_head + 1 ) % k_velocity_history;
 		this->m_velocity_history_count = std::min( this->m_velocity_history_count + 1, k_velocity_history );
 
-		const auto& s = xui::ctx( ).style;
-		const xdraw::color accent = cfg.color;
-		const auto accent_dim = xdraw::color{ accent.r, accent.g, accent.b, static_cast< std::uint8_t >( accent.a * 0.45f ) };
-		const auto accent_fill = xdraw::color{ accent.r, accent.g, accent.b, static_cast< std::uint8_t >( accent.a * 0.18f ) };
+		const xdraw::color accent = tokens::col_accent;
+		const auto num_font = rendering::g_fonts.inter_bold[ rendering::fonts::size::big ];
+		const auto label_font = rendering::g_fonts.inter_medium[ rendering::fonts::size::petite ];
+		const auto stat_font = rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ];
 
-		constexpr auto panel_r{ 10.0f };
-		constexpr auto inner_pad{ 4.0f };
-		constexpr auto inner_r{ 7.0f };
-		constexpr auto text_pad_x{ 8.0f };
-		constexpr auto text_nudge{ -1.0f };
-		constexpr auto section_gap{ 4.0f };
+		constexpr auto bottom_offset = 80.0f;
+		constexpr auto chart_w = 220.0f;
+		constexpr auto chart_h = 48.0f;
 
-		const auto chart_w = std::clamp( cfg.chart_width.value, 120.0f, 320.0f );
-		const auto chart_h = std::clamp( cfg.chart_height.value, 24.0f, 80.0f );
-		const auto chart_inner_h = chart_h - inner_pad * 2.0f;
-		const auto chart_inner_w = chart_w - inner_pad * 2.0f;
-
-		char speed_buf[ 16 ]{};
-		std::snprintf( speed_buf, sizeof( speed_buf ), "%.0f", this->m_velocity_smoothed );
-
-		const auto [ speed_vw, speed_vh ] = xdraw::measure_text( speed_buf );
-		const auto [ speed_uw, speed_uh ] = xdraw::measure_text( " u/s" );
-		const auto counter_pill_w = speed_vw + speed_uw + text_pad_x * 2.0f;
-		const auto counter_pill_h = speed_vh + inner_pad * 2.0f;
-
-		const auto panel_w = cfg.chart.value ? chart_w : counter_pill_w + inner_pad * 2.0f;
-		const auto counter_block_h = cfg.counter.value ? counter_pill_h + inner_pad * 2.0f : 0.0f;
-		const auto chart_block_h = cfg.chart.value ? chart_h : 0.0f;
-		const auto stack_gap = ( cfg.counter.value && cfg.chart.value ) ? section_gap : 0.0f;
-		const auto panel_h = counter_block_h + stack_gap + chart_block_h;
-
-		const auto bottom_offset = std::clamp( cfg.bottom_offset.value, 20.0f, 220.0f );
-		const auto panel_x = std::floor( cx - panel_w * 0.5f );
-		const auto panel_y = std::floor( screen_h - bottom_offset - panel_h );
-
-		draw_list.rect_filled_blurred( panel_x, panel_y, panel_w, panel_h, xdraw::corner_radius{ panel_r } );
-		draw_list.rect_filled( panel_x, panel_y, panel_w, panel_h, s.window_bg, xdraw::corner_radius{ panel_r } );
-
-		auto content_y = panel_y;
-
-		if ( cfg.counter.value )
-		{
-			const auto pill_x = std::floor( cx - counter_pill_w * 0.5f );
-			const auto pill_y = content_y + inner_pad;
-			draw_list.rect_filled( pill_x, pill_y, counter_pill_w, counter_pill_h, s.child_bg, xdraw::corner_radius{ inner_r } );
-			draw_list.text( pill_x + text_pad_x, pill_y + ( counter_pill_h - speed_vh ) * 0.5f + text_nudge, speed_buf, accent );
-			draw_list.text( pill_x + text_pad_x + speed_vw, pill_y + ( counter_pill_h - speed_uh ) * 0.5f + text_nudge, " u/s", accent_dim );
-			content_y += counter_block_h + stack_gap;
-		}
-
-		if ( !cfg.chart.value || this->m_velocity_history_count < 2 || chart_inner_w <= 1.0f || chart_inner_h <= 1.0f )
-		{
-			return;
-		}
-
-		const auto chart_x = panel_x + inner_pad;
-		const auto chart_y = content_y + inner_pad;
-		draw_list.rect_filled( chart_x, chart_y, chart_w - inner_pad * 2.0f, chart_inner_h, s.child_bg, xdraw::corner_radius{ inner_r } );
-
-		auto peak = 50.0f;
+		// Peak calculation
+		float peak = 50.0f;
 		for ( std::size_t i = 0; i < this->m_velocity_history_count; ++i )
 		{
 			peak = std::max( peak, this->m_velocity_history[ i ] );
@@ -655,68 +608,393 @@ namespace features::misc {
 		this->m_velocity_scale += ( target_scale - this->m_velocity_scale ) * std::min( 6.0f * dt, 1.0f );
 		const auto scale = std::max( this->m_velocity_scale, 50.0f );
 
-		const auto plot_x = chart_x + inner_pad;
-		const auto plot_y = chart_y + inner_pad;
-		const auto plot_w = chart_inner_w - inner_pad * 2.0f;
-		const auto plot_h = chart_inner_h - inner_pad * 2.0f;
-		const auto baseline_y = std::floor( plot_y + plot_h );
+		char speed_buf[ 16 ]{};
+		std::snprintf( speed_buf, sizeof( speed_buf ), "%.0f", this->m_velocity_smoothed );
 
-		draw_list.line( plot_x, baseline_y, plot_x + plot_w, baseline_y, xdraw::color{ 255, 255, 255, 18 }, 1.0f, false );
+		char peak_buf[ 16 ]{};
+		std::snprintf( peak_buf, sizeof( peak_buf ), "%.0f", peak );
 
-		const auto sample_count = this->m_velocity_history_count;
-		const auto step_x = plot_w / static_cast< float >( sample_count - 1 );
+		const auto [ speed_vw, speed_vh ] = xdraw::measure_text( speed_buf, num_font );
+		const auto [ speed_uw, speed_uh ] = xdraw::measure_text( " U/S", label_font );
+		const bool is_accelerated = ( this->m_velocity_smoothed > 250.0f );
 
-		std::array<float, k_velocity_history * 2> points{};
-		std::array<xdraw::color, k_velocity_history> point_colors{};
-
-		for ( std::size_t i = 0; i < sample_count; ++i )
+		// =========================================================================
+		// CASE 1: BOTH COUNTER & CHART (UNIFIED TELEMETRY DASHBOARD)
+		// =========================================================================
+		if ( cfg.counter.value && cfg.chart.value )
 		{
-			const auto idx = ( this->m_velocity_history_head + k_velocity_history - sample_count + i ) % k_velocity_history;
-			const auto value = this->m_velocity_history[ idx ];
-			const auto nx = plot_x + step_x * static_cast< float >( i );
-			const auto ny = std::floor( plot_y + plot_h - ( value / scale ) * plot_h );
+			constexpr float header_h = 36.0f;
+			const float total_w = chart_w;
+			const float total_h = header_h + chart_h;
+			const float card_x = std::floor( cx - total_w * 0.5f );
+			const float card_y = std::floor( screen_h - bottom_offset - total_h );
+			constexpr auto card_r = xdraw::corner_radius{ 10.0f };
 
-			points[ i * 2 ] = nx;
-			points[ i * 2 + 1 ] = ny;
-			point_colors[ i ] = accent;
-		}
+			// Soft multi-layer drop shadow
+			draw_list.rect_filled( card_x - 2.0f, card_y + 4.0f, total_w + 4.0f, total_h + 4.0f, xdraw::color{ 0, 0, 0, 40 }, xdraw::corner_radius{ 12.0f } );
+			draw_list.rect_filled( card_x - 1.0f, card_y + 2.0f, total_w + 2.0f, total_h + 2.0f, xdraw::color{ 0, 0, 0, 60 }, xdraw::corner_radius{ 11.0f } );
 
-		for ( std::size_t i = 0; i + 1 < sample_count; ++i )
-		{
-			const auto x0 = points[ i * 2 ];
-			const auto y0 = points[ i * 2 + 1 ];
-			const auto x1 = points[ ( i + 1 ) * 2 ];
-			const auto y1 = points[ ( i + 1 ) * 2 + 1 ];
+			// Frosted glass background
+			draw_list.rect_filled_blurred( card_x, card_y, total_w, total_h, card_r );
+			draw_list.rect_filled( card_x, card_y, total_w, total_h, tokens::col_dark.alpha( 225 ), card_r );
 
-			const auto fill_top = std::min( y0, y1 );
-			const auto fill_h = std::max( 0.0f, baseline_y - fill_top );
-			if ( fill_h > 0.0f )
+			// Dynamic border: glowing when accelerated
+			const auto border_col = is_accelerated ? accent.alpha( 130 ) : tokens::col_border.alpha( 110 );
+			draw_list.rect( card_x, card_y, total_w, total_h, border_col, card_r, 1.0f );
+
+			// Top neon reflection line
+			const float half_w = ( total_w - 24.0f ) * 0.5f;
+			draw_list.rect_filled_gradient(
+				card_x + 12.0f, card_y, half_w, 1.2f,
+				accent.alpha( 0 ), accent.alpha( is_accelerated ? 180 : 120 ), accent.alpha( is_accelerated ? 180 : 120 ), accent.alpha( 0 )
+			);
+			draw_list.rect_filled_gradient(
+				card_x + 12.0f + half_w, card_y, half_w, 1.2f,
+				accent.alpha( is_accelerated ? 180 : 120 ), accent.alpha( 0 ), accent.alpha( 0 ), accent.alpha( is_accelerated ? 180 : 120 )
+			);
+
+			// --- Top Telemetry Header ---
+			// Radar live indicator
+			const float dot_x = card_x + 15.0f;
+			const float dot_y = card_y + header_h * 0.5f;
+			if ( speed > 5.0f )
 			{
-				const auto seg_w = std::max( 1.0f, x1 - x0 );
-				draw_list.rect_filled_gradient(
-					x0,
-					fill_top,
-					seg_w,
-					fill_h,
-					accent_fill,
-					accent_fill,
-					xdraw::color{ accent_fill.r, accent_fill.g, accent_fill.b, 0 },
-					xdraw::color{ accent_fill.r, accent_fill.g, accent_fill.b, 0 }
-				);
+				draw_list.circle_filled( dot_x, dot_y, 4.8f, accent.alpha( 45 ) );
+				draw_list.circle_filled( dot_x, dot_y, 2.4f, accent );
+				draw_list.circle_filled( dot_x, dot_y, 1.0f, xdraw::color{ 255, 255, 255, 240 } );
+			}
+			else
+			{
+				draw_list.circle_filled( dot_x, dot_y, 2.2f, tokens::col_text_dim.alpha( 110 ) );
+			}
+
+			// Large speed numbers
+			const float text_x = dot_x + 10.0f;
+			const float text_y = card_y + ( header_h - speed_vh ) * 0.5f - 1.0f;
+			if ( is_accelerated )
+			{
+				draw_list.text( text_x, text_y, speed_buf, accent.alpha( 90 ), num_font );
+				draw_list.text( text_x, text_y, speed_buf, accent, num_font );
+			}
+			else
+			{
+				draw_list.text( text_x, text_y, speed_buf, tokens::col_text, num_font );
+			}
+
+			// Unit label
+			const float unit_x = text_x + speed_vw;
+			const float unit_y = card_y + ( header_h - speed_uh ) * 0.5f;
+			draw_list.text( unit_x, unit_y, " U/S", tokens::col_text_dim.alpha( 180 ), label_font );
+
+			// Right side: Peak badge
+			const auto [ pkw, pkh ] = xdraw::measure_text( "PEAK ", label_font );
+			const auto [ pvw, pvh ] = xdraw::measure_text( peak_buf, stat_font );
+			const float peak_pill_w = pkw + pvw + 14.0f;
+			constexpr float peak_pill_h = 18.0f;
+			const float peak_pill_x = card_x + total_w - peak_pill_w - 12.0f;
+			const float peak_pill_y = card_y + ( header_h - peak_pill_h ) * 0.5f;
+
+			draw_list.rect_filled( peak_pill_x, peak_pill_y, peak_pill_w, peak_pill_h, tokens::col_card.alpha( 160 ), xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( peak_pill_x, peak_pill_y, peak_pill_w, peak_pill_h, tokens::col_border.alpha( 110 ), xdraw::corner_radius{ 4.0f }, 1.0f );
+			draw_list.text( peak_pill_x + 7.0f, peak_pill_y + ( peak_pill_h - pkh ) * 0.5f - 0.5f, "PEAK ", tokens::col_text_dim.alpha( 160 ), label_font );
+			draw_list.text( peak_pill_x + 7.0f + pkw, peak_pill_y + ( peak_pill_h - pvh ) * 0.5f - 0.5f, peak_buf, accent, stat_font );
+
+			// Dynamic speed progress line
+			const float bar_y = card_y + header_h;
+			const float bar_track_w = total_w - 20.0f;
+			draw_list.rect_filled( card_x + 10.0f, bar_y, bar_track_w, 1.5f, tokens::col_border.alpha( 60 ), xdraw::corner_radius{ 1.0f } );
+
+			const float speed_ratio = std::clamp( this->m_velocity_smoothed / std::max( 300.0f, scale ), 0.0f, 1.0f );
+			const float bar_fill_w = bar_track_w * speed_ratio;
+			if ( bar_fill_w > 1.0f )
+			{
+				const auto bar_col = is_accelerated ? accent : tokens::col_text_dim.alpha( 180 );
+				draw_list.rect_filled( card_x + 10.0f, bar_y, bar_fill_w, 1.5f, bar_col, xdraw::corner_radius{ 1.0f } );
+			}
+
+			// --- Waveform Plot Area ---
+			constexpr float plot_pad_x = 10.0f;
+			const float plot_x = card_x + plot_pad_x;
+			const float plot_w = total_w - plot_pad_x * 2.0f;
+			const float plot_y = bar_y + 4.0f;
+			const float plot_h = chart_h - 10.0f;
+			const float baseline_y = std::floor( plot_y + plot_h );
+
+			// 250 u/s guide line
+			if ( scale > 250.0f )
+			{
+				const float ref_y = std::floor( baseline_y - ( 250.0f / scale ) * plot_h );
+				if ( ref_y > plot_y && ref_y < baseline_y )
+				{
+					draw_list.line( plot_x, ref_y, plot_x + plot_w, ref_y, xdraw::color{ 255, 255, 255, 18 }, 1.0f );
+					draw_list.text( plot_x + plot_w - 18.0f, ref_y - 8.0f, "250", xdraw::color{ 255, 255, 255, 30 }, label_font );
+				}
+			}
+
+			// Baseline rule
+			draw_list.line( plot_x, baseline_y, plot_x + plot_w, baseline_y, tokens::col_border.alpha( 80 ), 1.0f );
+
+			const auto sample_count = this->m_velocity_history_count;
+			if ( sample_count >= 2 && plot_w > 2.0f && plot_h > 2.0f )
+			{
+				const auto step_x = plot_w / static_cast< float >( sample_count - 1 );
+				std::array<float, k_velocity_history * 2> points{};
+
+				for ( std::size_t i = 0; i < sample_count; ++i )
+				{
+					const auto idx = ( this->m_velocity_history_head + k_velocity_history - sample_count + i ) % k_velocity_history;
+					const auto value = this->m_velocity_history[ idx ];
+					const auto nx = plot_x + step_x * static_cast< float >( i );
+					const auto ny = std::clamp( std::floor( plot_y + plot_h - ( value / scale ) * plot_h ), plot_y, baseline_y );
+
+					points[ i * 2 ] = nx;
+					points[ i * 2 + 1 ] = ny;
+				}
+
+				// Smooth trapezoidal area gradient fill
+				for ( std::size_t i = 0; i + 1 < sample_count; ++i )
+				{
+					const auto x0 = points[ i * 2 ];
+					const auto y0 = points[ i * 2 + 1 ];
+					const auto x1 = points[ ( i + 1 ) * 2 ];
+					const auto y1 = points[ ( i + 1 ) * 2 + 1 ];
+
+					if ( x1 <= x0 ) continue;
+
+					draw_list.ensure_cmd( nullptr );
+					const auto a = draw_list.emit_vtx( x0, y0, 0, 0, accent.alpha( 45 ) );
+					const auto b = draw_list.emit_vtx( x1, y1, 1, 0, accent.alpha( 45 ) );
+					const auto c = draw_list.emit_vtx( x1, baseline_y, 1, 1, accent.alpha( 0 ) );
+					const auto d = draw_list.emit_vtx( x0, baseline_y, 0, 1, accent.alpha( 0 ) );
+					draw_list.emit_quad( a, b, c, d );
+				}
+
+				// Antialiased curve with soft ambient glow
+				draw_list.polyline( std::span<const float>{ points.data( ), sample_count * 2 }, accent.alpha( 35 ), false, 3.5f, true );
+				draw_list.polyline( std::span<const float>{ points.data( ), sample_count * 2 }, accent, false, 1.6f, true );
+
+				// Real-time leading edge live pulse dot
+				const auto dot_x = points[ ( sample_count - 1 ) * 2 ];
+				const auto dot_y = points[ ( sample_count - 1 ) * 2 + 1 ];
+				draw_list.circle_filled( dot_x, dot_y, 5.0f, accent.alpha( 45 ) );
+				draw_list.circle_filled( dot_x, dot_y, 2.5f, accent );
+				draw_list.circle_filled( dot_x, dot_y, 1.0f, xdraw::color{ 255, 255, 255, 240 } );
 			}
 		}
+		// =========================================================================
+		// CASE 2: ONLY COUNTER (STANDALONE SPEEDOMETER CAPSULE)
+		// =========================================================================
+		else if ( cfg.counter.value )
+		{
+			constexpr float counter_h = 36.0f;
+			const auto [ pkw, pkh ] = xdraw::measure_text( "PEAK ", label_font );
+			const auto [ pvw, pvh ] = xdraw::measure_text( peak_buf, stat_font );
+			const float peak_pill_w = pkw + pvw + 12.0f;
 
-		draw_list.polyline_gradient(
-			std::span<const float>{ points.data( ), sample_count * 2 },
-			std::span<const xdraw::color>{ point_colors.data( ), sample_count },
-			false,
-			1.5f,
-			false
-		);
+			const float counter_w = std::max( 175.0f, 16.0f + 14.0f + speed_vw + speed_uw + 16.0f + peak_pill_w + 14.0f );
+			const float counter_x = std::floor( cx - counter_w * 0.5f );
+			const float counter_y = std::floor( screen_h - bottom_offset - counter_h );
+			constexpr auto pill_r = xdraw::corner_radius{ 10.0f };
 
-		const auto dot_x = points[ ( sample_count - 1 ) * 2 ];
-		const auto dot_y = points[ ( sample_count - 1 ) * 2 + 1 ];
-		draw_list.circle_filled( dot_x, dot_y, 2.0f, accent );
+			// Soft multi-layer drop shadow
+			draw_list.rect_filled( counter_x - 2.0f, counter_y + 4.0f, counter_w + 4.0f, counter_h + 4.0f, xdraw::color{ 0, 0, 0, 40 }, xdraw::corner_radius{ 12.0f } );
+			draw_list.rect_filled( counter_x - 1.0f, counter_y + 2.0f, counter_w + 2.0f, counter_h + 2.0f, xdraw::color{ 0, 0, 0, 60 }, xdraw::corner_radius{ 11.0f } );
+
+			// Frosted glass background
+			draw_list.rect_filled_blurred( counter_x, counter_y, counter_w, counter_h, pill_r );
+			draw_list.rect_filled( counter_x, counter_y, counter_w, counter_h, tokens::col_dark.alpha( 225 ), pill_r );
+
+			// Dynamic border: glowing when accelerated
+			const auto border_col = is_accelerated ? accent.alpha( 130 ) : tokens::col_border.alpha( 110 );
+			draw_list.rect( counter_x, counter_y, counter_w, counter_h, border_col, pill_r, 1.0f );
+
+			// Top neon reflection line
+			const float half_w = ( counter_w - 24.0f ) * 0.5f;
+			draw_list.rect_filled_gradient(
+				counter_x + 12.0f, counter_y, half_w, 1.2f,
+				accent.alpha( 0 ), accent.alpha( is_accelerated ? 180 : 120 ), accent.alpha( is_accelerated ? 180 : 120 ), accent.alpha( 0 )
+			);
+			draw_list.rect_filled_gradient(
+				counter_x + 12.0f + half_w, counter_y, half_w, 1.2f,
+				accent.alpha( is_accelerated ? 180 : 120 ), accent.alpha( 0 ), accent.alpha( 0 ), accent.alpha( is_accelerated ? 180 : 120 )
+			);
+
+			// Radar live indicator
+			const float dot_x = counter_x + 16.0f;
+			const float dot_y = counter_y + counter_h * 0.5f;
+			if ( speed > 5.0f )
+			{
+				draw_list.circle_filled( dot_x, dot_y, 4.8f, accent.alpha( 45 ) );
+				draw_list.circle_filled( dot_x, dot_y, 2.4f, accent );
+				draw_list.circle_filled( dot_x, dot_y, 1.0f, xdraw::color{ 255, 255, 255, 240 } );
+			}
+			else
+			{
+				draw_list.circle_filled( dot_x, dot_y, 2.2f, tokens::col_text_dim.alpha( 110 ) );
+			}
+
+			// Large speed numbers
+			const float text_x = dot_x + 10.0f;
+			const float text_y = counter_y + ( counter_h - speed_vh ) * 0.5f - 1.0f;
+			if ( is_accelerated )
+			{
+				draw_list.text( text_x, text_y, speed_buf, accent.alpha( 90 ), num_font );
+				draw_list.text( text_x, text_y, speed_buf, accent, num_font );
+			}
+			else
+			{
+				draw_list.text( text_x, text_y, speed_buf, tokens::col_text, num_font );
+			}
+
+			// Unit label
+			const float unit_x = text_x + speed_vw;
+			const float unit_y = counter_y + ( counter_h - speed_uh ) * 0.5f;
+			draw_list.text( unit_x, unit_y, " U/S", tokens::col_text_dim.alpha( 180 ), label_font );
+
+			// Right side: Peak badge
+			constexpr float peak_pill_h = 18.0f;
+			const float peak_pill_x = counter_x + counter_w - peak_pill_w - 12.0f;
+			const float peak_pill_y = counter_y + ( counter_h - peak_pill_h ) * 0.5f;
+
+			draw_list.rect_filled( peak_pill_x, peak_pill_y, peak_pill_w, peak_pill_h, tokens::col_card.alpha( 160 ), xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( peak_pill_x, peak_pill_y, peak_pill_w, peak_pill_h, tokens::col_border.alpha( 110 ), xdraw::corner_radius{ 4.0f }, 1.0f );
+			draw_list.text( peak_pill_x + 6.0f, peak_pill_y + ( peak_pill_h - pkh ) * 0.5f - 0.5f, "PEAK ", tokens::col_text_dim.alpha( 160 ), label_font );
+			draw_list.text( peak_pill_x + 6.0f + pkw, peak_pill_y + ( peak_pill_h - pvh ) * 0.5f - 0.5f, peak_buf, accent, stat_font );
+
+			// Bottom dynamic speed underline
+			const float bar_y = counter_y + counter_h - 2.0f;
+			const float bar_track_w = counter_w - 24.0f;
+			draw_list.rect_filled( counter_x + 12.0f, bar_y, bar_track_w, 1.5f, tokens::col_border.alpha( 60 ), xdraw::corner_radius{ 1.0f } );
+
+			const float speed_ratio = std::clamp( this->m_velocity_smoothed / std::max( 300.0f, scale ), 0.0f, 1.0f );
+			const float bar_fill_w = bar_track_w * speed_ratio;
+			if ( bar_fill_w > 1.0f )
+			{
+				const auto bar_col = is_accelerated ? accent : tokens::col_text_dim.alpha( 180 );
+				draw_list.rect_filled( counter_x + 12.0f, bar_y, bar_fill_w, 1.5f, bar_col, xdraw::corner_radius{ 1.0f } );
+			}
+		}
+		// =========================================================================
+		// CASE 3: ONLY CHART (STANDALONE WAVEFORM CARD)
+		// =========================================================================
+		else if ( cfg.chart.value )
+		{
+			constexpr float header_h = 28.0f;
+			const float total_w = chart_w;
+			const float total_h = header_h + chart_h;
+			const float card_x = std::floor( cx - total_w * 0.5f );
+			const float card_y = std::floor( screen_h - bottom_offset - total_h );
+			constexpr auto card_r = xdraw::corner_radius{ 10.0f };
+
+			// Soft multi-layer drop shadow
+			draw_list.rect_filled( card_x - 2.0f, card_y + 4.0f, total_w + 4.0f, total_h + 4.0f, xdraw::color{ 0, 0, 0, 40 }, xdraw::corner_radius{ 12.0f } );
+			draw_list.rect_filled( card_x - 1.0f, card_y + 2.0f, total_w + 2.0f, total_h + 2.0f, xdraw::color{ 0, 0, 0, 60 }, xdraw::corner_radius{ 11.0f } );
+
+			// Frosted glass background
+			draw_list.rect_filled_blurred( card_x, card_y, total_w, total_h, card_r );
+			draw_list.rect_filled( card_x, card_y, total_w, total_h, tokens::col_dark.alpha( 225 ), card_r );
+			draw_list.rect( card_x, card_y, total_w, total_h, tokens::col_border.alpha( 110 ), card_r, 1.0f );
+
+			// Top neon reflection line
+			const float half_w = ( total_w - 24.0f ) * 0.5f;
+			draw_list.rect_filled_gradient(
+				card_x + 12.0f, card_y, half_w, 1.2f,
+				accent.alpha( 0 ), accent.alpha( 120 ), accent.alpha( 120 ), accent.alpha( 0 )
+			);
+			draw_list.rect_filled_gradient(
+				card_x + 12.0f + half_w, card_y, half_w, 1.2f,
+				accent.alpha( 120 ), accent.alpha( 0 ), accent.alpha( 0 ), accent.alpha( 120 )
+			);
+
+			// Header title
+			draw_list.text( card_x + 12.0f, card_y + ( header_h - 13.0f ) * 0.5f, "VELOCITY TELEMETRY", tokens::col_text_dim.alpha( 160 ), label_font );
+
+			// Right side: Peak badge
+			const auto [ pkw, pkh ] = xdraw::measure_text( "PEAK ", label_font );
+			const auto [ pvw, pvh ] = xdraw::measure_text( peak_buf, stat_font );
+			const float peak_pill_w = pkw + pvw + 12.0f;
+			constexpr float peak_pill_h = 16.0f;
+			const float peak_pill_x = card_x + total_w - peak_pill_w - 12.0f;
+			const float peak_pill_y = card_y + ( header_h - peak_pill_h ) * 0.5f;
+
+			draw_list.rect_filled( peak_pill_x, peak_pill_y, peak_pill_w, peak_pill_h, tokens::col_card.alpha( 160 ), xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( peak_pill_x, peak_pill_y, peak_pill_w, peak_pill_h, tokens::col_border.alpha( 110 ), xdraw::corner_radius{ 4.0f }, 1.0f );
+			draw_list.text( peak_pill_x + 6.0f, peak_pill_y + ( peak_pill_h - pkh ) * 0.5f - 0.5f, "PEAK ", tokens::col_text_dim.alpha( 160 ), label_font );
+			draw_list.text( peak_pill_x + 6.0f + pkw, peak_pill_y + ( peak_pill_h - pvh ) * 0.5f - 0.5f, peak_buf, accent, stat_font );
+
+			// Divider line
+			const float div_y = card_y + header_h;
+			draw_list.line( card_x + 10.0f, div_y, card_x + total_w - 10.0f, div_y, tokens::col_border.alpha( 60 ), 1.0f );
+
+			// Waveform plot area
+			constexpr float plot_pad_x = 10.0f;
+			const float plot_x = card_x + plot_pad_x;
+			const float plot_w = total_w - plot_pad_x * 2.0f;
+			const float plot_y = div_y + 4.0f;
+			const float plot_h = chart_h - 10.0f;
+			const float baseline_y = std::floor( plot_y + plot_h );
+
+			// 250 u/s guide line
+			if ( scale > 250.0f )
+			{
+				const float ref_y = std::floor( baseline_y - ( 250.0f / scale ) * plot_h );
+				if ( ref_y > plot_y && ref_y < baseline_y )
+				{
+					draw_list.line( plot_x, ref_y, plot_x + plot_w, ref_y, xdraw::color{ 255, 255, 255, 18 }, 1.0f );
+					draw_list.text( plot_x + plot_w - 18.0f, ref_y - 8.0f, "250", xdraw::color{ 255, 255, 255, 30 }, label_font );
+				}
+			}
+
+			// Baseline rule
+			draw_list.line( plot_x, baseline_y, plot_x + plot_w, baseline_y, tokens::col_border.alpha( 80 ), 1.0f );
+
+			const auto sample_count = this->m_velocity_history_count;
+			if ( sample_count >= 2 && plot_w > 2.0f && plot_h > 2.0f )
+			{
+				const auto step_x = plot_w / static_cast< float >( sample_count - 1 );
+				std::array<float, k_velocity_history * 2> points{};
+
+				for ( std::size_t i = 0; i < sample_count; ++i )
+				{
+					const auto idx = ( this->m_velocity_history_head + k_velocity_history - sample_count + i ) % k_velocity_history;
+					const auto value = this->m_velocity_history[ idx ];
+					const auto nx = plot_x + step_x * static_cast< float >( i );
+					const auto ny = std::clamp( std::floor( plot_y + plot_h - ( value / scale ) * plot_h ), plot_y, baseline_y );
+
+					points[ i * 2 ] = nx;
+					points[ i * 2 + 1 ] = ny;
+				}
+
+				// Smooth trapezoidal area gradient fill
+				for ( std::size_t i = 0; i + 1 < sample_count; ++i )
+				{
+					const auto x0 = points[ i * 2 ];
+					const auto y0 = points[ i * 2 + 1 ];
+					const auto x1 = points[ ( i + 1 ) * 2 ];
+					const auto y1 = points[ ( i + 1 ) * 2 + 1 ];
+
+					if ( x1 <= x0 ) continue;
+
+					draw_list.ensure_cmd( nullptr );
+					const auto a = draw_list.emit_vtx( x0, y0, 0, 0, accent.alpha( 45 ) );
+					const auto b = draw_list.emit_vtx( x1, y1, 1, 0, accent.alpha( 45 ) );
+					const auto c = draw_list.emit_vtx( x1, baseline_y, 1, 1, accent.alpha( 0 ) );
+					const auto d = draw_list.emit_vtx( x0, baseline_y, 0, 1, accent.alpha( 0 ) );
+					draw_list.emit_quad( a, b, c, d );
+				}
+
+				// Antialiased curve with soft ambient glow
+				draw_list.polyline( std::span<const float>{ points.data( ), sample_count * 2 }, accent.alpha( 35 ), false, 3.5f, true );
+				draw_list.polyline( std::span<const float>{ points.data( ), sample_count * 2 }, accent, false, 1.6f, true );
+
+				// Real-time leading edge live pulse dot
+				const auto dot_x = points[ ( sample_count - 1 ) * 2 ];
+				const auto dot_y = points[ ( sample_count - 1 ) * 2 + 1 ];
+				draw_list.circle_filled( dot_x, dot_y, 5.0f, accent.alpha( 45 ) );
+				draw_list.circle_filled( dot_x, dot_y, 2.5f, accent );
+				draw_list.circle_filled( dot_x, dot_y, 1.0f, xdraw::color{ 255, 255, 255, 240 } );
+			}
+		}
 	}
 
 } // namespace features::misc

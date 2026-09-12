@@ -8,6 +8,7 @@
 
 #include "../rendering.hpp"
 #include "../theme.hpp"
+#include "menu/menu.weapons.hpp"
 #include <utilities/security/security.hpp>
 #include <utilities/steam/steam.hpp>
 
@@ -144,20 +145,30 @@ namespace rendering {
 
 
         xdraw::push_font(g_fonts.inter_medium[fonts::size::petite]);
-        struct segment { std::string value, unit; float width; };
+        enum class wm_icon_type : int {
+            user,
+            map,
+            ping,
+            velocity,
+            fps,
+            tick,
+            time
+        };
+        struct segment { wm_icon_type icon; std::string value, unit; float width; };
         std::vector<segment> segments;
-        const auto add = [&](std::string value, std::string unit = {}) {
-            const auto width = xdraw::measure_text(value).first + xdraw::measure_text(unit).first + 22.0f;
-            segments.push_back({std::move(value), std::move(unit), width});
+        const auto add = [&](wm_icon_type icon, std::string value, std::string unit = {}) {
+            constexpr float icon_area_w = 14.0f + 6.0f;
+            const auto width = icon_area_w + xdraw::measure_text(value).first + xdraw::measure_text(unit).first + 18.0f;
+            segments.push_back({icon, std::move(value), std::move(unit), width});
         };
         const auto available = std::max(100.0f, static_cast<float>(screen_w) - 24.0f);
-        if (wm.show_user.value) add(theme::fit_text(g_menu.user_name(), std::min(140.0f, available * 0.25f)));
-        if (has_map) add(theme::fit_text(s_map_name, 130.0f));
-        if (wm.show_ping.value) add(ping_val, " ms");
-        if (has_velocity) add(vel_val, " u/s");
-        if (wm.show_fps.value) add(fps_val, " fps");
-        if (has_tick) add(tick_val, " tick");
-        if (wm.show_time.value) add(time_buf);
+        if (wm.show_user.value) add(wm_icon_type::user, theme::fit_text(g_menu.user_name(), std::min(140.0f, available * 0.25f)));
+        if (has_map) add(wm_icon_type::map, theme::fit_text(s_map_name, 130.0f));
+        if (wm.show_ping.value) add(wm_icon_type::ping, ping_val, " ms");
+        if (has_velocity) add(wm_icon_type::velocity, vel_val, " u/s");
+        if (wm.show_fps.value) add(wm_icon_type::fps, fps_val, " fps");
+        if (has_tick) add(wm_icon_type::tick, tick_val, " tick");
+        if (wm.show_time.value) add(wm_icon_type::time, time_buf);
 
         constexpr float height = 34.0f, pad = 7.0f, gap = 5.0f;
         const auto brand_width = 29.0f + xdraw::measure_text("mintaly").first + 14.0f;
@@ -184,6 +195,82 @@ namespace rendering {
         const bool is_bottom = pos >= 3;
         const bool is_left   = pos == 0 || pos == 3;
         const bool is_center = pos == 1 || pos == 4;
+
+        auto draw_wm_icon = [&]( wm_icon_type type, float ix, float iy, xdraw::color col ) {
+            switch ( type )
+            {
+            case wm_icon_type::user:
+            {
+                draw_list.circle( ix, iy - 2.8f, 2.5f, col, 1.3f );
+                std::vector<float> p{
+                    ix - 4.5f, iy + 4.2f,
+                    ix - 3.2f, iy + 1.8f,
+                    ix,        iy + 1.0f,
+                    ix + 3.2f, iy + 1.8f,
+                    ix + 4.5f, iy + 4.2f
+                };
+                draw_list.polyline( p, col, false, 1.3f );
+                break;
+            }
+            case wm_icon_type::map:
+            {
+                draw_list.circle( ix, iy - 1.8f, 3.2f, col, 1.3f );
+                draw_list.circle_filled( ix, iy - 1.8f, 1.2f, col );
+                draw_list.line( ix - 2.4f, iy + 0.2f, ix, iy + 4.4f, col, 1.3f );
+                draw_list.line( ix + 2.4f, iy + 0.2f, ix, iy + 4.4f, col, 1.3f );
+                break;
+            }
+            case wm_icon_type::ping:
+            {
+                draw_list.line( ix - 3.5f, iy + 3.8f, ix - 3.5f, iy + 1.2f, col, 1.5f );
+                draw_list.line( ix,        iy + 3.8f, ix,        iy - 1.2f, col, 1.5f );
+                draw_list.line( ix + 3.5f, iy + 3.8f, ix + 3.5f, iy - 3.8f, col, 1.5f );
+                break;
+            }
+            case wm_icon_type::velocity:
+            {
+                draw_list.line( ix - 4.5f, iy - 2.6f, ix + 2.2f, iy - 2.6f, col, 1.4f );
+                draw_list.line( ix - 2.5f, iy,        ix + 4.5f, iy,        col, 1.4f );
+                draw_list.line( ix - 4.5f, iy + 2.6f, ix + 1.2f, iy + 2.6f, col, 1.4f );
+                break;
+            }
+            case wm_icon_type::fps:
+            {
+                std::vector<float> p{
+                    ix + 0.6f, iy - 4.8f,
+                    ix - 2.8f, iy + 0.2f,
+                    ix - 0.2f, iy + 0.2f,
+                    ix - 1.4f, iy + 4.8f,
+                    ix + 3.2f, iy - 0.8f,
+                    ix + 0.8f, iy - 0.8f,
+                    ix + 1.8f, iy - 4.8f
+                };
+                draw_list.polyline( p, col, false, 1.4f );
+                break;
+            }
+            case wm_icon_type::tick:
+            {
+                std::vector<float> p{
+                    ix - 4.8f, iy + 0.8f,
+                    ix - 2.2f, iy + 0.8f,
+                    ix - 0.8f, iy - 3.8f,
+                    ix + 0.8f, iy + 3.8f,
+                    ix + 2.2f, iy + 0.8f,
+                    ix + 4.8f, iy + 0.8f
+                };
+                draw_list.polyline( p, col, false, 1.4f );
+                break;
+            }
+            case wm_icon_type::time:
+            {
+                draw_list.circle( ix, iy, 4.4f, col, 1.3f );
+                draw_list.line( ix, iy, ix,        iy - 2.5f, col, 1.3f );
+                draw_list.line( ix, iy, ix + 2.2f, iy + 0.6f, col, 1.3f );
+                draw_list.circle_filled( ix, iy, 1.0f, col );
+                break;
+            }
+            }
+        };
 
         for (std::size_t row = 0; row < rows.size(); ++row)
         {
@@ -233,13 +320,18 @@ namespace rendering {
             }
             for (const auto& item : rows[row])
             {
-                draw_list.line(cx + gap * 0.5f, y + 10.0f, cx + gap * 0.5f, y + height - 10.0f, tint(tokens::col_border));
                 cx += gap;
+                const auto item_cy = y + height * 0.5f;
+                const auto icon_x = cx + 8.0f;
+                draw_wm_icon( item.icon, icon_x, item_cy, tint(tokens::col_accent) );
+
+                const auto text_x = icon_x + 11.0f;
                 const auto [vw, vh] = xdraw::measure_text(item.value);
                 const auto uh = xdraw::measure_text(item.unit).second;
-                draw_list.text(cx + 11.0f, y + (height - vh) * 0.5f, item.value, tint(tokens::col_text));
+                draw_list.text(text_x, y + (height - vh) * 0.5f, item.value, tint(tokens::col_text));
                 if (!item.unit.empty())
-                    draw_list.text(cx + 11.0f + vw, y + (height - uh) * 0.5f, item.unit, tint(tokens::col_text_dim));
+                    draw_list.text(text_x + vw, y + (height - uh) * 0.5f, item.unit, tint(tokens::col_text_dim));
+
                 cx += item.width;
             }
         }
@@ -264,24 +356,32 @@ namespace rendering {
 		const auto& s = xui::ctx( ).style;
 
 		constexpr auto margin{ 10.0f };
-		constexpr auto row_spacing{ 3.0f };
-		constexpr auto row_h{ 21.0f };
-		constexpr auto header_h{ 24.0f };
-		constexpr auto r{ 8.0f };
-		constexpr auto inner_r{ 6.0f };
-		constexpr auto inner_pad{ 2.0f };
-		constexpr auto text_pad_x{ 8.0f };
-		constexpr auto text_nudge{ 0.5f };
-		constexpr auto icon_size{ 20.0f };
-		constexpr auto icon_inner_pad{ 4.0f };
 
 		constexpr std::size_t k_max_entries = 64;
 		struct bind_entry
 		{
 			char name[ 64 ]{};
 			char value[ 32 ]{};
+			char key[ 16 ]{};
 			bool has_value_pill{ false };
 			xui::bind_mode mode{ xui::bind_mode::toggle };
+		};
+
+		const auto format_key_name = []( int vk, char* out, std::size_t out_sz ) {
+			if ( !out || out_sz == 0 )
+				return;
+			out[ 0 ] = '\0';
+			if ( vk == 0 )
+				return;
+			const auto raw = xui::vk_name( vk );
+			if ( !raw || raw[ 0 ] == '\0' || std::strcmp( raw, "none" ) == 0 )
+				return;
+			std::size_t i = 0;
+			for ( ; raw[ i ] != '\0' && i + 1 < out_sz; ++i )
+			{
+				out[ i ] = static_cast< char >( std::toupper( static_cast< unsigned char >( raw[ i ] ) ) );
+			}
+			out[ i ] = '\0';
 		};
 
 		bind_entry entries[ k_max_entries ]{};
@@ -297,6 +397,22 @@ namespace rendering {
 		{
 			s_last_rage_group = &settings::g_combat.m_ragebot.get_group( ctx.weapon_type, ctx.item_def_idx );
 			s_last_legit_group = &settings::g_combat.m_legitbot.get_group( ctx.weapon_type, ctx.item_def_idx );
+		}
+		else if ( g_menu.is_open( ) )
+		{
+			const auto is_custom_rage = ( menu_weapons::weapon_sel_rage.weapon_flat_idx >= 0 &&
+				menu_weapons::weapon_sel_rage.weapon_flat_idx < static_cast< int >( cstypes::weapons::k_total_weapons ) );
+			if ( is_custom_rage && settings::g_combat.m_ragebot.weapons[ menu_weapons::weapon_sel_rage.weapon_flat_idx ].override_group.value )
+				s_last_rage_group = &settings::g_combat.m_ragebot.weapons[ menu_weapons::weapon_sel_rage.weapon_flat_idx ].cfg;
+			else
+				s_last_rage_group = &settings::g_combat.m_ragebot.groups[ std::clamp( menu_weapons::weapon_sel_rage.group_idx, 0, 5 ) ];
+
+			const auto is_custom_legit = ( menu_weapons::weapon_sel_legit.weapon_flat_idx >= 0 &&
+				menu_weapons::weapon_sel_legit.weapon_flat_idx < static_cast< int >( cstypes::weapons::k_total_weapons ) );
+			if ( is_custom_legit && settings::g_combat.m_legitbot.weapons[ menu_weapons::weapon_sel_legit.weapon_flat_idx ].override_group.value )
+				s_last_legit_group = &settings::g_combat.m_legitbot.weapons[ menu_weapons::weapon_sel_legit.weapon_flat_idx ].cfg;
+			else
+				s_last_legit_group = &settings::g_combat.m_legitbot.groups[ std::clamp( menu_weapons::weapon_sel_legit.group_idx, 0, 5 ) ];
 		}
 
 		const auto active_rage_group = s_last_rage_group ? s_last_rage_group : &settings::g_combat.m_ragebot.groups[ 2 ];
@@ -383,6 +499,7 @@ namespace rendering {
 				}
 
 				auto& e = entries[ count++ ];
+				format_key_name( setting->bind.key, e.key, sizeof( e.key ) );
 				std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
 				e.name[ sizeof( e.name ) - 1 ] = '\0';
 				e.mode = setting->bind.mode;
@@ -486,6 +603,7 @@ namespace rendering {
 				}
 
 				auto& e = entries[ count++ ];
+				format_key_name( setting->bind.key, e.key, sizeof( e.key ) );
 				std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
 				e.name[ sizeof( e.name ) - 1 ] = '\0';
 				e.mode = setting->bind.mode;
@@ -541,6 +659,7 @@ namespace rendering {
 			}
 
 			auto& e = entries[ count++ ];
+			format_key_name( setting->bind.key, e.key, sizeof( e.key ) );
 			std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
 			e.name[ sizeof( e.name ) - 1 ] = '\0';
 			e.mode = setting->bind.mode;
@@ -630,6 +749,7 @@ namespace rendering {
 					continue;
 
 				auto& e = entries[ count++ ];
+				format_key_name( b.key, e.key, sizeof( e.key ) );
 				std::strncpy( e.name, clean_name.c_str( ), sizeof( e.name ) - 1 );
 				e.name[ sizeof( e.name ) - 1 ] = '\0';
 				e.mode = b.mode;
@@ -661,32 +781,36 @@ namespace rendering {
 		}
 
 		const auto master_alpha = container_alpha.alpha( );
-		const auto total_h = ( count > 0 )
-			? ( header_h + row_spacing + ( static_cast< float >( count ) * ( row_h + row_spacing ) ) )
-			: header_h;
-
-		const auto [header_tw, header_th] = xdraw::measure_text( "keybinds" );
-		const auto header_w = inner_pad + icon_size + inner_pad + header_tw + text_pad_x * 2.0f + inner_pad;
-		const auto header_inner_h = header_h - inner_pad * 2.0f;
-		const auto inner_h = row_h - inner_pad * 2.0f;
 		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
 
-		float max_w = header_w;
+		constexpr auto header_h{ 30.0f };
+		constexpr auto row_h{ 24.0f };
+		const auto [header_tw, header_th] = xdraw::measure_text( "Keybinds" );
+
+		float max_w = 200.0f;
 		for ( auto i = 0; i < count; ++i )
 		{
 			const auto& e = entries[ i ];
 			const auto [nw, nh] = xdraw::measure_text( e.name );
 			const auto [vw, vh] = xdraw::measure_text( e.value );
-			const float row_w = inner_pad + ( nw + text_pad_x * 2.0f ) + inner_pad + ( vw + text_pad_x * 2.0f ) + inner_pad;
+			const bool has_key = ( e.key[ 0 ] != '\0' );
+			const auto [kw, kh] = has_key ? xdraw::measure_text( e.key ) : std::pair{ 0.0f, 0.0f };
+			const float key_w = has_key ? ( kw + 10.0f + 4.0f ) : 0.0f;
+			const float row_w = 15.0f + 8.0f + nw + 18.0f + ( vw + 10.0f ) + key_w + 12.0f;
 			if ( row_w > max_w )
 			{
 				max_w = row_w;
 			}
 		}
 
+		const auto body_h = ( count > 0 )
+			? ( static_cast< float >( count ) * row_h + 6.0f )
+			: ( g_menu.is_open( ) ? 28.0f : 0.0f );
+		const auto total_h = header_h + body_h;
+
 		auto& widgets_cfg = settings::g_misc.m_widgets;
-		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - header_w );
-		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - header_h );
+		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - max_w );
+		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - total_h );
 
 		float current_x = widgets_cfg.keybinds_x.value;
 		float current_y = widgets_cfg.keybinds_y.value;
@@ -760,103 +884,156 @@ namespace rendering {
 		const auto x = current_x;
 		const auto base_ry = current_y;
 
-		static auto icon_w_px = 0, icon_h_px = 0;
-		static const auto kb_icon = xdraw::load_svg( R"(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.78571 4.07143C2.53142 4.07143 2.28285 3.99602 2.07141 3.85475C1.85998 3.71347 1.69518 3.51267 1.59787 3.27774C1.50056 3.0428 1.4751 2.78429 1.52471 2.53488C1.57431 2.28548 1.69677 2.05639 1.87658 1.87658C2.05639 1.69677 2.28548 1.57431 2.53488 1.52471C2.78429 1.4751 3.0428 1.50056 3.27774 1.59787C3.51267 1.69518 3.71347 1.85998 3.85475 2.07141C3.99602 2.28285 4.07143 2.53142 4.07143 2.78571V9.21429C4.07143 9.46858 3.99602 9.71716 3.85475 9.92859C3.71347 10.14 3.51267 10.3048 3.27774 10.4021C3.0428 10.4994 2.78429 10.5249 2.53488 10.4753C2.28548 10.4257 2.05639 10.3032 1.87658 10.1234C1.69677 9.94361 1.57431 9.71452 1.52471 9.46512C1.4751 9.21571 1.50056 8.9572 1.59787 8.72226C1.69518 8.48733 1.85998 8.28653 2.07141 8.14525C2.28285 8.00398 2.53142 7.92857 2.78571 7.92857H9.21429C9.46858 7.92857 9.71716 8.00398 9.92859 8.14525C10.14 8.28653 10.3048 8.48733 10.4021 8.72226C10.4994 8.9572 10.5249 9.21571 10.4753 9.46512C10.4257 9.71452 10.3032 9.94361 10.1234 10.1234C9.94361 10.3032 9.71452 10.4257 9.46512 10.4753C9.21571 10.5249 8.9572 10.4994 8.72226 10.4021C8.48733 10.3048 8.28653 10.14 8.14525 9.92859C8.00398 9.71716 7.92857 9.46858 7.92857 9.21429V2.78571C7.92857 2.53142 8.00398 2.28285 8.14525 2.07141C8.28653 1.85998 8.48733 1.69518 8.72226 1.59787C8.9572 1.50056 9.21571 1.4751 9.46512 1.52471C9.71452 1.57431 9.94361 1.69677 10.1234 1.87658C10.3032 2.05639 10.4257 2.28548 10.4753 2.53488C10.5249 2.78429 10.4994 3.0428 10.4021 3.27774C10.3048 3.51267 10.14 3.71347 9.92859 3.85475C9.71716 3.99602 9.46858 4.07143 9.21429 4.07143H2.78571Z" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/></svg>)", 1.0f, &icon_w_px, &icon_h_px );
+		// Soft modern drop shadow
+		draw_list.rect_filled( x - 2.0f, base_ry + 3.0f, max_w + 4.0f, total_h + 3.0f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 35.0f * master_alpha ) }, xdraw::corner_radius{ 11.0f } );
+		draw_list.rect_filled( x - 1.0f, base_ry + 1.5f, max_w + 2.0f, total_h + 1.5f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 55.0f * master_alpha ) }, xdraw::corner_radius{ 10.0f } );
 
-		draw_list.rect_filled_blurred( x, base_ry, header_w, header_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, master_u8 } );
-		draw_list.rect_filled( x, base_ry, header_w, header_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * master_alpha ) ), xdraw::corner_radius{ r } );
-		if ( menu_open && ( hovered || s_is_dragging ) )
+		// Floating glass capsule container
+		const auto card_r = xdraw::corner_radius{ 9.0f };
+		draw_list.rect_filled_blurred( x, base_ry, max_w, total_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+		draw_list.rect_filled( x, base_ry, max_w, total_h, tokens::col_dark.alpha( static_cast< std::uint8_t >( 225.0f * master_alpha ) ), card_r );
+
+		const auto border_col = ( menu_open && ( hovered || s_is_dragging ) )
+			? s.accent.alpha( static_cast< std::uint8_t >( ( s_is_dragging ? 220.0f : 140.0f ) * master_alpha ) )
+			: tokens::col_border.alpha( static_cast< std::uint8_t >( 115.0f * master_alpha ) );
+		draw_list.rect( x, base_ry, max_w, total_h, border_col, card_r, 1.0f );
+
+		// Top subtle ambient neon reflection line
+		const auto half_w = ( max_w - 24.0f ) * 0.5f;
+		draw_list.rect_filled_gradient(
+			x + 12.0f, base_ry, half_w, 1.2f,
+			s.accent.alpha( 0 ),
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
+			s.accent.alpha( 0 )
+		);
+		draw_list.rect_filled_gradient(
+			x + 12.0f + half_w, base_ry, half_w, 1.2f,
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
+			s.accent.alpha( 0 ),
+			s.accent.alpha( 0 ),
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) )
+		);
+
+		// Modern glowing brand indicator on left of header
+		const auto dot_cx = x + 16.0f;
+		const auto dot_cy = base_ry + header_h * 0.5f;
+		draw_list.circle_filled( dot_cx, dot_cy, 5.0f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 2.5f, s.accent.alpha( static_cast< std::uint8_t >( 230.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 1.0f, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 240.0f * master_alpha ) } );
+
+		// Header title
+		const auto title_x = dot_cx + 9.0f;
+		const auto title_y = base_ry + ( header_h - header_th ) * 0.5f - 0.5f;
+		draw_list.text( title_x, title_y, "Keybinds", tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ), g_fonts.inter_bold[ fonts::size::petite ] );
+
+		// Header count capsule pill on right
+		if ( count > 0 )
 		{
-			const auto border_alpha = static_cast< std::uint8_t >( ( s_is_dragging ? 170.0f : 100.0f ) * master_alpha );
-			draw_list.rect( x, base_ry, header_w, header_h, s.accent.alpha( border_alpha ), xdraw::corner_radius{ r }, 1.0f );
-		}
-		draw_list.rect_filled( x + inner_pad, base_ry + inner_pad, icon_size, header_inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
+			char count_str[ 16 ]{};
+			std::snprintf( count_str, sizeof( count_str ), "%d", count );
+			const auto [ cw, ch ] = xdraw::measure_text( count_str );
+			const auto count_pill_w = cw + 10.0f;
+			const auto count_pill_h = 16.0f;
+			const auto cpx = x + max_w - count_pill_w - 10.0f;
+			const auto cpy = base_ry + ( header_h - count_pill_h ) * 0.5f;
 
-		if ( kb_icon )
-		{
-			const auto icon_draw = icon_size - icon_inner_pad * 2.0f;
-			const auto ix = std::floor( x + inner_pad + icon_inner_pad );
-			const auto iy = std::floor( base_ry + inner_pad + ( header_inner_h - icon_draw ) * 0.5f + 1.0f );
-			draw_list.image( ix, iy, icon_draw, icon_draw, kb_icon.Get( ), s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * master_alpha ) ) );
-		}
-
-		const auto htx = x + inner_pad + icon_size + inner_pad;
-		const auto htw = header_tw + text_pad_x * 2.0f;
-		draw_list.rect_filled( htx, base_ry + inner_pad, htw, header_inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
-		draw_list.text( htx + text_pad_x, base_ry + ( header_h - header_th ) * 0.5f + text_nudge, "keybinds", s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ) );
-
-		for ( auto& [name, state] : row_states )
-			state.active_this_frame = false;
-
-		float current_offset_y = header_h + row_spacing;
-		for ( auto i = 0; i < count; ++i )
-		{
-			const auto& e = entries[ i ];
-			auto& anim = row_states[ e.name ];
-
-			if ( !anim.active_this_frame && anim.alpha.alpha( ) <= 0.01f )
-				anim.offset_y.snap( current_offset_y );
-
-			anim.active_this_frame = true;
-			anim.alpha.fade_in( 0.2f );
-			anim.offset_y.set_target( current_offset_y );
-			anim.alpha.update( );
-			anim.offset_y.update( );
-
-			const auto row_alpha = anim.alpha.alpha( ) * master_alpha;
-			const auto draw_y = base_ry + anim.offset_y.value( );
-			const auto [nw, nh] = xdraw::measure_text( e.name );
-			const auto [vw, vh] = xdraw::measure_text( e.value );
-			const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
-
-			const auto name_pill_w = nw + text_pad_x * 2.0f;
-			const auto value_pill_w = vw + text_pad_x * 2.0f;
-			const auto row_w = inner_pad + name_pill_w + inner_pad + value_pill_w + inner_pad;
-			anim.last_w = row_w;
-
-			draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-			draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-			draw_list.rect_filled( x + inner_pad, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-			draw_list.text( x + inner_pad + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, s.text.alpha( static_cast< std::uint8_t >( s.text.a * row_alpha ) ) );
-
-			const auto vpx = x + inner_pad + name_pill_w + inner_pad;
-			if ( e.has_value_pill )
-			{
-				draw_list.rect_filled( vpx, draw_y + inner_pad, value_pill_w, inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( vpx + text_pad_x, draw_y + ( row_h - vh ) * 0.5f + text_nudge, e.value, s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * row_alpha ) ) );
-			}
-			else
-			{
-				draw_list.rect_filled( vpx, draw_y + inner_pad, value_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( vpx + text_pad_x, draw_y + ( row_h - vh ) * 0.5f + text_nudge, e.value, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
-			}
-
-			current_offset_y += row_h + row_spacing;
+			draw_list.rect_filled( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 25.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f } );
+			draw_list.rect( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 85.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f }, 1.0f );
+			draw_list.text( cpx + 5.0f, cpy + ( count_pill_h - ch ) * 0.5f - 0.5f, count_str, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
 		}
 
-		for ( auto it = row_states.begin( ); it != row_states.end( ); )
+		// Divider below header with smooth edge fadeout
+		if ( total_h > header_h )
 		{
-			if ( !it->second.active_this_frame )
-			{
-				it->second.alpha.fade_out( 0.15f );
-				it->second.alpha.update( );
-				it->second.offset_y.update( );
+			const auto div_y = base_ry + header_h;
+			const auto div_w = max_w - 20.0f;
+			const auto div_half = div_w * 0.5f;
+			const auto div_col = tokens::col_border.alpha( static_cast< std::uint8_t >( 90.0f * master_alpha ) );
+			const auto div_clear = tokens::col_border.alpha( 0 );
+			draw_list.rect_filled_gradient( x + 10.0f, div_y, div_half, 1.0f, div_clear, div_col, div_col, div_clear );
+			draw_list.rect_filled_gradient( x + 10.0f + div_half, div_y, div_half, 1.0f, div_col, div_clear, div_clear, div_col );
+		}
 
-				if ( it->second.alpha.alpha( ) <= 0.001f )
+		// Rows
+		if ( count == 0 && g_menu.is_open( ) )
+		{
+			const auto empty_text = "No active binds";
+			const auto [ ew, eh ] = xdraw::measure_text( empty_text );
+			draw_list.text( x + ( max_w - ew ) * 0.5f, base_ry + header_h + ( 28.0f - eh ) * 0.5f, empty_text, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 135.0f * master_alpha ) ) );
+		}
+		else
+		{
+			float current_offset_y = header_h + 3.0f;
+			for ( auto i = 0; i < count; ++i )
+			{
+				const auto& e = entries[ i ];
+				const auto row_y = base_ry + current_offset_y;
+				const auto [ nw, nh ] = xdraw::measure_text( e.name );
+				const auto [ vw, vh ] = xdraw::measure_text( e.value );
+
+				// Subtle hover/row background
+				draw_list.rect_filled( x + 6.0f, row_y, max_w - 12.0f, row_h - 2.0f, tokens::col_card.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ), xdraw::corner_radius{ 5.0f } );
+
+				// Status indicator pip on left
+				const auto pip_x = x + 15.0f;
+				const auto pip_y = row_y + ( row_h - 2.0f ) * 0.5f;
+				if ( e.mode == xui::bind_mode::hold_off )
 				{
-					it = row_states.erase( it );
-					continue;
+					draw_list.circle_filled( pip_x, pip_y, 1.8f, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 100.0f * master_alpha ) ) );
+				}
+				else
+				{
+					draw_list.circle_filled( pip_x, pip_y, 3.2f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
+					draw_list.circle_filled( pip_x, pip_y, 1.8f, s.accent.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
 				}
 
-				const auto row_alpha = it->second.alpha.alpha( ) * master_alpha;
-				const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
-				const auto draw_y = base_ry + it->second.offset_y.value( );
-				const auto row_w = ( it->second.last_w > 0.0f ) ? it->second.last_w : header_w;
+				// Name text on left
+				draw_list.text( pip_x + 8.0f, row_y + ( ( row_h - 2.0f ) - nh ) * 0.5f - 0.5f, e.name, tokens::col_text.alpha( static_cast< std::uint8_t >( 235.0f * master_alpha ) ) );
 
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
+				// Badges on right: Keycap badge on far right, mode badge immediately to its left
+				const auto badge_h = 16.0f;
+				const auto badge_r = xdraw::corner_radius{ 4.0f };
+				const auto by = row_y + ( ( row_h - 2.0f ) - badge_h ) * 0.5f;
+
+				const bool has_key = ( e.key[ 0 ] != '\0' );
+				const auto [kw, kh] = has_key ? xdraw::measure_text( e.key ) : std::pair{ 0.0f, 0.0f };
+				float current_right_x = x + max_w - 10.0f;
+
+				if ( has_key )
+				{
+					const auto key_w = kw + 10.0f;
+					const auto kx = current_right_x - key_w;
+					draw_list.rect_filled( kx, by, key_w, badge_h, tokens::col_elevated.alpha( static_cast< std::uint8_t >( 190.0f * master_alpha ) ), badge_r );
+					draw_list.rect( kx, by, key_w, badge_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 120.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.text( kx + 5.0f, by + ( badge_h - kh ) * 0.5f - 0.5f, e.key, tokens::col_text.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
+					current_right_x = kx - 4.0f;
+				}
+
+				const auto badge_w = vw + 10.0f;
+				const auto bx = current_right_x - badge_w;
+
+				if ( e.has_value_pill )
+				{
+					draw_list.rect_filled( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 35.0f * master_alpha ) ), badge_r );
+					draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 110.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.text( bx + 5.0f, by + ( badge_h - vh ) * 0.5f - 0.5f, e.value, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
+				}
+				else if ( e.mode == xui::bind_mode::hold_off )
+				{
+					draw_list.rect_filled( bx, by, badge_w, badge_h, tokens::col_card.alpha( static_cast< std::uint8_t >( 160.0f * master_alpha ) ), badge_r );
+					draw_list.rect( bx, by, badge_w, badge_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 80.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.text( bx + 5.0f, by + ( badge_h - vh ) * 0.5f - 0.5f, e.value, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ) );
+				}
+				else
+				{
+					draw_list.rect_filled( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 28.0f * master_alpha ) ), badge_r );
+					draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 95.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.text( bx + 5.0f, by + ( badge_h - vh ) * 0.5f - 0.5f, e.value, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
+				}
+
+				current_offset_y += row_h;
 			}
-			++it;
 		}
 	}
 
@@ -928,17 +1105,6 @@ namespace rendering {
 		const auto& s = xui::ctx( ).style;
 
 		constexpr auto margin{ 10.0f };
-		constexpr auto row_spacing{ 3.0f };
-		constexpr auto row_h{ 24.0f };
-		constexpr auto header_h{ 24.0f };
-		constexpr auto r{ 8.0f };
-		constexpr auto inner_r{ 6.0f };
-		constexpr auto inner_pad{ 2.0f };
-		constexpr auto text_pad_x{ 8.0f };
-		constexpr auto text_nudge{ 0.5f };
-		constexpr auto icon_size{ 20.0f };
-		constexpr auto icon_inner_pad{ 4.0f };
-		constexpr auto avatar_pill_size{ 20.0f };
 
 		struct spectator_entry
 		{
@@ -1033,32 +1199,32 @@ namespace rendering {
 		}
 
 		const auto master_alpha = container_alpha.alpha( );
-		const auto total_h = ( count > 0 )
-			? ( header_h + row_spacing + ( static_cast< float >( count ) * ( row_h + row_spacing ) ) )
-			: header_h;
-
-		const auto [header_tw, header_th] = xdraw::measure_text( "spectators" );
-		const auto header_w = inner_pad + icon_size + inner_pad + header_tw + text_pad_x * 2.0f + inner_pad;
-		const auto header_inner_h = header_h - inner_pad * 2.0f;
-		const auto inner_h = row_h - inner_pad * 2.0f;
 		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
 
-		float max_w = header_w;
+		constexpr auto header_h{ 30.0f };
+		constexpr auto row_h{ 25.0f };
+		const auto [header_tw, header_th] = xdraw::measure_text( "Spectators" );
+
+		float max_w = 195.0f;
 		for ( auto i = 0; i < count; ++i )
 		{
 			const auto& e = entries[ i ];
 			const auto [nw, nh] = xdraw::measure_text( e.name );
-			const auto avatar_tex = avatars.get( e.steam_id );
-			const auto has_avatar = avatar_tex != nullptr;
-			const auto name_pill_w = nw + text_pad_x * 2.0f;
-			const auto row_w = inner_pad + name_pill_w + ( has_avatar ? inner_pad + avatar_pill_size : 0.0f ) + inner_pad;
+			const float row_w = 14.0f + 18.0f + 8.0f + nw + 16.0f + 36.0f + 14.0f;
 			if ( row_w > max_w )
+			{
 				max_w = row_w;
+			}
 		}
 
+		const auto body_h = ( count > 0 )
+			? ( static_cast< float >( count ) * row_h + 6.0f )
+			: ( g_menu.is_open( ) ? 28.0f : 0.0f );
+		const auto total_h = header_h + body_h;
+
 		auto& widgets_cfg = settings::g_misc.m_widgets;
-		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - header_w );
-		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - header_h );
+		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - max_w );
+		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - total_h );
 
 		float current_x = widgets_cfg.spectator_x.value;
 		float current_y = widgets_cfg.spectator_y.value;
@@ -1069,7 +1235,7 @@ namespace rendering {
 		{
 			smoothed_base_y.set_target( target_base_y );
 			smoothed_base_y.update( );
-			current_x = std::max( 0.0f, static_cast< float >( screen_w ) - header_w - margin );
+			current_x = std::max( 0.0f, static_cast< float >( screen_w ) - max_w - margin );
 			current_y = smoothed_base_y.value( );
 		}
 		else
@@ -1132,109 +1298,133 @@ namespace rendering {
 		const auto x = current_x;
 		const auto base_ry = current_y;
 
-		static auto icon_w_px = 0, icon_h_px = 0;
-		static const auto eye_icon = xdraw::load_svg( R"svg(<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#clip0_155_223)"><path d="M5 6C5 6.26522 5.10536 6.51957 5.29289 6.70711C5.48043 6.89464 5.73478 7 6 7C6.26522 7 6.51957 6.89464 6.70711 6.70711C6.89464 6.51957 7 6.26522 7 6C7 5.73478 6.89464 5.48043 6.70711 5.29289C6.51957 5.10536 6.26522 5 6 5C5.73478 5 5.48043 5.10536 5.29289 5.29289C5.10536 5.48043 5 5.73478 5 6Z" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.515 8.739C7.02924 8.91426 6.51641 9.00261 6 9C4.2 9 2.7 8 1.5 6C2.7 4 4.2 3 6 3C7.8 3 9.3 4 10.5 6C10.4578 6.07035 10.4148 6.14019 10.371 6.2095" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 8V9.5" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 11V11.005" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round"/></g><defs><clipPath id="clip0_155_223"><rect width="12" height="12" fill="white"/></clipPath></defs></svg>)svg", 1.0f, &icon_w_px, &icon_h_px );
+		// Soft modern drop shadow
+		draw_list.rect_filled( x - 2.0f, base_ry + 3.0f, max_w + 4.0f, total_h + 3.0f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 35.0f * master_alpha ) }, xdraw::corner_radius{ 11.0f } );
+		draw_list.rect_filled( x - 1.0f, base_ry + 1.5f, max_w + 2.0f, total_h + 1.5f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 55.0f * master_alpha ) }, xdraw::corner_radius{ 10.0f } );
 
-		draw_list.rect_filled_blurred( x, base_ry, header_w, header_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, master_u8 } );
-		draw_list.rect_filled( x, base_ry, header_w, header_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * master_alpha ) ), xdraw::corner_radius{ r } );
-		if ( menu_open && ( hovered || s_is_dragging ) )
+		// Floating glass capsule container
+		const auto card_r = xdraw::corner_radius{ 9.0f };
+		draw_list.rect_filled_blurred( x, base_ry, max_w, total_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+		draw_list.rect_filled( x, base_ry, max_w, total_h, tokens::col_dark.alpha( static_cast< std::uint8_t >( 225.0f * master_alpha ) ), card_r );
+
+		const auto border_col = ( menu_open && ( hovered || s_is_dragging ) )
+			? s.accent.alpha( static_cast< std::uint8_t >( ( s_is_dragging ? 220.0f : 140.0f ) * master_alpha ) )
+			: tokens::col_border.alpha( static_cast< std::uint8_t >( 115.0f * master_alpha ) );
+		draw_list.rect( x, base_ry, max_w, total_h, border_col, card_r, 1.0f );
+
+		// Top subtle ambient neon reflection line
+		const auto half_w = ( max_w - 24.0f ) * 0.5f;
+		draw_list.rect_filled_gradient(
+			x + 12.0f, base_ry, half_w, 1.2f,
+			s.accent.alpha( 0 ),
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
+			s.accent.alpha( 0 )
+		);
+		draw_list.rect_filled_gradient(
+			x + 12.0f + half_w, base_ry, half_w, 1.2f,
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
+			s.accent.alpha( 0 ),
+			s.accent.alpha( 0 ),
+			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) )
+		);
+
+		// Modern glowing brand indicator on left of header
+		const auto dot_cx = x + 16.0f;
+		const auto dot_cy = base_ry + header_h * 0.5f;
+		draw_list.circle_filled( dot_cx, dot_cy, 5.0f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 2.5f, s.accent.alpha( static_cast< std::uint8_t >( 230.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 1.0f, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 240.0f * master_alpha ) } );
+
+		// Header title
+		const auto title_x = dot_cx + 9.0f;
+		const auto title_y = base_ry + ( header_h - header_th ) * 0.5f - 0.5f;
+		draw_list.text( title_x, title_y, "Spectators", tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ), g_fonts.inter_bold[ fonts::size::petite ] );
+
+		// Header count capsule pill on right
+		if ( count > 0 )
 		{
-			const auto border_alpha = static_cast< std::uint8_t >( ( s_is_dragging ? 170.0f : 100.0f ) * master_alpha );
-			draw_list.rect( x, base_ry, header_w, header_h, s.accent.alpha( border_alpha ), xdraw::corner_radius{ r }, 1.0f );
+			char count_str[ 16 ]{};
+			std::snprintf( count_str, sizeof( count_str ), "%d", count );
+			const auto [ cw, ch ] = xdraw::measure_text( count_str );
+			const auto count_pill_w = cw + 10.0f;
+			const auto count_pill_h = 16.0f;
+			const auto cpx = x + max_w - count_pill_w - 10.0f;
+			const auto cpy = base_ry + ( header_h - count_pill_h ) * 0.5f;
+
+			draw_list.rect_filled( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 25.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f } );
+			draw_list.rect( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 85.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f }, 1.0f );
+			draw_list.text( cpx + 5.0f, cpy + ( count_pill_h - ch ) * 0.5f - 0.5f, count_str, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
 		}
-		draw_list.rect_filled( x + inner_pad, base_ry + inner_pad, icon_size, header_inner_h, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
 
-		if ( eye_icon )
+		// Divider below header with smooth edge fadeout
+		if ( total_h > header_h )
 		{
-			const auto icon_draw = icon_size - icon_inner_pad * 2.0f;
-			const auto ix = std::floor( x + inner_pad + icon_inner_pad );
-			const auto iy = std::floor( base_ry + inner_pad + ( header_inner_h - icon_draw ) * 0.5f + 1.0f );
-			draw_list.image( ix, iy, icon_draw, icon_draw, eye_icon.Get( ), s.checkbox_mark_icon.alpha( static_cast< std::uint8_t >( s.checkbox_mark_icon.a * master_alpha ) ) );
+			const auto div_y = base_ry + header_h;
+			const auto div_w = max_w - 20.0f;
+			const auto div_half = div_w * 0.5f;
+			const auto div_col = tokens::col_border.alpha( static_cast< std::uint8_t >( 90.0f * master_alpha ) );
+			const auto div_clear = tokens::col_border.alpha( 0 );
+			draw_list.rect_filled_gradient( x + 10.0f, div_y, div_half, 1.0f, div_clear, div_col, div_col, div_clear );
+			draw_list.rect_filled_gradient( x + 10.0f + div_half, div_y, div_half, 1.0f, div_col, div_clear, div_clear, div_col );
 		}
 
-		const auto htx = x + inner_pad + icon_size + inner_pad;
-		const auto htw = header_tw + text_pad_x * 2.0f;
-		draw_list.rect_filled( htx, base_ry + inner_pad, htw, header_inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * master_alpha ) ), xdraw::corner_radius{ inner_r } );
-		draw_list.text( htx + text_pad_x, base_ry + ( header_h - header_th ) * 0.5f + text_nudge, "spectators", s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * master_alpha ) ) );
-
-		for ( auto& [name, state] : row_states )
-			state.active_this_frame = false;
-
-		float current_offset_y = header_h + row_spacing;
-		for ( auto i = 0; i < count; ++i )
+		// Rows
+		if ( count == 0 && g_menu.is_open( ) )
 		{
-			const auto& e = entries[ i ];
-			auto& anim = row_states[ e.name ];
-
-			if ( !anim.active_this_frame && anim.alpha.alpha( ) <= 0.01f )
-				anim.offset_y.snap( current_offset_y );
-
-			anim.active_this_frame = true;
-			anim.alpha.fade_in( 0.2f );
-			anim.offset_y.set_target( current_offset_y );
-			anim.alpha.update( );
-			anim.offset_y.update( );
-
-			const auto row_alpha = anim.alpha.alpha( ) * master_alpha;
-			const auto draw_y = base_ry + anim.offset_y.value( );
-			const auto [nw, nh] = xdraw::measure_text( e.name );
-			const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
-
-			const auto avatar_tex = avatars.get( e.steam_id );
-			const auto has_avatar = avatar_tex != nullptr;
-
-			const auto name_pill_w = nw + text_pad_x * 2.0f;
-			const auto row_w = inner_pad + name_pill_w + ( has_avatar ? inner_pad + avatar_pill_size : 0.0f ) + inner_pad;
-
-			draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-			draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
-
-			auto cx = x + inner_pad;
-			draw_list.rect_filled( cx, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-			draw_list.text( cx + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, e.name, s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
-			cx += name_pill_w;
-
-			if ( has_avatar )
+			const auto empty_text = "No spectators";
+			const auto [ ew, eh ] = xdraw::measure_text( empty_text );
+			draw_list.text( x + ( max_w - ew ) * 0.5f, base_ry + header_h + ( 28.0f - eh ) * 0.5f, empty_text, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 135.0f * master_alpha ) ) );
+		}
+		else
+		{
+			float current_offset_y = header_h + 3.0f;
+			for ( auto i = 0; i < count; ++i )
 			{
-				cx += inner_pad;
-				const auto avatar_draw = inner_h;
-				const auto ay = draw_y + inner_pad;
-				draw_list.image( cx, ay, avatar_draw, avatar_draw, avatar_tex, xdraw::corner_radius{ inner_r }, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * row_alpha ) } );
-			}
+				const auto& e = entries[ i ];
+				const auto row_y = base_ry + current_offset_y;
+				const auto [ nw, nh ] = xdraw::measure_text( e.name );
+				const auto avatar_tex = avatars.get( e.steam_id );
+				constexpr auto av_size = 18.0f;
+				const auto av_x = x + 10.0f;
+				const auto av_y = row_y + ( ( row_h - 2.0f ) - av_size ) * 0.5f;
 
-			current_offset_y += row_h + row_spacing;
-		}
+				// Subtle row background
+				draw_list.rect_filled( x + 6.0f, row_y, max_w - 12.0f, row_h - 2.0f, tokens::col_card.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ), xdraw::corner_radius{ 5.0f } );
 
-		for ( auto it = row_states.begin( ); it != row_states.end( ); )
-		{
-			if ( !it->second.active_this_frame )
-			{
-				it->second.alpha.fade_out( 0.2f );
-				it->second.alpha.update( );
-				it->second.offset_y.update( );
-
-				if ( it->second.alpha.alpha( ) <= 0.01f )
+				// Circular avatar
+				if ( avatar_tex )
 				{
-					it = row_states.erase( it );
-					continue;
+					draw_list.image( av_x, av_y, av_size, av_size, avatar_tex, xdraw::corner_radius{ av_size * 0.5f }, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * master_alpha ) } );
+				}
+				else
+				{
+					// Sleek circular avatar placeholder
+					const auto cx_av = av_x + av_size * 0.5f;
+					const auto cy_av = av_y + av_size * 0.5f;
+					draw_list.circle_filled( cx_av, cy_av, av_size * 0.5f, tokens::col_elevated.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) ) );
+					draw_list.circle( cx_av, cy_av, av_size * 0.5f, tokens::col_border.alpha( static_cast< std::uint8_t >( 110.0f * master_alpha ) ), 1.0f );
+					draw_list.circle_filled( cx_av, cy_av - 2.2f, 2.6f, s.accent.alpha( static_cast< std::uint8_t >( 190.0f * master_alpha ) ) );
+					draw_list.circle_filled( cx_av, cy_av + 4.8f, 3.8f, s.accent.alpha( static_cast< std::uint8_t >( 140.0f * master_alpha ) ) );
 				}
 
-				const auto row_alpha = it->second.alpha.alpha( ) * master_alpha;
-				const auto draw_y = base_ry + it->second.offset_y.value( );
-				const auto [nw, nh] = xdraw::measure_text( it->first.c_str( ) );
-				const auto row_u8 = static_cast< std::uint8_t >( 255.0f * row_alpha );
+				// Name text
+				draw_list.text( av_x + av_size + 8.0f, row_y + ( ( row_h - 2.0f ) - nh ) * 0.5f - 0.5f, e.name, tokens::col_text.alpha( static_cast< std::uint8_t >( 235.0f * master_alpha ) ) );
 
-				const auto name_pill_w = nw + text_pad_x * 2.0f;
-				const auto row_w = inner_pad + name_pill_w + inner_pad;
+				// SPEC badge on right
+				const auto badge_h = 16.0f;
+				const auto badge_w = 34.0f;
+				const auto bx = x + max_w - badge_w - 10.0f;
+				const auto by = row_y + ( ( row_h - 2.0f ) - badge_h ) * 0.5f;
+				const auto badge_r = xdraw::corner_radius{ 4.0f };
 
-				draw_list.rect_filled_blurred( x, draw_y, row_w, row_h, xdraw::corner_radius{ r }, xdraw::color{ 255, 255, 255, row_u8 } );
-				draw_list.rect_filled( x, draw_y, row_w, row_h, s.window_bg.alpha( static_cast< std::uint8_t >( s.window_bg.a * row_alpha ) ), xdraw::corner_radius{ r } );
+				draw_list.rect_filled( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 25.0f * master_alpha ) ), badge_r );
+				draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 85.0f * master_alpha ) ), badge_r, 1.0f );
+				const auto [ sw, sh ] = xdraw::measure_text( "SPEC" );
+				draw_list.text( bx + ( badge_w - sw ) * 0.5f, by + ( badge_h - sh ) * 0.5f - 0.5f, "SPEC", s.accent.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ) );
 
-				auto cx = x + inner_pad;
-				draw_list.rect_filled( cx, draw_y + inner_pad, name_pill_w, inner_h, s.child_bg.alpha( static_cast< std::uint8_t >( s.child_bg.a * row_alpha ) ), xdraw::corner_radius{ inner_r } );
-				draw_list.text( cx + text_pad_x, draw_y + ( row_h - nh ) * 0.5f + text_nudge, it->first.c_str( ), s.accent.alpha( static_cast< std::uint8_t >( s.accent.a * row_alpha ) ) );
+				current_offset_y += row_h;
 			}
-			++it;
 		}
 	}
 

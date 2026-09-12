@@ -7,5 +7,5 @@ for ($i = 0; $i -lt $bytes.Length; $i++) {
     [void]$sb.Append('0x' + $bytes[$i].ToString('x2') + ', ')
 }
 [void]$sb.Append("`n};`ninline constexpr std::size_t g_koch_wav_size = sizeof(g_koch_wav);`n}`n")
-[System.IO.File]::WriteAllText('c:\Users\stass\OneDrive\Documents\OneTap\gaycity\velocity-cs2\project\core\features\misc\koch_sound.hpp', $sb.ToString())
+[System.IO.File]::WriteAllText('c:\Users\stass\OneDrive\Documents\OneTap\gaycity\mintaly-cs2\project\core\features\misc\koch_sound.hpp', $sb.ToString())
 Write-Host "Generated successfully, byte count: $($bytes.Length)"

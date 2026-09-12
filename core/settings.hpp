@@ -69,21 +69,31 @@ namespace settings {
 				void copy_values_from(const weapon_group& other)
 				{
 					this->silent.value = other.silent.value;
+					this->silent.bind = other.silent.bind;
 					this->no_spread.value = other.no_spread.value;
+					this->no_spread.bind = other.no_spread.bind;
 					this->body_aim.value = other.body_aim.value;
+					this->body_aim.bind = other.body_aim.bind;
 					this->force_shot_air.value = other.force_shot_air.value;
+					this->force_shot_air.bind = other.force_shot_air.bind;
 					this->force_shot.value = other.force_shot.value;
+					this->force_shot.bind = other.force_shot.bind;
 					this->autostop.value = other.autostop.value;
+					this->autostop.bind = other.autostop.bind;
 					this->max_fov.value = other.max_fov.value;
 					this->hitchance.value = other.hitchance.value;
 					this->min_damage.value = other.min_damage.value;
 					this->min_damage_override.value = other.min_damage_override.value;
+					this->min_damage_override.bind = other.min_damage_override.bind;
 					this->min_damage_override_value.value = other.min_damage_override_value.value;
 					this->hitchance_override.value = other.hitchance_override.value;
+					this->hitchance_override.bind = other.hitchance_override.bind;
 					this->hitchance_override_value.value = other.hitchance_override_value.value;
 					this->pointscale.value = other.pointscale.value;
 					this->dynamic_pointscale.value = other.dynamic_pointscale.value;
+					this->dynamic_pointscale.bind = other.dynamic_pointscale.bind;
 					this->debug_multipoints.value = other.debug_multipoints.value;
+					this->debug_multipoints.bind = other.debug_multipoints.bind;
 					this->hitboxes = other.hitboxes;
 				}
 
@@ -125,6 +135,11 @@ namespace settings {
 				for (std::size_t i = 0; i < k_weapon_count; ++i)
 				{
 					this->weapons[i].init(std::string("ragebot - ") + cstypes::weapons::k_weapons[i].config_name);
+					const auto grp_idx = cstypes::weapons::k_weapons[i].group_idx;
+					if (grp_idx < k_group_count)
+					{
+						this->weapons[i].cfg.copy_values_from(this->groups[grp_idx]);
+					}
 				}
 			}
 
@@ -157,19 +172,6 @@ namespace settings {
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
 				const auto safe_idx = idx < k_group_count ? idx : 2;
 
-				if (this->is_group_overridden(safe_idx))
-				{
-					static weapon_group s_disabled_group{};
-					static bool s_inited = false;
-					if (!s_inited)
-					{
-						s_disabled_group.silent.value = false;
-						s_disabled_group.autostop.value = false;
-						s_inited = true;
-					}
-					return s_disabled_group;
-				}
-
 				return this->groups[safe_idx];
 			}
 
@@ -183,17 +185,6 @@ namespace settings {
 
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
 				const auto safe_idx = idx < k_group_count ? idx : 2;
-
-				if (this->is_group_overridden(safe_idx))
-				{
-					static const weapon_group s_disabled_group = []() {
-						weapon_group wg{};
-						wg.silent.value = false;
-						wg.autostop.value = false;
-						return wg;
-					}();
-					return s_disabled_group;
-				}
 
 				return this->groups[safe_idx];
 			}
@@ -277,27 +268,39 @@ namespace settings {
 					this->fov.value = other.fov.value;
 					this->smooth.value = other.smooth.value;
 					this->hitboxes = other.hitboxes;
+					this->aimbot.bind = other.aimbot.bind;
 					this->rcs.value = other.rcs.value;
+					this->rcs.bind = other.rcs.bind;
+					this->standalone_rcs.value = other.standalone_rcs.value;
+					this->standalone_rcs.bind = other.standalone_rcs.bind;
 					this->rcs_min.value = other.rcs_min.value;
 					this->rcs_max.value = other.rcs_max.value;
-					this->standalone_rcs.value = other.standalone_rcs.value;
-					this->standalone_rcs_strength.value = other.standalone_rcs_strength.value;
-					this->standalone_rcs_min.value = other.standalone_rcs_min.value;
-					this->standalone_rcs_max.value = other.standalone_rcs_max.value;
+					this->smooth.value = other.smooth.value;
+					this->fov.value = other.fov.value;
+					this->hitboxes = other.hitboxes;
 					this->triggerbot.value = other.triggerbot.value;
+					this->triggerbot.bind = other.triggerbot.bind;
 					this->trigger_delay.value = other.trigger_delay.value;
 					this->trigger_hitchance.value = other.trigger_hitchance.value;
 					this->trigger_head_only.value = other.trigger_head_only.value;
+					this->trigger_head_only.bind = other.trigger_head_only.bind;
 					this->give_me_your_seed.value = other.give_me_your_seed.value;
+					this->give_me_your_seed.bind = other.give_me_your_seed.bind;
 					this->autowall.value = other.autowall.value;
+					this->autowall.bind = other.autowall.bind;
 					this->min_damage.value = other.min_damage.value;
 					this->smoke_check.value = other.smoke_check.value;
+					this->smoke_check.bind = other.smoke_check.bind;
 					this->scope_check.value = other.scope_check.value;
+					this->scope_check.bind = other.scope_check.bind;
 					this->flash_check.value = other.flash_check.value;
+					this->flash_check.bind = other.flash_check.bind;
 					this->ground_check.value = other.ground_check.value;
+					this->ground_check.bind = other.ground_check.bind;
 					this->smoke_radius.value = other.smoke_radius.value;
 					this->smoke_lifetime.value = other.smoke_lifetime.value;
 					this->visualize_fov.value = other.visualize_fov.value;
+					this->visualize_fov.bind = other.visualize_fov.bind;
 					this->fov_color = other.fov_color;
 				}
 			};
@@ -330,6 +333,11 @@ namespace settings {
 				for (std::size_t i = 0; i < k_weapon_count; ++i)
 				{
 					this->weapons[i].init(std::string("legitbot - ") + cstypes::weapons::k_weapons[i].config_name);
+					const auto grp_idx = cstypes::weapons::k_weapons[i].group_idx;
+					if (grp_idx < k_group_count)
+					{
+						this->weapons[i].cfg.copy_values_from(this->groups[grp_idx]);
+					}
 				}
 			}
 
@@ -362,19 +370,6 @@ namespace settings {
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
 				const auto safe_idx = idx < k_group_count ? idx : 2;
 
-				if (this->is_group_overridden(safe_idx))
-				{
-					static weapon_group s_disabled_group{};
-					static bool s_inited = false;
-					if (!s_inited)
-					{
-						s_disabled_group.aimbot.value = false;
-						s_disabled_group.triggerbot.value = false;
-						s_inited = true;
-					}
-					return s_disabled_group;
-				}
-
 				return this->groups[safe_idx];
 			}
 
@@ -388,17 +383,6 @@ namespace settings {
 
 				const auto idx = weapon_type - cstypes::weapon_type::pistol;
 				const auto safe_idx = idx < k_group_count ? idx : 2;
-
-				if (this->is_group_overridden(safe_idx))
-				{
-					static const weapon_group s_disabled_group = []() {
-						weapon_group wg{};
-						wg.aimbot.value = false;
-						wg.triggerbot.value = false;
-						return wg;
-					}();
-					return s_disabled_group;
-				}
 
 				return this->groups[safe_idx];
 			}
@@ -461,6 +445,7 @@ namespace settings {
 		struct autos
 		{
 			xui::setting revolver{ true,{}, "auto revolver", "autos" };
+			xui::setting revolver_quick{ true,{}, "revolver quick shot", "autos" };
 			xui::setting scope{ true,{}, "auto scope", "autos" };
 		} m_autos{};
 
@@ -1477,7 +1462,6 @@ namespace settings {
 		struct scoreboard_weapons
 		{
 			xui::setting enabled{ false,{}, "scoreboard weapons", "misc" };
-			config::col color{ { 255, 255, 0, 255 }, "misc", "scoreboard weapons color" };
 		} m_scoreboard_weapons{};
 
 		struct name_changer
@@ -1652,10 +1636,6 @@ namespace settings {
 			{
 				xui::setting counter{ false,{}, "velocity counter", "velocity hud" };
 				xui::setting chart{ false,{}, "velocity chart", "velocity hud" };
-				config::col color{ { 173, 192, 255, 255 }, "velocity hud", "color" };
-				config::val<float> bottom_offset{ 80.0f, "velocity hud", "bottom offset" };
-				config::val<float> chart_width{ 200.0f, "velocity hud", "chart width" };
-				config::val<float> chart_height{ 44.0f, "velocity hud", "chart height" };
 			} m_velocity{};
 		} m_hud{};
 
@@ -1774,14 +1754,14 @@ namespace settings {
 		xui::setting jumpbug{ true,{}, "jumpbug", "movement" };
 		xui::setting fastladder{ true,{}, "fastladder", "movement" };
 		xui::setting edgejump{ false,{ 'E', xui::bind_mode::hold_on }, "edgejump", "movement" };
-		xui::setting edgestop{ false,{ 'N', xui::bind_mode::hold_on }, "edgestop", "movement" };
+		xui::setting quickstop{ false,{ 'N', xui::bind_mode::hold_on }, "quick stop", "movement" };
 		xui::setting edgebug{ false,{}, "edgebug", "movement" };
-		/// 0..4 — matches jmp table order around \c loc_C80A3A in dump (mode dword selects case before the active path).
-		config::val<int> edgebug_mode{ 1, "movement", "edgebug mode" };
-		/// Analog of \c xmmword_E22CA4+0xC — extra subtick duck cycles (each cycle = press+release pair).
-		config::val<int> edgebug_passes{ 1, "movement", "edgebug passes" };
-		/// Adds jump up/down subticks like jumpbug after duck sequence (not in every dump path; optional).
-		xui::setting edgebug_include_jump_steps{ false,{}, "edgebug jump steps", "movement" };
+		/// 0: auto / adaptive, 1: edge trace, 2: no jump held, 3: min speed, 4: strict vz
+		config::val<int> edgebug_mode{ 0, "movement", "edgebug mode" };
+		/// 0: auto / dynamic (simulates ahead up to 64 ticks), 1..64: custom tick count
+		config::val<int> edgebug_passes{ 0, "movement", "edgebug passes" };
+		/// Adds jump up/down subticks like jumpbug to prevent fall damage on landing
+		xui::setting edgebug_include_jump_steps{ true,{}, "edgebug jump steps", "movement" };
 		xui::setting slowwalk{ false,{}, "slowwalk", "movement" };
 		config::val<float> slowwalk_speed{ 33.0f, "movement", "slowwalk speed" };
 
