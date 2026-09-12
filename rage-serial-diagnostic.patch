@@ -1,0 +1,102 @@
+--- a/core/features/combat/impl/rage.cpp
++++ b/core/features/combat/impl/rage.cpp
+@@ -3,7 +3,6 @@
+ #include <utilities/addresses/addresses.hpp>
+ #include <utilities/logging/logging.hpp>
+ #include <utilities/diag.hpp>
+-#include <utilities/threadpool/threadpool.hpp>
+ #include <core/systems/systems.hpp>
+ #include <core/features/features.hpp>
+ #include <protection/game_addresses.hpp>
+@@ -706,33 +705,30 @@
+         diag::exception_scope scan_scope{ "rage: scan_players / dispatch" };
+         std::vector<std::vector<scan_hit>> per_candidate(candidates.size());
+ 
+-        // Parallel processing for performance
+-        threadpool::parallel_for(0, static_cast<int>(candidates.size()), [&](int begin, int end)
+-            {
+-                for (auto ci = begin; ci < end; ++ci)
+-                {
+-                    auto& cand = candidates[ci];
+-                    auto& candidate_hits = per_candidate[ci];
+-                    candidate_hits.reserve(24);
+-
+-                    for (auto ri = 0; ri < cand.record_count; ++ri)
+-                    {
+-                        if (!cand.records[ri] || !cand.records[ri]->valid)
+-                            continue;
+-
+-                        auto hits = this->scan_player(eye, inaccuracy, ctx, cand, cand.records[ri], local);
+-
+-                        const auto has_direct_hit = std::any_of(hits.begin(), hits.end(), [](const scan_hit& hit) { return !hit.penetrated; });
+-
+-                        for (auto& h : hits)
+-                            candidate_hits.push_back(std::move(h));
+-
+-                        // Optimization: if we found a direct hit on the newest record, skip older records
+-                        if (has_direct_hit)
+-                            break;
+-                    }
+-                }
+-            }, 1);
++        // Diagnostic mode: keep engine calls on the calling thread.
++        // This bypasses the custom CStdFunctionJob ABI, not target scanning.
++        for (std::size_t ci = 0; ci < candidates.size(); ++ci)
++        {
++            auto& cand = candidates[ci];
++            auto& candidate_hits = per_candidate[ci];
++            candidate_hits.reserve(24);
++
++            for (auto ri = 0; ri < cand.record_count; ++ri)
++            {
++                if (!cand.records[ri] || !cand.records[ri]->valid)
++                    continue;
++
++                auto hits = this->scan_player(eye, inaccuracy, ctx, cand, cand.records[ri], local);
++                const auto has_direct_hit = std::any_of(hits.begin(), hits.end(),
++                    [](const scan_hit& hit) { return !hit.penetrated; });
++
++                for (auto& hit : hits)
++                    candidate_hits.push_back(std::move(hit));
++
++                if (has_direct_hit)
++                    break;
++            }
++        }
+ 
+         std::vector<scan_hit> flat;
+         auto total_hits{ std::size_t{} };
+@@ -750,6 +746,7 @@
+ 
+     std::vector<rage::scan_hit> rage::scan_player(const math::vector3& eye, float inaccuracy, const aim_context& ctx, candidate& cand, shared::lagcomp::record* record, const systems::local::snapshot& local) const
+     {
++        diag::exception_scope player_scope{ "rage: scan_player / validation" };
+         if (!cand.pawn || cand.record_count <= 0 || cand.health <= 0 ||
+             !record || !record->valid || record->bone_count <= 0)
+             return {};
+@@ -757,6 +754,7 @@
+         const auto& shared_ctx = g_shared.ctx();
+         const auto& config = settings::g_combat.m_ragebot.get_group(shared_ctx.weapon_type, shared_ctx.item_def_idx);
+ 
++        diag::set_exception_phase("rage: scan_player / hitboxes");
+         const auto game_scene_node = memory::read<std::uintptr_t>(cand.pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
+         if (!game_scene_node)
+             return {};
+@@ -766,7 +764,9 @@
+             return {};
+ 
+         const auto skeleton = g_shared.lc().get_skeleton(*record);
++        diag::set_exception_phase("rage: scan_player / prepare_target");
+         const auto pen_ctx = g_shared.pen().prepare_target(cand.pawn, record);
++        diag::set_exception_phase("rage: scan_player / multipoints");
+ 
+         const auto force_body = config.body_aim.value;
+         std::array<int, 19> scan_order{};
+@@ -902,6 +902,7 @@
+         if (points.empty())
+             return {};
+ 
++        diag::set_exception_phase("rage: scan_player / penetration");
+         std::vector<scan_hit> results;
+         results.reserve(static_cast<std::size_t>(scan_count) * 2);
+         std::array<bool, 19> center_sufficient{};
