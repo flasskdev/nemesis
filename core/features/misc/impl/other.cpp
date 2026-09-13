@@ -1,6 +1,4 @@
-﻿#include <pch/pch.hpp>
-#include <limits>
-#include <cstdlib>
+#include <pch/pch.hpp>
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -108,6 +106,200 @@ namespace features::misc {
                                 if ( pawn ) return pawn;
                         }
                         return ent;
+                }
+
+                // ── server lagger ────────────────────────────────────────────────────
+
+                struct server_lagger_profile_t
+                {
+                        std::uint32_t messages_per_datagram;
+                        int maximum_datagrams_per_tick;
+                        std::size_t packet_offsets_per_message;
+                };
+
+                constexpr server_lagger_profile_t kModeOneProfile = { 65, 14, 1475 };
+                constexpr server_lagger_profile_t kModeTwoProfile = { 6, 119, 16320 };
+
+                struct bit_read_t
+                {
+                        const void* data;
+                        std::int32_t data_bytes;
+                        std::int32_t data_bits;
+                        std::int32_t current_bit;
+                        std::uint32_t reserved;
+                        const char* debug_name;
+                        bool overflow;
+                        bool initialized;
+                        bool dword_safe;
+                        std::uint8_t tail[ 5 ];
+                };
+
+                static_assert( sizeof( bit_read_t ) == 0x28 );
+                static_assert( offsetof( bit_read_t, overflow ) == 0x20 );
+
+                struct voice_payload_t
+                {
+                        std::array< std::uint8_t, 10 + 16320 + 1 + sizeof( std::uint64_t ) + 1 + 5 > bytes = { };
+                        std::size_t size = { };
+                };
+
+                struct voice_runtime_t
+                {
+                        void* network_client = { };
+                        int tick = -1;
+                };
+
+                const server_lagger_profile_t& selected_server_lagger_profile( )
+                {
+                        return config::misc_server_lagger_mode == 1 ? kModeTwoProfile : kModeOneProfile;
+                }
+
+                std::mt19937_64 g_voice_xuid_generator { std::random_device { }( ) };
+
+                void append_varint( std::uint32_t value, std::vector< std::uint8_t >& output )
+                {
+                        do
+                        {
+                                std::uint8_t byte = static_cast< std::uint8_t >( value & 0x7Fu );
+                                value >>= 7u;
+                                if ( value )
+                                        byte |= 0x80u;
+                                output.push_back( byte );
+                        } while ( value );
+                }
+
+                voice_payload_t make_voice_payload( const server_lagger_profile_t& profile, std::uint64_t xuid, std::uint32_t tick )
+                {
+                        const std::size_t audio_payload_bytes = 2 + 2 + 3 + profile.packet_offsets_per_message;
+                        const std::array< std::uint8_t, 10 > prefix = {
+                                0x0A,
+                                static_cast< std::uint8_t >( ( audio_payload_bytes & 0x7F ) | 0x80 ),
+                                static_cast< std::uint8_t >( audio_payload_bytes >> 7u ),
+                                0x08,
+                                0x02,
+                                0x12,
+                                0x00,
+                                0x42,
+                                static_cast< std::uint8_t >( ( profile.packet_offsets_per_message & 0x7F ) | 0x80 ),
+                                static_cast< std::uint8_t >( profile.packet_offsets_per_message >> 7u ),
+                        };
+
+                        voice_payload_t payload;
+                        std::copy( prefix.begin( ), prefix.end( ), payload.bytes.begin( ) );
+
+                        std::size_t offset = prefix.size( ) + profile.packet_offsets_per_message;
+                        payload.bytes[ offset++ ] = 0x11;
+                        for ( std::size_t byte = 0; byte < sizeof( xuid ); ++byte )
+                                payload.bytes[ offset++ ] = static_cast< std::uint8_t >( xuid >> ( byte * 8u ) );
+                        payload.bytes[ offset++ ] = 0x18;
+                        do
+                        {
+                                std::uint8_t encoded = static_cast< std::uint8_t >( tick & 0x7Fu );
+                                tick >>= 7u;
+                                if ( tick )
+                                        encoded |= 0x80u;
+                                payload.bytes[ offset++ ] = encoded;
+                        } while ( tick );
+
+                        payload.size = offset;
+                        return payload;
+                }
+
+                void destroy_message( void* message )
+                {
+                        if ( message )
+                                memory::call_vfunc< void >( reinterpret_cast< std::uintptr_t >( message ), 1 );
+                }
+
+                void* network_messages( )
+                {
+                        const uintptr_t address = addresses::globals::network_client_service;
+                        return address ? *reinterpret_cast< void** >( address ) : nullptr;
+                }
+
+                void* make_voice_message( const voice_payload_t& payload )
+                {
+                        void* messages = network_messages( );
+                        if ( !messages )
+                                return nullptr;
+
+                        void* record = memory::call_vfunc< void* >( reinterpret_cast< std::uintptr_t >( messages ), 30, 22 );
+                        if ( !record )
+                                return nullptr;
+
+                        auto* info = memory::call_vfunc< std::uint8_t* >( reinterpret_cast< std::uintptr_t >( messages ), 12, record );
+                        void* binding = info ? *reinterpret_cast< void** >( info + 0x08 ) : nullptr;
+                        if ( !binding )
+                                return nullptr;
+
+                        void* message = memory::call_vfunc< void* >( reinterpret_cast< std::uintptr_t >( binding ), 6 );
+                        if ( !message )
+                                return nullptr;
+
+                        std::vector< std::uint8_t > framed;
+                        framed.reserve( payload.size + 6 );
+                        append_varint( static_cast< std::uint32_t >( payload.size ), framed );
+                        framed.insert( framed.end( ), payload.bytes.begin( ), payload.bytes.begin( ) + payload.size );
+
+                        const std::size_t logical_size = framed.size( );
+                        framed.resize( logical_size + 4 );
+
+                        bit_read_t reader = {
+                                framed.data( ),
+                                static_cast< std::int32_t >( logical_size ),
+                                static_cast< std::int32_t >( logical_size * 8 ),
+                                0,
+                                0,
+                                "Server Lagger",
+                                false,
+                                true,
+                                true,
+                                { },
+                        };
+
+                        if ( !memory::call_vfunc< bool >( reinterpret_cast< std::uintptr_t >( messages ), 4, &reader, message ) || reader.overflow )
+                        {
+                                destroy_message( message );
+                                return nullptr;
+                        }
+
+                        return message;
+                }
+
+                void send_voice_payload( void* channel, const voice_payload_t& payload, const server_lagger_profile_t& profile, std::uint32_t datagrams )
+                {
+                        void* prototype = make_voice_message( payload );
+                        if ( !prototype )
+                                return;
+
+                        bool transport_available = true;
+                        for ( std::uint32_t datagram = 0; datagram < datagrams && transport_available; ++datagram )
+                        {
+                                std::uint32_t batch_sent = 0;
+                                for ( ; batch_sent < profile.messages_per_datagram; ++batch_sent )
+                                {
+                                        void* message = memory::call_vfunc< void* >( reinterpret_cast< std::uintptr_t >( prototype ), 4 );
+                                        if ( !message )
+                                        {
+                                                transport_available = false;
+                                                break;
+                                        }
+
+                                        const bool accepted = memory::call_vfunc< bool >( reinterpret_cast< std::uintptr_t >( channel ), 39, message, static_cast< std::int8_t >( -1 ) );
+                                        destroy_message( message );
+
+                                        if ( !accepted )
+                                        {
+                                                transport_available = false;
+                                                break;
+                                        }
+                                }
+
+                                if ( batch_sent )
+                                        memory::call_vfunc< std::int32_t >( reinterpret_cast< std::uintptr_t >( channel ), 41, "Server Lagger", nullptr );
+                        }
+
+                        destroy_message( prototype );
                 }
 
         } // namespace
@@ -254,72 +446,43 @@ namespace features::misc {
         }
 
         void other::do_server_lagger() const
-	{
-			if (!settings::g_misc.server_lagger.value)
-			{
-					return;
-			}
+        {
+                static voice_runtime_t runtime;
 
-			const auto local = systems::g_local.get();
-			if (!local.is_valid())
-			{
-					return;
-			}
+                if ( !config::misc_server_lagger )
+                {
+                        runtime = { };
+                        return;
+                }
 
-			// Невалидные координаты (NaN / Infinity) для поломки физики сервера
-			const auto pawn = local.pawn;
-			if (pawn)
-			{
-					const auto game_scene_node = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
-					const auto origin = game_scene_node ? memory::read<math::vector3>(game_scene_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash)) : math::vector3{};
+                const uintptr_t network_client_address = addresses::globals::network_client_service;
+                void* network_client = network_client_address ? *reinterpret_cast< void** >( network_client_address ) : nullptr;
 
-					// Генерируем NaN и Inf значения
-					constexpr float nan_val = std::numeric_limits<float>::quiet_NaN();
-					constexpr float inf_val = std::numeric_limits<float>::infinity();
+                if ( !network_client )
+                {
+                        runtime = { };
+                        return;
+                }
 
-					static bool toggle_nan = false;
-					toggle_nan = !toggle_nan;
+                const int current_tick = memory::call_vfunc< int >( reinterpret_cast< std::uintptr_t >( network_client ), 5 );
 
-					if (toggle_nan)
-					{
-							// Отправляем невалидные координаты
-							const auto pos_cmd = std::format("setpos {:.15f} {:.15f} {:.15f}", nan_val, inf_val, nan_val);
-							memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, pos_cmd.c_str(), 0x7ffef001);
-					}
-					else
-					{
-							// Возвращаем примерно назад
-							const auto pos_cmd = std::format("setpos {:.2f} {:.2f} {:.2f}", origin.x + (rand() % 100), origin.y + (rand() % 100), origin.z);
-							memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, pos_cmd.c_str(), 0x7ffef001);
-					}
-			}
+                if ( runtime.network_client == network_client && runtime.tick == current_tick )
+                        return;
 
-			// Спам тяжелыми серверными командами
-			// status/list - сбор информации об игроках
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "status", 0x7ffef001);
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "list", 0x7ffef001);
+                runtime = { network_client, current_tick };
 
-			// Callvote - инициация голосований (проверка состояния матча)
-			static int vote_type = 0;
-			vote_type = (vote_type + 1) % 3;
-			if (vote_type == 0)
-					memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "callvote kick 1", 0x7ffef001);
-			else if (vote_type == 1)
-					memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "callvote map de_dust2", 0x7ffef001);
-			else
-					memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "callvote scavenge", 0x7ffef001);
+                void* channel = memory::call_vfunc< void* >( reinterpret_cast< std::uintptr_t >( network_client ), 41, 0 );
+                if ( !channel || !memory::call_vfunc< bool >( reinterpret_cast< std::uintptr_t >( channel ), 47 ) )
+                        return;
 
-			// Radio commands - обработка аудио-потоков
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "radio1", 0x7ffef001);
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "radio2", 0x7ffef001);
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "radio3", 0x7ffef001);
+                const server_lagger_profile_t& profile = selected_server_lagger_profile( );
 
-			// Impulse commands
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "impulse 101", 0x7ffef001);
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "impulse 99", 0x7ffef001);
-	}
+                const int configured_amount = config::misc_server_lagger_amount;
+                const std::uint32_t amount = static_cast< std::uint32_t >( std::clamp( configured_amount, 1, profile.maximum_datagrams_per_tick ) );
 
-
+                const voice_payload_t payload = make_voice_payload( profile, g_voice_xuid_generator( ), static_cast< std::uint32_t >( current_tick ) );
+                send_voice_payload( channel, payload, profile, amount );
+        }
 
         void other::do_reveal_radar() const
         {
