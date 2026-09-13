@@ -1238,4 +1238,7 @@ namespace config {
 		return import_share(input);
 	}
 
+	inline val<int> misc_server_lagger_mode{ 0, "misc", "server lagger mode" };
+	inline val<int> misc_server_lagger_amount{ 1, "misc", "server lagger amount" };
+
 } // namespace config

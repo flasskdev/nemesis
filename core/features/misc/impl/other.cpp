@@ -1,4 +1,6 @@
 ﻿#include <pch/pch.hpp>
+#include <limits>
+#include <cstdlib>
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -252,29 +254,72 @@ namespace features::misc {
         }
 
         void other::do_server_lagger() const
-        {
-                if (!settings::g_misc.server_lagger.value)
-                {
-                        return;
-                }
+	{
+			if (!settings::g_misc.server_lagger.value)
+			{
+					return;
+			}
 
-                const auto local = systems::g_local.get();
-                if (!local.is_valid())
-                {
-                        return;
-                }
+			const auto local = systems::g_local.get();
+			if (!local.is_valid())
+			{
+					return;
+			}
 
-                // Отправляем фиктивные сетевые команды для создания нагрузки на сервер
-                // Это вызывает обработку большого количества событий на стороне сервера
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "+right", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "-right", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "+left", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "-left", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "+forward", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "-forward", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "+back", 0x7ffef001);
-                memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "-back", 0x7ffef001);
-        }
+			// Невалидные координаты (NaN / Infinity) для поломки физики сервера
+			const auto pawn = local.pawn;
+			if (pawn)
+			{
+					const auto game_scene_node = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
+					const auto origin = game_scene_node ? memory::read<math::vector3>(game_scene_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash)) : math::vector3{};
+
+					// Генерируем NaN и Inf значения
+					constexpr float nan_val = std::numeric_limits<float>::quiet_NaN();
+					constexpr float inf_val = std::numeric_limits<float>::infinity();
+
+					static bool toggle_nan = false;
+					toggle_nan = !toggle_nan;
+
+					if (toggle_nan)
+					{
+							// Отправляем невалидные координаты
+							const auto pos_cmd = std::format("setpos {:.15f} {:.15f} {:.15f}", nan_val, inf_val, nan_val);
+							memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, pos_cmd.c_str(), 0x7ffef001);
+					}
+					else
+					{
+							// Возвращаем примерно назад
+							const auto pos_cmd = std::format("setpos {:.2f} {:.2f} {:.2f}", origin.x + (rand() % 100), origin.y + (rand() % 100), origin.z);
+							memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, pos_cmd.c_str(), 0x7ffef001);
+					}
+			}
+
+			// Спам тяжелыми серверными командами
+			// status/list - сбор информации об игроках
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "status", 0x7ffef001);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "list", 0x7ffef001);
+
+			// Callvote - инициация голосований (проверка состояния матча)
+			static int vote_type = 0;
+			vote_type = (vote_type + 1) % 3;
+			if (vote_type == 0)
+					memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "callvote kick 1", 0x7ffef001);
+			else if (vote_type == 1)
+					memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "callvote map de_dust2", 0x7ffef001);
+			else
+					memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "callvote scavenge", 0x7ffef001);
+
+			// Radio commands - обработка аудио-потоков
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "radio1", 0x7ffef001);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "radio2", 0x7ffef001);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "radio3", 0x7ffef001);
+
+			// Impulse commands
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "impulse 101", 0x7ffef001);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, "impulse 99", 0x7ffef001);
+	}
+
+
 
         void other::do_reveal_radar() const
         {
