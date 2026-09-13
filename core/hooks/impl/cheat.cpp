@@ -13,6 +13,7 @@
 #include <external/xdraw/xui/xui.hpp>
 #include <utilities/lifecycle.hpp>
 #include <utilities/loader_session.hpp>
+#include <utilities/steam/steam.hpp>
 #include "../hooks.hpp"
 
 namespace hooks {
@@ -1348,14 +1349,21 @@ namespace hooks {
 					}
 				}
 
-				const auto& display = features::misc::other::s_display_name;
-				if ( !display.empty( ) )
+				static char s_display_name_buf[ 256 ]{};
+				std::string final_name = features::misc::other::s_display_name;
+				if ( final_name.empty( ) || final_name == "x" )
 				{
-					static_cast<void>( memory::safe_write<const char*>( arg_list + 0x10, display.c_str( ) ) );
+					if ( const auto* steam_p = steam::friends::get_persona_name( ); steam_p && *steam_p && std::strcmp( steam_p, "x" ) != 0 )
+					{
+						final_name = steam_p;
+					}
 				}
-				if ( !cfg.clantag.value && !cfg.override_name.value )
+
+				if ( !final_name.empty( ) && final_name != "x" )
 				{
-					features::misc::other::s_display_name.clear( );
+					std::strncpy( s_display_name_buf, final_name.c_str( ), sizeof( s_display_name_buf ) - 1 );
+					s_display_name_buf[ sizeof( s_display_name_buf ) - 1 ] = '\0';
+					static_cast<void>( memory::safe_write<const char*>( arg_list + 0x10, s_display_name_buf ) );
 				}
 				features::misc::other::s_name_change_pending = false;
 			}

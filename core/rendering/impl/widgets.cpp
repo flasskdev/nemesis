@@ -11,6 +11,7 @@
 #include "menu/menu.weapons.hpp"
 #include <utilities/security/security.hpp>
 #include <utilities/steam/steam.hpp>
+#include <protection/game_addresses.hpp>
 
 namespace rendering {
 
@@ -77,8 +78,44 @@ namespace rendering {
 
 		// ── ping ────────────────────────────────────────────────────────────
 		auto ping{ 0 };
-		if ( local.is_alive && local.controller && systems::g_entities.exists( local.controller ) )
-			ping = memory::read<std::uint32_t>( local.controller + SCHEMA( "CCSPlayerController", "m_iPing"_hash ) );
+		if ( addresses::globals::network_client_service )
+		{
+			const auto net_channel = memory::call<std::uintptr_t>( PATTERN( patterns::get_net_channel ), 0, 0 );
+			if ( net_channel )
+			{
+				const auto lat_out = memory::call_vfunc<float>( net_channel, 10, 0 );
+				const auto lat_in  = memory::call_vfunc<float>( net_channel, 10, 1 );
+				if ( std::isfinite( lat_out ) && lat_out > 0.0f )
+				{
+					float total_lat = lat_out;
+					if ( std::isfinite( lat_in ) && lat_in > 0.0f )
+						total_lat += lat_in;
+					ping = static_cast<int>( std::round( total_lat * 1000.0f ) );
+				}
+				else
+				{
+					const auto avg_out = memory::call_vfunc<float>( net_channel, 9, 0 );
+					const auto avg_in  = memory::call_vfunc<float>( net_channel, 9, 1 );
+					if ( std::isfinite( avg_out ) && avg_out > 0.0f )
+					{
+						float total_lat = avg_out;
+						if ( std::isfinite( avg_in ) && avg_in > 0.0f )
+							total_lat += avg_in;
+						ping = static_cast<int>( std::round( total_lat * 1000.0f ) );
+					}
+				}
+			}
+		}
+
+		if ( ping <= 0 )
+		{
+			const auto ctrl = local.controller ? local.controller : memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
+			if ( ctrl )
+			{
+				ping = static_cast<int>( memory::read<std::uint32_t>( ctrl + SCHEMA( "CCSPlayerController", "m_iPing"_hash ) ) );
+			}
+		}
+
 		char ping_val[ 8 ]{};
 		std::snprintf( ping_val, sizeof( ping_val ), "%d", ping );
 
