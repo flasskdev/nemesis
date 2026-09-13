@@ -49,6 +49,9 @@ namespace systems {
 		static bool register_listener( const char* event_name, handler_fn handler );
 		static void unregister_listener( const char* event_name );
 
+		[[nodiscard]] static std::uintptr_t get_controller( void* event, const char* key_name );
+		[[nodiscard]] static std::uintptr_t get_pawn( void* event, const char* key_name );
+
 	private:
 		struct listener
 		{

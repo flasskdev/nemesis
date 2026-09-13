@@ -14,12 +14,16 @@
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 #include <core/rendering/rendering.hpp>
+#include <core/rendering/theme.hpp>
+#include <core/features/misc/misc.hpp>
 
 #include <utilities/diag.hpp>
 #include <utilities/loader_session.hpp>
+#include <utilities/lifecycle.hpp>
 
 namespace {
 
+	PRUNTIME_FUNCTION g_registered_function_table{};
 	std::atomic<LPTOP_LEVEL_EXCEPTION_FILTER> g_previous_exception_filter{};
 	PVOID g_vectored_exception_handler{};
 	std::atomic<bool> g_is_attached{ false };
@@ -67,12 +71,24 @@ namespace {
 				const DWORD entry_count = pdata.Size / sizeof( RUNTIME_FUNCTION );
 				if ( entry_count > 0 )
 				{
-					RtlAddFunctionTable( function_table, entry_count, static_cast<DWORD64>( base ) );
+					if ( RtlAddFunctionTable( function_table, entry_count, static_cast<DWORD64>( base ) ) )
+					{
+						g_registered_function_table = function_table;
+					}
 				}
 			}
 		}
 		__except ( EXCEPTION_EXECUTE_HANDLER )
 		{
+		}
+	}
+
+	void unregister_exception_table( )
+	{
+		if ( g_registered_function_table )
+		{
+			RtlDeleteFunctionTable( g_registered_function_table );
+			g_registered_function_table = nullptr;
 		}
 	}
 
@@ -573,6 +589,8 @@ namespace {
 
 		diag::step( "stage: done" );
 		loader_session::ready();
+
+		lifecycle::start_subscription_monitor( module_handle );
 		return 1;
 	}
 
@@ -600,6 +618,209 @@ namespace {
 
 } // namespace
 
+namespace lifecycle {
+
+void print_expired_chat_notification( )
+{
+	const auto r = tokens::col_accent.r;
+	const auto g = tokens::col_accent.g;
+	const auto b = tokens::col_accent.b;
+
+	const auto formatted = std::format(
+		"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> "
+		"<font color='#38BDF8'>Ваша подписка на </font>"
+		"<font color='#{:02X}{:02X}{:02X}'>Mintaly</font>"
+		"<font color='#38BDF8'> закончилась, возобновить ее вы можете на нашем сайте </font>"
+		"<font color='#{:02X}{:02X}{:02X}'>mintaly.cc</font>",
+		r, g, b, r, g, b, r, g, b
+	);
+
+	features::misc::detail::chat_print_raw( formatted.c_str( ) );
+}
+
+void shutdown_all_cheat_systems( )
+{
+	if ( g_has_shutdown.exchange( true ) )
+	{
+		return;
+	}
+
+	g_is_unloading.store( true, std::memory_order_release );
+	g_stop_monitor.store( true, std::memory_order_release );
+
+	// 1. Immediately disable and unhook all cheat & utility hooks first!
+	// This restores the original game bytes so NO NEW CALLS enter any detour.
+	hooks::cheat::shutdown( );
+	hooks::utility::shutdown( );
+
+#if defined( DEV )
+	g_terminate_process_hook.reset( );
+	g_minidump_hook.reset( );
+#endif
+
+	// 2. Wait 300ms so any in-flight game threads currently inside hook detours
+	// finish their execution and safely return to caller.
+	Sleep( 300 );
+
+	// 3. Unregister exception handlers and function tables
+	if ( g_vectored_exception_handler )
+	{
+		RemoveVectoredExceptionHandler( g_vectored_exception_handler );
+		g_vectored_exception_handler = nullptr;
+	}
+
+	const auto previous_filter =
+		g_previous_exception_filter.exchange(
+			nullptr,
+			std::memory_order_acq_rel );
+	const auto current_filter =
+		SetUnhandledExceptionFilter( previous_filter );
+	if ( current_filter != diag_unhandled_exception_filter )
+	{
+		SetUnhandledExceptionFilter( current_filter );
+	}
+
+	unregister_exception_table( );
+
+	// 4. Clean up menu, cursor, and features
+	rendering::g_menu.shutdown( );
+	ClipCursor( nullptr );
+
+	features::esp::player::g_chams.bt( ).shutdown( );
+	features::esp::player::g_chams.os( ).shutdown( );
+	features::world::g_weather.release( );
+
+	systems::events::shutdown( );
+
+	// 5. Clean up DirectX rendering context
+	rendering::g_context.shutdown( );
+
+	CoUninitialize( );
+	diag::shutdown( );
+
+	if ( auto* block = loader_session::shared.load( std::memory_order_acquire ) )
+	{
+		UnmapViewOfFile( block );
+		loader_session::shared.store( nullptr, std::memory_order_release );
+	}
+	if ( loader_session::mapping )
+	{
+		CloseHandle( loader_session::mapping );
+		loader_session::mapping = nullptr;
+	}
+}
+
+void unload_and_exit( HMODULE module_handle )
+{
+	if ( !module_handle )
+	{
+		module_handle = g_module_handle ? g_module_handle : resolve_self_module( );
+	}
+
+	// Print expiration notification into CS2 chat and HUD toast banner
+	print_expired_chat_notification( );
+
+	// Short pause so Panorama and HUD process the chat event before tear-down
+	Sleep( 100 );
+
+	shutdown_all_cheat_systems( );
+
+	// Wait 200ms for CPU caches
+	Sleep( 200 );
+
+	BOOL is_load_library_module = FALSE;
+	if ( module_handle )
+	{
+		HMODULE check_mod = nullptr;
+		if ( GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			reinterpret_cast< LPCSTR >( module_handle ), &check_mod ) && check_mod == module_handle )
+		{
+			is_load_library_module = TRUE;
+		}
+	}
+
+	if ( is_load_library_module )
+	{
+		FreeLibraryAndExitThread( module_handle, 0 );
+		return;
+	}
+
+	// For manual-mapped DLL: DO NOT VirtualFree MEM_RELEASE!
+	// Unmapping the DLL memory causes instant access violations if any threads,
+	// CRT runtime structures, or system callbacks touch addresses in this range.
+	// Leaving the dormant, unhooked image in memory is completely safe and stable.
+	ExitThread( 0 );
+}
+
+void request_unload( )
+{
+	if ( g_is_unloading.exchange( true ) )
+	{
+		return;
+	}
+
+	const auto h = CreateThread( nullptr, 0, []( LPVOID param ) -> DWORD {
+		unload_and_exit( static_cast< HMODULE >( param ) );
+		return 0;
+	}, g_module_handle ? g_module_handle : resolve_self_module( ), 0, nullptr );
+
+	if ( h )
+	{
+		CloseHandle( h );
+	}
+}
+
+DWORD WINAPI subscription_monitor_thread( LPVOID param )
+{
+	const auto module_handle = static_cast< HMODULE >( param );
+
+	while ( !g_stop_monitor.load( std::memory_order_relaxed ) )
+	{
+		for ( int i = 0; i < 60; ++i )
+		{
+			if ( g_stop_monitor.load( std::memory_order_relaxed ) )
+			{
+				return 0;
+			}
+			Sleep( 1000 );
+		}
+
+		if ( g_stop_monitor.load( std::memory_order_relaxed ) )
+		{
+			return 0;
+		}
+
+		if ( loader_session::check_access( ) != loader_session::access_status::granted )
+		{
+			diag::write( diag::level::info, "subscription expired during runtime, shutting down and unloading" );
+			unload_and_exit( module_handle );
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+void start_subscription_monitor( HMODULE module_handle )
+{
+	g_module_handle = module_handle;
+	g_stop_monitor.store( false, std::memory_order_release );
+
+	g_monitor_thread = CreateThread( nullptr, 0, subscription_monitor_thread, module_handle, 0, nullptr );
+	if ( g_monitor_thread )
+	{
+		CloseHandle( g_monitor_thread );
+		g_monitor_thread = nullptr;
+	}
+}
+
+void stop_subscription_monitor( )
+{
+	g_stop_monitor.store( true, std::memory_order_release );
+}
+
+} // namespace lifecycle
+
 extern "C" int __stdcall entry( HMODULE module_handle, DWORD reason, LPVOID reserved )
 {
 	module_handle = resolve_self_module( module_handle );
@@ -623,6 +844,7 @@ extern "C" int __stdcall entry( HMODULE module_handle, DWORD reason, LPVOID rese
 		DisableThreadLibraryCalls( module_handle );
 
 		diag::set_module( module_handle );
+		lifecycle::g_module_handle = module_handle;
 		diag::step( "stage: dll attach" );
 		diag::step( "build: development diagnostics" );
 
@@ -644,41 +866,7 @@ extern "C" int __stdcall entry( HMODULE module_handle, DWORD reason, LPVOID rese
 	else if ( reason == DLL_PROCESS_DETACH && g_is_attached.load( std::memory_order_acquire ) )
 	{
 		g_is_attached.store( false, std::memory_order_release );
-
-#if defined( DEV )
-		if ( g_vectored_exception_handler )
-		{
-			RemoveVectoredExceptionHandler( g_vectored_exception_handler );
-			g_vectored_exception_handler = nullptr;
-		}
-
-		const auto previous_filter =
-			g_previous_exception_filter.exchange(
-				nullptr,
-				std::memory_order_acq_rel );
-		const auto current_filter =
-			SetUnhandledExceptionFilter( previous_filter );
-		if ( current_filter != diag_unhandled_exception_filter )
-		{
-			SetUnhandledExceptionFilter( current_filter );
-		}
-
-		g_terminate_process_hook.reset( );
-		g_minidump_hook.reset( );
-
-		features::esp::player::g_chams.bt( ).shutdown( );
-		features::esp::player::g_chams.os( ).shutdown( );
-
-		features::world::g_weather.release( );
-		rendering::g_menu.shutdown( );
-
-		systems::events::shutdown( );
-		hooks::utility::shutdown( );
-		hooks::cheat::shutdown( );
-		CoUninitialize( );
-#endif
-
-		diag::shutdown( );
+		lifecycle::shutdown_all_cheat_systems( );
 
 #if defined( DEV )
 		_CRT_INIT( module_handle, reason, reserved );
@@ -687,3 +875,4 @@ extern "C" int __stdcall entry( HMODULE module_handle, DWORD reason, LPVOID rese
 
 	return 1;
 }
+

@@ -11,6 +11,8 @@
 #include <core/features/features.hpp>
 #include <protection/game_addresses.hpp>
 #include <external/xdraw/xui/xui.hpp>
+#include <utilities/lifecycle.hpp>
+#include <utilities/loader_session.hpp>
 #include "../hooks.hpp"
 
 namespace hooks {
@@ -165,6 +167,24 @@ namespace hooks {
 
 	HRESULT __fastcall cheat::present( IDXGISwapChain* thisptr, UINT sync_interval, UINT flags )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_present.call<HRESULT>( thisptr, sync_interval, flags );
+		}
+
+		static auto last_sub_check = std::chrono::steady_clock::now( );
+		const auto now = std::chrono::steady_clock::now( );
+		if ( now - last_sub_check >= std::chrono::seconds( 60 ) )
+		{
+			last_sub_check = now;
+			if ( loader_session::check_access( ) != loader_session::access_status::granted )
+			{
+				diag::write( diag::level::info, "subscription expired during present, requesting unload" );
+				lifecycle::request_unload( );
+				return m_present.call<HRESULT>( thisptr, sync_interval, flags );
+			}
+		}
+
 		rendering::g_context.on_present( thisptr );
 		features::misc::g_auto_accept.run( );
 
@@ -181,6 +201,11 @@ namespace hooks {
 
 	HRESULT __fastcall cheat::resize_buffers( IDXGISwapChain* thisptr, UINT buffer_count, UINT width, UINT height, DXGI_FORMAT new_format, UINT swap_chain_flags )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_resize_buffers.call<long>( thisptr, buffer_count, width, height, new_format, swap_chain_flags );
+		}
+
 		rendering::g_context.on_resize_buffers( );
 
 		const auto result = m_resize_buffers.call<long>( thisptr, buffer_count, width, height, new_format, swap_chain_flags );
@@ -194,6 +219,10 @@ namespace hooks {
 
 	LRESULT __stdcall cheat::wnd_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_wnd_proc.call<LRESULT>( hwnd, msg, wparam, lparam );
+		}
 		if ( msg == WM_ACTIVATE && LOWORD( wparam ) != WA_INACTIVE && rendering::g_menu.is_open( ) && rendering::g_context.get_window( ) == hwnd )
 		{
 			if ( addresses::globals::input_system )
@@ -252,6 +281,12 @@ namespace hooks {
 
 	void __fastcall cheat::frame_stage_notify( std::uintptr_t thisptr, int stage )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_frame_stage_notify.call<void>( thisptr, stage );
+			return;
+		}
+
 		const auto local_player_controller = memory::safe_read<std::uintptr_t>( addresses::globals::local_player_controller ).value_or( 0 );
 		if ( !local_player_controller )
 		{
@@ -366,7 +401,7 @@ namespace hooks {
 
 	void __fastcall cheat::create_move( std::uintptr_t thisptr, int slot, bool active )
 	{
-		if ( is_level_shutting_down( ) )
+		if ( lifecycle::is_unloading( ) || is_level_shutting_down( ) )
 		{
 			return m_create_move.call<void>( thisptr, slot, active );
 		}
@@ -527,7 +562,7 @@ namespace hooks {
 
 	void __fastcall cheat::handle_view_angles( std::uintptr_t thisptr, int a2 )
 	{
-		if ( !systems::g_local.get( ).is_valid( ) )
+		if ( lifecycle::is_unloading( ) || !systems::g_local.get( ).is_valid( ) )
 		{
 			m_handle_view_angles.call<void>( thisptr, a2 );
 			return;
@@ -542,6 +577,12 @@ namespace hooks {
 
 	void __fastcall cheat::add_entity( std::uintptr_t thisptr, std::uintptr_t entity, std::uint32_t handle )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_add_entity.call<void>( thisptr, entity, handle );
+			return;
+		}
+
 		systems::g_entities.on_add_entity( entity, handle );
 
 		m_add_entity.call<void>( thisptr, entity, handle );
@@ -549,6 +590,12 @@ namespace hooks {
 
 	void __fastcall cheat::remove_entity( std::uintptr_t thisptr, std::uintptr_t entity, std::uint32_t handle )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_remove_entity.call<void>( thisptr, entity, handle );
+			return;
+		}
+
 		systems::g_entities.on_remove_entity( entity, handle );
 
 		m_remove_entity.call<void>( thisptr, entity, handle );
@@ -558,7 +605,7 @@ namespace hooks {
 	{
 		m_render_view.call<void>( thisptr );
 
-		if ( is_level_shutting_down( ) || !systems::g_local.get( ).is_valid( ) )
+		if ( lifecycle::is_unloading( ) || is_level_shutting_down( ) || !systems::g_local.get( ).is_valid( ) )
 		{
 			systems::g_view.reset( );
 			systems::g_frame_data.reset( );
@@ -571,6 +618,12 @@ namespace hooks {
 
 	void __fastcall cheat::draw_skybox_array( std::uintptr_t thisptr, std::uintptr_t a2, std::uintptr_t mesh_array, int mesh_count, int a5, std::uintptr_t a6, std::uintptr_t a7, std::uintptr_t a8 )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_draw_skybox_array.call<void>( thisptr, a2, mesh_array, mesh_count, a5, a6, a7, a8 );
+			return;
+		}
+
 		features::world::g_scene.on_draw_skybox_array_pre( mesh_array, mesh_count );
 
 		m_draw_skybox_array.call<void>( thisptr, a2, mesh_array, mesh_count, a5, a6, a7, a8 );
@@ -580,6 +633,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::light_scene_object( std::uintptr_t thisptr, std::uintptr_t object, std::uintptr_t a3 )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_light_scene_object.call<std::uintptr_t>( thisptr, object, a3 );
+		}
+
 		features::world::g_scene.on_light_scene_object_pre( object );
 		features::misc::g_dlight.apply_scene_color( object );
 
@@ -594,12 +652,18 @@ namespace hooks {
 	{
 		m_draw_scene_object_array.call<void>( thisptr, a2, object_array );
 
+		if ( lifecycle::is_unloading( ) )
+		{
+			return;
+		}
+
 		diag::exception_scope exception_scope{ "world: aggregate records" };
 		features::world::g_scene.on_draw_scene_object_array( object_array );
 	}
 
 	std::uintptr_t __fastcall cheat::draw_scene_object( std::uintptr_t a1, std::uintptr_t a2, std::uintptr_t batch, int batch_count, int a5, std::uintptr_t a6, std::uintptr_t a7, std::uintptr_t a8 )
 	{
+		if ( !lifecycle::is_unloading( ) )
 		{
 			diag::exception_scope exception_scope{ "world: primitive tint" };
 			features::world::g_scene.on_draw_scene_object( batch, batch_count );
@@ -610,6 +674,11 @@ namespace hooks {
 
 	bool __fastcall cheat::is_glowing( std::uintptr_t glow_property )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_is_glowing.call<bool>( glow_property );
+		}
+
 		if ( glow_property )
 		{
 			const auto owner_entity = memory::safe_read<std::uintptr_t>( glow_property + 0x18 ).value_or( 0 );
@@ -640,6 +709,12 @@ namespace hooks {
 
 	void __fastcall cheat::get_glow_color( std::uintptr_t glow_property, float* color )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_get_glow_color.call<void>( glow_property, color );
+			return;
+		}
+
 		if ( glow_property )
 		{
 			const auto owner_entity = memory::safe_read<std::uintptr_t>( glow_property + 0x18 ).value_or( 0 );
@@ -672,7 +747,7 @@ namespace hooks {
 	{
 		diag::exception_scope exception_scope{ "chams: generate primitives" };
 
-		if ( is_level_shutting_down( ) )
+		if ( lifecycle::is_unloading( ) || is_level_shutting_down( ) )
 		{
 			m_generate_primitives.call<void>( thisptr, scene_object, scene_view, primitive_buffer );
 			return;
@@ -733,7 +808,7 @@ namespace hooks {
 	std::uintptr_t __fastcall cheat::parse_report_hit( std::uintptr_t thisptr, std::uint8_t deleting )
 	{
 		// A report's deleting destructor can also run while the level is torn down.
-		if ( !is_level_shutting_down( ) && systems::g_local.get( ).is_valid( ) )
+		if ( !lifecycle::is_unloading( ) && !is_level_shutting_down( ) && systems::g_local.get( ).is_valid( ) )
 		{
 			features::misc::g_impacts.on_report_hit( thisptr );
 		}
@@ -743,25 +818,34 @@ namespace hooks {
 
 	void __fastcall cheat::vote_start( void* panel, std::uintptr_t msg )
 	{
-		features::misc::g_vote_logs.on_vote_start( msg );
+		if ( !lifecycle::is_unloading( ) )
+		{
+			features::misc::g_vote_logs.on_vote_start( msg );
+		}
 		m_vote_start.call<void>( panel, msg );
 	}
 
 	void __fastcall cheat::vote_pass( void* panel, std::uintptr_t msg )
 	{
-		features::misc::g_vote_logs.on_vote_pass( msg );
+		if ( !lifecycle::is_unloading( ) )
+		{
+			features::misc::g_vote_logs.on_vote_pass( msg );
+		}
 		m_vote_pass.call<void>( panel, msg );
 	}
 
 	void __fastcall cheat::vote_failed( void* panel, std::uintptr_t msg )
 	{
-		features::misc::g_vote_logs.on_vote_failed( msg );
+		if ( !lifecycle::is_unloading( ) )
+		{
+			features::misc::g_vote_logs.on_vote_failed( msg );
+		}
 		m_vote_failed.call<void>( panel, msg );
 	}
 
 	void* __fastcall cheat::panorama_event( void* thisptr, const char* event_name, void* p1, void* p2 )
 	{
-		if ( event_name )
+		if ( !lifecycle::is_unloading( ) && event_name )
 		{
 			features::misc::g_auto_accept.on_panorama_event( event_name );
 		}
@@ -771,6 +855,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::setup_fog( __m128i* output, int* mode )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_setup_fog.call<std::uintptr_t>( output, mode );
+		}
+
 		if ( features::world::g_scene.on_setup_fog( output, mode ) )
 		{
 			return 0;
@@ -781,6 +870,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::set_shader_param( __m128i* map, std::uint32_t hash, __m128i* value )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_set_shader_param.call<std::uintptr_t>( map, hash, value );
+		}
+
 		features::world::g_scene.on_set_shader_param( value, hash );
 
 		return m_set_shader_param.call<std::uintptr_t>( map, hash, value );
@@ -788,6 +882,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::set_postprocess_vec( __m128i* map, std::uint32_t hash, __m128i* value )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_set_postprocess_vec.call<std::uintptr_t>( map, hash, value );
+		}
+
 		constexpr std::uint32_t dof_ranges{ 0x2ACAB07C };
 
 		// The engine only publishes DofRanges when the active camera enables DOF.
@@ -810,6 +909,11 @@ namespace hooks {
 	{
 		m_override_view.call<void>( thisptr, view_setup );
 
+		if ( lifecycle::is_unloading( ) )
+		{
+			return;
+		}
+
 		features::misc::g_camera.on_override_view( view_setup );
 		features::misc::g_removals.on_override_view( view_setup );
 		features::combat::g_misc.duckpeek( ).on_override_view( view_setup );
@@ -819,12 +923,22 @@ namespace hooks {
 	{
 		m_update_fov_sensitivity.call<void>( thisptr );
 
+		if ( lifecycle::is_unloading( ) )
+		{
+			return;
+		}
+
 		features::misc::g_camera.update_fov_sensitivity( thisptr );
 	}
 
 	void __fastcall cheat::render_scope( std::uintptr_t a1, std::uintptr_t a2 )
 	{
 		m_render_scope.call<void>( a1, a2 );
+
+		if ( lifecycle::is_unloading( ) )
+		{
+			return;
+		}
 
 		if ( settings::g_misc.m_removals.scope.value )
 		{
@@ -834,7 +948,7 @@ namespace hooks {
 
 	bool __fastcall cheat::render_crosshair( std::uintptr_t a1 )
 	{
-		if ( settings::g_misc.m_removals.crosshair.value )
+		if ( !lifecycle::is_unloading( ) && settings::g_misc.m_removals.crosshair.value )
 		{
 			return false;
 		}
@@ -844,7 +958,10 @@ namespace hooks {
 
 	float __fastcall cheat::prepare_scene_material( std::uintptr_t material, void* a2, float a3 )
 	{
-		features::misc::g_removals.on_prepare_scene_material( material );
+		if ( !lifecycle::is_unloading( ) )
+		{
+			features::misc::g_removals.on_prepare_scene_material( material );
+		}
 
 		return m_prepare_scene_material.call<float>( material, a2, a3 );
 	}
@@ -856,7 +973,7 @@ namespace hooks {
 
 	bool __fastcall cheat::draw_overhead( std::uintptr_t pawn, std::uint32_t player_slot )
 	{
-		if ( settings::g_misc.m_removals.overhead.value && pawn == systems::g_local.get( ).pawn )
+		if ( !lifecycle::is_unloading( ) && settings::g_misc.m_removals.overhead.value && pawn == systems::g_local.get( ).pawn )
 		{
 			return false;
 		}
@@ -866,7 +983,7 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::draw_legs( std::uintptr_t a1, std::uintptr_t a2, std::uintptr_t a3, std::uintptr_t a4, std::uintptr_t a5 )
 	{
-		if ( settings::g_misc.m_removals.legs.value )
+		if ( !lifecycle::is_unloading( ) && settings::g_misc.m_removals.legs.value )
 		{
 			return 0;
 		}
@@ -876,7 +993,7 @@ namespace hooks {
 
 	bool __fastcall cheat::get_transforms_for_hitbox_list( std::uintptr_t a1, std::uintptr_t a2, int* a3 )
 	{
-		if ( !features::combat::g_shared.autowalling( ) )
+		if ( lifecycle::is_unloading( ) || !features::combat::g_shared.autowalling( ) )
 		{
 			return m_get_transforms_for_hitbox_list.call<bool>( a1, a2, a3 );
 		}
@@ -966,6 +1083,11 @@ namespace hooks {
 	{
 		m_sort_primitives.call<void>( thisptr, a2, a3, a4 );
 
+		if ( lifecycle::is_unloading( ) )
+		{
+			return;
+		}
+
 		diag::exception_scope exception_scope{ "chams: sort primitives" };
 		features::esp::player::g_chams.on_sort_primitives( a3, a4 );
 	}
@@ -973,6 +1095,11 @@ namespace hooks {
 	float __fastcall cheat::get_inaccuracy( std::uintptr_t thisptr, float* a2, float* a3 )
 	{
 		const auto result = m_get_inaccuracy.call<float>( thisptr, a2, a3 );
+
+		if ( lifecycle::is_unloading( ) )
+		{
+			return result;
+		}
 
 #if defined(__clang__) || defined(__GNUC__)
 		const auto result_address = reinterpret_cast< std::uintptr_t >( __builtin_return_address( 0 ) );
@@ -995,6 +1122,11 @@ namespace hooks {
 	{
 		const auto result = m_get_interpolated_shoot_position.call<float*>( thisptr, out, tick_frac );
 
+		if ( lifecycle::is_unloading( ) )
+		{
+			return result;
+		}
+
 		// Prediction calls this helper while building the next command as well.
 		// Only the call made for an actual rage shot is its authoritative origin.
 		if ( features::combat::g_rage.is_firing_this_tick( ) )
@@ -1007,6 +1139,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::level_initialization( std::uintptr_t a1, const char* new_map )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_level_initialization.call<std::uintptr_t>( a1, new_map );
+		}
+
 		// If shutdown was missed, old map objects are no longer ours to delete.
 		do_level_shutdown( false );
 
@@ -1083,6 +1220,11 @@ namespace hooks {
 
 	std::uintptr_t __fastcall cheat::level_shutdown( std::uintptr_t a1 )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_level_shutdown.call<std::uintptr_t>( a1 );
+		}
+
 		do_level_shutdown( true );
 		diag::exception_scope exception_scope{ "level shutdown: engine" };
 		return m_level_shutdown.call<std::uintptr_t>( a1 );
@@ -1095,13 +1237,19 @@ namespace hooks {
 
 	void __fastcall cheat::process_input_event( std::uintptr_t csgo_input, int slot, float frametime )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_process_input_event.call<void>( csgo_input, slot, frametime );
+			return;
+		}
+
 		systems::g_legit_input.on_process_input_event( csgo_input, slot );
 		m_process_input_event.call<void>( csgo_input, slot, frametime );
 	}
 
 	std::uintptr_t __fastcall cheat::render_decals( std::uintptr_t render_context, std::uintptr_t** render_view, bool pass_flag_a, bool pass_flag_b )
 	{
-		if ( settings::g_misc.m_removals.decals.value )
+		if ( !lifecycle::is_unloading( ) && settings::g_misc.m_removals.decals.value )
 		{
 			return 0;
 		}
@@ -1111,6 +1259,12 @@ namespace hooks {
 
 	void __fastcall cheat::render_smoke( std::uintptr_t a1, std::uintptr_t a2, int a3, int a4, std::uintptr_t a5, std::uintptr_t a6 )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_render_smoke.call<void>( a1, a2, a3, a4, a5, a6 );
+			return;
+		}
+
 		static std::once_flag alright;
 		std::call_once( alright, [ & ]
 			{
@@ -1142,19 +1296,30 @@ namespace hooks {
 	{
 		const auto result = m_render_smoke_map.call<std::uintptr_t>( thisptr, size, out_ptr );
 
-		features::world::g_smoke.on_map( result, size, out_ptr && *out_ptr ? *out_ptr : 0 );
+		if ( !lifecycle::is_unloading( ) )
+		{
+			features::world::g_smoke.on_map( result, size, out_ptr && *out_ptr ? *out_ptr : 0 );
+		}
 
 		return result;
 	}
 
 	void __fastcall cheat::render_smoke_unmap( std::uintptr_t thisptr, std::uintptr_t ctx, std::size_t size )
 	{
-		features::world::g_smoke.on_unmap( ctx );
+		if ( !lifecycle::is_unloading( ) )
+		{
+			features::world::g_smoke.on_unmap( ctx );
+		}
 		m_render_smoke_unmap.call<void>( thisptr, ctx, size );
 	}
 
 	char __fastcall cheat::set_info( std::uintptr_t rcx, std::uintptr_t a2 )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_set_info.call<char>( rcx, a2 );
+		}
+
 		const auto& cfg = settings::g_misc.m_name_changer;
 		const auto should_override = cfg.clantag.value || cfg.override_name.value || features::misc::other::s_name_change_pending;
 		if ( should_override && a2 )
@@ -1196,6 +1361,12 @@ namespace hooks {
 
 	void __fastcall cheat::draw_flash_effect( std::uintptr_t a1, int a2, std::uintptr_t* a3, std::uintptr_t a4, __m128* a5 )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_draw_flash_effect.call<void>( a1, a2, a3, a4, a5 );
+			return;
+		}
+
 		if ( settings::g_misc.m_removals.flash_alpha.value < 100.0f && settings::g_misc.m_removals.flash_alpha.value != 0.0f )
 		{
 			const auto view_pawn = systems::g_local.get( ).view_pawn( );
@@ -1216,7 +1387,7 @@ namespace hooks {
 	{
 		m_calculate_viewmodel.call<void>( thisptr, offsets, fov );
 
-		if ( !offsets || !fov )
+		if ( lifecycle::is_unloading( ) || !offsets || !fov )
 			return;
 
 		if ( !systems::g_local.get( ).is_valid( ) || !systems::g_view.has_camera( ) )
@@ -1336,7 +1507,7 @@ namespace hooks {
 
 	void __fastcall cheat::spec_cmds_handler( void* cmd )
 	{
-		if ( !cmd || !settings::g_misc.m_camera.unlock_spectating.value )
+		if ( lifecycle::is_unloading( ) || !cmd || !settings::g_misc.m_camera.unlock_spectating.value )
 		{
 			m_spec_cmds_handler.call<void>( cmd );
 			return;
@@ -1500,6 +1671,11 @@ namespace hooks {
 
 	int __fastcall cheat::collect_attached_entities( std::uintptr_t entity, std::uintptr_t out_vec )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			return m_collect_attached_entities.call<int>( entity, out_vec );
+		}
+
 		if ( !entity )
 		{
 			return out_vec ? memory::safe_read<int>( out_vec ).value_or( 0 ) : 0;
@@ -1517,6 +1693,12 @@ namespace hooks {
 
 	void __fastcall cheat::play_music( void* thisptr, int track_type, std::uint16_t music_kit_id, float volume )
 	{
+		if ( lifecycle::is_unloading( ) )
+		{
+			m_play_music.call<void>( thisptr, track_type, music_kit_id, volume );
+			return;
+		}
+
 		const auto custom_kit = static_cast< std::uint16_t >( settings::g_changer.music.id );
 		if ( custom_kit > 0 )
 		{

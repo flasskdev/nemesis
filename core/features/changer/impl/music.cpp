@@ -175,8 +175,7 @@ namespace features::changer {
 			return;
 		}
 
-		const auto userid_key = cstypes::event_hash{ 0, "userid" };
-		const auto mvp_controller = memory::call<std::uintptr_t>( PATTERN( patterns::game_event_get_controller ), event, &userid_key );
+		const auto mvp_controller = systems::events::get_controller( event, "userid" );
 		const auto local_controller = systems::g_local.get( ).controller;
 
 		const auto target_id = static_cast< std::uint16_t >( settings::g_changer.music.id );

@@ -1424,6 +1424,68 @@ namespace settings {
 			}
 		};
 
+		struct custom_agent_entry
+		{
+			std::string name{};
+			std::string model_path{};
+			int team{ 3 }; // 0 = any, 2 = T, 3 = CT
+
+			bool operator==( const custom_agent_entry& ) const = default;
+		};
+
+		struct custom_agents_field : config::custom_field
+		{
+			std::vector<custom_agent_entry> entries{};
+			int selected_ct{ -1 };
+			int selected_t{ -1 };
+
+			nlohmann::json serialize( ) const override
+			{
+				nlohmann::json j;
+				j["selected_ct"] = selected_ct;
+				j["selected_t"] = selected_t;
+				j["entries"] = nlohmann::json::array( );
+
+				for ( const auto& entry : entries )
+				{
+					j["entries"].push_back( {
+						{ "name", entry.name },
+						{ "model_path", entry.model_path },
+						{ "team", entry.team }
+					} );
+				}
+
+				return j;
+			}
+
+			void deserialize( const nlohmann::json& j ) override
+			{
+				if ( !j.is_object( ) )
+				{
+					return;
+				}
+
+				selected_ct = j.value( "selected_ct", -1 );
+				selected_t = j.value( "selected_t", -1 );
+
+				entries.clear( );
+				if ( j.contains( "entries" ) && j["entries"].is_array( ) )
+				{
+					for ( const auto& item : j["entries"] )
+					{
+						custom_agent_entry entry;
+						entry.name = item.value( "name", std::string( "Custom Agent" ) );
+						entry.model_path = item.value( "model_path", item.value( "model", std::string( ) ) );
+						entry.team = item.value( "team", 3 );
+						if ( !entry.model_path.empty( ) )
+						{
+							entries.push_back( entry );
+						}
+					}
+				}
+			}
+		};
+
 		struct music_field : config::custom_field
 		{
 			int id{};
@@ -1447,12 +1509,14 @@ namespace settings {
 
 		skin_map_field skins{};
 		agent_selection_field agents{};
+		custom_agents_field custom_agents{};
 		music_field music{};
 
 		changer()
 		{
 			config::detail::register_field({ .key = config::detail::make_key("changer", "applied skins"), .type = config::field_type::custom, .ptr = &skins, .count = 1 });
 			config::detail::register_field({ .key = config::detail::make_key("changer", "agents"), .type = config::field_type::custom, .ptr = &agents, .count = 1 });
+			config::detail::register_field({ .key = config::detail::make_key("changer", "custom agents"), .type = config::field_type::custom, .ptr = &custom_agents, .count = 1 });
 			config::detail::register_field({ .key = config::detail::make_key("changer", "music"), .type = config::field_type::custom, .ptr = &music, .count = 1 });
 		}
 	};

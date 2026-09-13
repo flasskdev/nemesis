@@ -21,6 +21,105 @@ namespace features::misc {
 		constexpr auto k_hit_color_hex{ "#4ADE80" };
 		constexpr auto k_miss_color_hex{ "#FF5C80" };
 
+		inline bool is_local_player( std::uintptr_t ent, const systems::local::snapshot& local )
+		{
+			if ( !ent || !local.is_valid( ) ) return false;
+			if ( ent == local.controller || ent == local.pawn ) return true;
+
+			const auto ctrl_h = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_h && ctrl_h != 0xFFFFFFFF && systems::g_entities.lookup( ctrl_h ) == local.controller ) return true;
+
+			const auto pawn_h = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_h && pawn_h != 0xFFFFFFFF && systems::g_entities.lookup( pawn_h ) == local.pawn ) return true;
+
+			return false;
+		}
+
+		inline std::uintptr_t resolve_pawn( std::uintptr_t ent )
+		{
+			if ( !ent ) return 0;
+			const auto ctrl_h = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_h && ctrl_h != 0xFFFFFFFF ) return ent;
+
+			const auto pawn_h = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_h && pawn_h != 0xFFFFFFFF )
+			{
+				const auto pawn = systems::g_entities.lookup( pawn_h );
+				if ( pawn ) return pawn;
+			}
+			return ent;
+		}
+
+		inline std::uintptr_t resolve_controller( std::uintptr_t ent )
+		{
+			if ( !ent ) return 0;
+			const auto pawn_h = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_h && pawn_h != 0xFFFFFFFF ) return ent;
+
+			const auto ctrl_h = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_h && ctrl_h != 0xFFFFFFFF )
+			{
+				const auto ctrl = systems::g_entities.lookup( ctrl_h );
+				if ( ctrl ) return ctrl;
+			}
+			return ent;
+		}
+
+		inline std::string format_cs2_colors( std::string_view text )
+		{
+			std::string result;
+			result.reserve( text.size( ) + 16 );
+
+			for ( std::size_t i = 0; i < text.size( ); )
+			{
+				if ( text[ i ] == '<' )
+				{
+					const auto tag_end = text.find( '>', i );
+					if ( tag_end != std::string_view::npos )
+					{
+						const auto tag = text.substr( i, tag_end - i + 1 );
+						if ( tag == "</font>" || tag == "</FONT>" )
+						{
+							result += '\x01'; // Default / Light Gray
+						}
+						else if ( tag.starts_with( "<font" ) || tag.starts_with( "<FONT" ) )
+						{
+							auto tag_lower = std::string( tag );
+							std::transform( tag_lower.begin( ), tag_lower.end( ), tag_lower.begin( ), ::tolower );
+
+							if ( tag_lower.find( "4ade80" ) != std::string::npos || tag_lower.find( "green" ) != std::string::npos )
+							{
+								result += '\x04'; // Green
+							}
+							else if ( tag_lower.find( "ff5c80" ) != std::string::npos || tag_lower.find( "red" ) != std::string::npos )
+							{
+								result += '\x07'; // Light Red
+							}
+							else if ( tag_lower.find( "38bdf8" ) != std::string::npos || tag_lower.find( "blue" ) != std::string::npos )
+							{
+								result += '\x0A'; // Light Blue / Cyan
+							}
+							else if ( tag_lower.find( "888888" ) != std::string::npos || tag_lower.find( "gray" ) != std::string::npos || tag_lower.find( "grey" ) != std::string::npos )
+							{
+								result += '\x08'; // Gray
+							}
+							else
+							{
+								result += '\x0E'; // Orchid / Mintaly Accent Purple
+							}
+						}
+						i = tag_end + 1;
+						continue;
+					}
+				}
+
+				result += text[ i ];
+				++i;
+			}
+
+			return result;
+		}
+
 		void chat_print_raw( const char* formatted_msg )
 		{
 			const auto fn_find_hud = PATTERN (patterns::find_hud_element);
@@ -29,8 +128,7 @@ namespace features::misc {
 				return;
 			}
 
-			// 1. Primary CS2 HUD message displayer: triggers on-screen HUD toast notification
-			// so the message is visible immediately during gameplay without needing to open chat
+			// 1. On-screen HUD toast notification (Panorama renders HTML natively)
 			const auto fn_voice = PATTERN (patterns::set_voice_data);
 			if ( fn_voice )
 			{
@@ -40,11 +138,10 @@ namespace features::misc {
 					const auto voice = voice_hud - 0x20;
 					std::uint8_t flags[ 2 ]{ 1, 0 };
 					memory::call<void>( fn_voice, voice, formatted_msg, 0xFFFFFFFF, flags );
-					return;
 				}
 			}
 
-			// 2. Direct Panorama chat scrollview fallback
+			// 2. Panorama chat scrollview (renders HTML colors natively)
 			const auto fn_chat = PATTERN (patterns::print_hud_chat);
 			if ( fn_chat )
 			{
@@ -287,10 +384,10 @@ namespace features::misc {
 			return;
 		}
 
-		const auto userid_key = cstypes::event_hash{ 0, "userid" };
-		const auto controller = memory::call<std::uintptr_t>(PATTERN (patterns::game_event_get_controller), event, &userid_key );
+		const auto controller = systems::events::get_controller( reinterpret_cast< void* >( event ), "userid" );
+		const auto local = systems::g_local.get( );
 
-		if ( controller != systems::g_local.get( ).controller )
+		if ( !local.is_valid( ) || !detail::is_local_player( controller, local ) )
 		{
 			return;
 		}
@@ -695,20 +792,22 @@ namespace features::misc {
 
 	impacts::hit_data impacts::parse_event( std::uintptr_t event )
 	{
-		const auto attacker_key = cstypes::event_hash{ 0, "attacker" };
-		const auto userid_key = cstypes::event_hash{ 0, "userid" };
-
-		const auto attacker = memory::call<std::uintptr_t>( PATTERN (patterns::game_event_get_controller), event, &attacker_key );
-		const auto victim = memory::call<std::uintptr_t>( PATTERN (patterns::game_event_get_controller), event, &userid_key );
+		const auto attacker = systems::events::get_controller( reinterpret_cast< void* >( event ), "attacker" );
+		const auto victim = systems::events::get_controller( reinterpret_cast< void* >( event ), "userid" );
 
 		const auto local = systems::g_local.get( );
 
-		if ( attacker != local.controller || victim == local.controller )
+		if ( !local.is_valid( ) || !detail::is_local_player( attacker, local ) || detail::is_local_player( victim, local ) )
 		{
 			return {};
 		}
 
-		const auto victim_pawn = memory::call<std::uintptr_t>(PATTERN (patterns::game_event_get_pawn), event, &userid_key );
+		auto victim_pawn = systems::events::get_pawn( reinterpret_cast< void* >( event ), "userid" );
+		if ( !victim_pawn && victim )
+		{
+			victim_pawn = detail::resolve_pawn( victim );
+		}
+
 		if ( !victim_pawn )
 		{
 			return {};
@@ -719,6 +818,8 @@ namespace features::misc {
 		{
 			return {};
 		}
+
+		const auto victim_controller = detail::resolve_controller( victim ? victim : victim_pawn );
 
 		const auto damage = memory::call<int>( PATTERN (patterns::game_event_get_int), event, "dmg_health", false );
 		const auto hitgroup = memory::call<int>( PATTERN (patterns::game_event_get_int), event, "hitgroup", false );
@@ -746,12 +847,22 @@ namespace features::misc {
 			auto matched_shot = this->m_pending_shots.end( );
 			for ( auto it = this->m_pending_shots.begin( ); it != this->m_pending_shots.end( ); ++it )
 			{
-				if ( it->victim_pawn != victim_pawn || it->resolved )
+				if ( it->resolved )
 				{
 					continue;
 				}
 
-				if ( it->impact_confirmed && ( current_time - it->impact_time ) > 0.12f )
+				if ( it->victim_pawn != victim_pawn )
+				{
+					const auto shot_ctrl_h = memory::read<std::uint32_t>( it->victim_pawn + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+					const auto victim_ctrl_h = memory::read<std::uint32_t>( victim_pawn + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+					if ( !shot_ctrl_h || shot_ctrl_h == 0xFFFFFFFF || shot_ctrl_h != victim_ctrl_h )
+					{
+						continue;
+					}
+				}
+
+				if ( it->impact_confirmed && ( current_time - it->impact_time ) > 0.45f )
 				{
 					continue;
 				}
@@ -801,7 +912,7 @@ namespace features::misc {
 
 		return
 		{
-			.victim = victim,
+			.victim = victim_controller,
 			.victim_pawn = victim_pawn,
 			.damage = damage,
 			.health = memory::call<int>( PATTERN (patterns::game_event_get_int), event, "health", false ),
@@ -818,34 +929,72 @@ namespace features::misc {
 
 	std::string impacts::get_player_name( std::uintptr_t controller )
 	{
-		const auto name_ptr = memory::read<std::uintptr_t>( controller + SCHEMA( "CCSPlayerController", "m_sSanitizedPlayerName"_hash ) );
-		if ( !name_ptr )
-		{
-			return "unknown";
-		}
-
-		auto name = memory::read_string( name_ptr, 64 );
-
-		std::transform( name.begin( ), name.end( ), name.begin( ), ::tolower );
-
-		return name;
-	}
-
-	std::string impacts::get_player_name_from_pawn( std::uintptr_t pawn )
-	{
-		const auto controller_handle = memory::read<std::uint32_t>( pawn + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
-		if ( !controller_handle )
-		{
-			return "unknown";
-		}
-
-		const auto controller = systems::g_entities.lookup( controller_handle );
 		if ( !controller )
 		{
 			return "unknown";
 		}
 
-		return this->get_player_name( controller );
+		// Handle case where pawn is passed instead of controller
+		const auto ctrl_h = memory::read<std::uint32_t>( controller + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+		if ( ctrl_h && ctrl_h != 0xFFFFFFFF )
+		{
+			const auto resolved = systems::g_entities.lookup( ctrl_h );
+			if ( resolved )
+			{
+				controller = resolved;
+			}
+		}
+
+		const auto name_ptr = memory::read<std::uintptr_t>( controller + SCHEMA( "CCSPlayerController", "m_sSanitizedPlayerName"_hash ) );
+		if ( name_ptr )
+		{
+			auto name = memory::read_string( name_ptr, 127 );
+			if ( !name.empty( ) )
+			{
+				std::transform( name.begin( ), name.end( ), name.begin( ), ::tolower );
+				return name;
+			}
+		}
+
+		auto raw_name = memory::read_string( controller + SCHEMA( "CBasePlayerController", "m_iszPlayerName"_hash ), 127 );
+		if ( !raw_name.empty( ) )
+		{
+			std::transform( raw_name.begin( ), raw_name.end( ), raw_name.begin( ), ::tolower );
+			return raw_name;
+		}
+
+		return "unknown";
+	}
+
+	std::string impacts::get_player_name_from_pawn( std::uintptr_t pawn )
+	{
+		if ( !pawn )
+		{
+			return "unknown";
+		}
+
+		const auto controller_handle = memory::read<std::uint32_t>( pawn + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+		if ( controller_handle && controller_handle != 0xFFFFFFFF )
+		{
+			const auto controller = systems::g_entities.lookup( controller_handle );
+			if ( controller )
+			{
+				return this->get_player_name( controller );
+			}
+		}
+
+		// Fallback: search player entities
+		for ( const auto& player : systems::g_entities.get_by_type( systems::entities::type::player ) )
+		{
+			if ( !player.ptr ) continue;
+			const auto hpawn = memory::read<std::uint32_t>( player.ptr + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( systems::g_entities.lookup( hpawn ) == pawn )
+			{
+				return this->get_player_name( player.ptr );
+			}
+		}
+
+		return "unknown";
 	}
 
 	float impacts::distance_to_nearest_hitbox( const shot_record& shot ) const
@@ -1039,6 +1188,10 @@ namespace features::misc {
 
 		log entry{};
 		entry.name = this->get_player_name( data.victim );
+		if ( entry.name.empty( ) || entry.name == "unknown" )
+		{
+			entry.name = this->get_player_name_from_pawn( data.victim_pawn );
+		}
 		entry.damage = data.damage;
 		entry.health = data.health;
 		entry.time = current_time;
@@ -1193,8 +1346,8 @@ namespace features::misc {
 
 				const auto elapsed = std::max( 0.0f, current_time - it->time );
 				const auto impact_elapsed = it->impact_confirmed ? std::max( 0.0f, current_time - it->impact_time ) : 0.0f;
-				const auto is_stale = it->impact_confirmed && impact_elapsed > 0.12f;
-				const auto is_expired = elapsed > 0.35f;
+				const auto is_stale = it->impact_confirmed && impact_elapsed > 0.35f;
+				const auto is_expired = elapsed > 0.6f;
 
 				if ( is_stale || is_expired )
 				{

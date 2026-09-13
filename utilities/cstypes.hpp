@@ -474,8 +474,18 @@ namespace cstypes {
 
 	struct event_hash
 	{
-		std::uintptr_t hash;
-		const char* str;
+		std::uint32_t hash{ 0 };
+		std::uint32_t unk{ 0xFFFFFFFF };
+		const char* str{ nullptr };
+
+		constexpr event_hash( ) = default;
+
+		constexpr event_hash( std::uint32_t h, const char* s )
+			: hash( h ), unk( 0xFFFFFFFF ), str( s ) {}
+
+		constexpr event_hash( const char* s )
+			: hash( 0 ), unk( 0xFFFFFFFF ), str( s ) {}
 	};
+	static_assert( sizeof( event_hash ) == 0x10 );
 
 } // namespace cstypes

@@ -273,6 +273,24 @@ namespace features::changer {
 			}
 
 			item.category = this->classify( item.item_class.c_str( ), item.loadout_slot );
+
+			if ( item.category == item_category::other )
+			{
+				if ( item.item_class.find( "customplayer" ) != std::string::npos ||
+					 item.name.find( "customplayer" ) != std::string::npos ||
+					 item.model_player.find( "characters/models" ) != std::string::npos ||
+					 item.model_player.find( "agents/models" ) != std::string::npos ||
+					 item.model_player.find( "models/player" ) != std::string::npos ||
+					 ( !item.model_player.empty( ) && ( item.model_player.find( "ctm_" ) != std::string::npos || item.model_player.find( "tm_" ) != std::string::npos ) ) )
+				{
+					item.category = item_category::agent;
+				}
+				else if ( item.item_class.find( "glove" ) != std::string::npos || item.name.find( "glove" ) != std::string::npos )
+				{
+					item.category = item_category::glove;
+				}
+			}
+
 			this->m_item_defs.push_back( std::move( item ) );
 		}
 
@@ -946,12 +964,15 @@ static constexpr fallback_music_kit k_fallback_kits[] = {
 
 	econ_item_system::item_category econ_item_system::classify( const char* item_class, int loadout_slot )
 	{
-		if ( loadout_slot == 38 )
+		if ( loadout_slot == 38 ||
+			 std::strncmp( item_class, xs( "customplayer" ), 12 ) == 0 ||
+			 std::strstr( item_class, xs( "customplayer" ) ) != nullptr )
 		{
 			return item_category::agent;
 		}
 
-		if ( loadout_slot == 41 )
+		if ( loadout_slot == 41 ||
+			 std::strstr( item_class, xs( "glove" ) ) != nullptr )
 		{
 			return item_category::glove;
 		}

@@ -53,6 +53,16 @@ inline void rendered() {
             InterlockedCompareExchange(&block->frame_completed, 1, 0);
     }
 }
+#include <ctime>
+#include <cstdio>
+
+inline void sync_payload() {
+    if (auto* block = shared.load(std::memory_order_acquire)) {
+        payload = block->payload;
+        payload.sub_to[sizeof(payload.sub_to) - 1] = '\0';
+    }
+}
+
 inline std::string subscription_text() {
     if (!available.load(std::memory_order_acquire)) {
 #if defined( DEV )
@@ -61,19 +71,72 @@ inline std::string subscription_text() {
         return "Subscription unavailable";
 #endif
     }
+    sync_payload();
     if (payload.flags & mintaly_session::developer) return "Developer access";
     if (payload.flags & mintaly_session::has_expiry_epoch) {
         const auto remaining = payload.expires_at_unix - mintaly_session::now_unix();
         if (remaining <= 0) return "Subscription expired";
+        const auto days = remaining / 86400;
+        if (days >= 2) return std::to_string(days) + " days left";
+        if (days == 1) return "1 day left";
         const auto hours = (remaining + 3599) / 3600;
-        return "Subscription: " + std::to_string(hours / 24) + "d " +
-            std::to_string(hours % 24) + "h";
+        if (hours > 1) return std::to_string(hours) + " hours left";
+        if (hours == 1) return "1 hour left";
+        return "< 1 hour left";
     }
-    if (payload.sub_to[0]) return std::string("Until ") + payload.sub_to;
-    if (std::isfinite(payload.days_left) && payload.days_left >= 0) {
-        char text[80]{};
-        snprintf(text, sizeof(text), "Subscription: %.1f days (at login)", payload.days_left);
-        return text;
+    if (std::isfinite(payload.days_left) && payload.days_left >= 0.0) {
+        double rem_days = payload.days_left;
+        if (payload.received_at_unix > 0) {
+            const auto elapsed = mintaly_session::now_unix() - payload.received_at_unix;
+            if (elapsed > 0) {
+                rem_days -= static_cast<double>(elapsed) / 86400.0;
+            }
+        }
+        if (rem_days <= 0.0) return "Subscription expired";
+        const auto days = static_cast<int>(std::round(rem_days));
+        if (days >= 2) return std::to_string(days) + " days left";
+        if (days == 1) return "1 day left";
+        const auto hours = static_cast<int>(std::round(rem_days * 24.0));
+        if (hours > 1) return std::to_string(hours) + " hours left";
+        if (hours == 1) return "1 hour left";
+        return "< 1 hour left";
+    }
+    if (payload.sub_to[0]) {
+        int y = 0, m = 0, d = 0, hr = 0, mn = 0, sc = 0;
+        bool parsed = false;
+        if (std::sscanf(payload.sub_to, "%d-%d-%d", &y, &m, &d) == 3 ||
+            std::sscanf(payload.sub_to, "%d/%d/%d", &y, &m, &d) == 3) {
+            std::sscanf(payload.sub_to, "%*d%*[-/]%*d%*[-/]%*d%*[ T]%d:%d:%d", &hr, &mn, &sc);
+            parsed = true;
+        } else if (std::sscanf(payload.sub_to, "%d.%d.%d", &d, &m, &y) == 3) {
+            std::sscanf(payload.sub_to, "%*d.%*d.%*d%*[ T]%d:%d:%d", &hr, &mn, &sc);
+            parsed = true;
+        }
+        if (parsed) {
+            if (y < 100) y += 2000;
+            if (y >= 1970 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+                std::tm t{};
+                t.tm_year = y - 1900;
+                t.tm_mon = m - 1;
+                t.tm_mday = d;
+                t.tm_hour = hr;
+                t.tm_min = mn;
+                t.tm_sec = sc;
+                t.tm_isdst = -1;
+                const auto epoch = std::mktime(&t);
+                if (epoch > 0) {
+                    const auto remaining = static_cast<std::int64_t>(epoch) - mintaly_session::now_unix();
+                    if (remaining <= 0) return "Subscription expired";
+                    const auto days = remaining / 86400;
+                    if (days >= 2) return std::to_string(days) + " days left";
+                    if (days == 1) return "1 day left";
+                    const auto hours = (remaining + 3599) / 3600;
+                    if (hours > 1) return std::to_string(hours) + " hours left";
+                    if (hours == 1) return "1 hour left";
+                    return "< 1 hour left";
+                }
+            }
+        }
     }
     return "Active subscription";
 }
@@ -87,6 +150,8 @@ enum class access_status {
 
 inline access_status check_access() {
     if (available.load(std::memory_order_acquire)) {
+        sync_payload();
+
         if (payload.flags & mintaly_session::developer) {
             return access_status::granted;
         }
@@ -101,8 +166,50 @@ inline access_status check_access() {
             }
         }
 
-        if (std::isfinite(payload.days_left) && payload.days_left <= 0.0 && !payload.sub_to[0]) {
-            return access_status::subscription_expired;
+        if (std::isfinite(payload.days_left)) {
+            double rem_days = payload.days_left;
+            if (payload.received_at_unix > 0) {
+                const auto elapsed = mintaly_session::now_unix() - payload.received_at_unix;
+                if (elapsed > 0) {
+                    rem_days -= static_cast<double>(elapsed) / 86400.0;
+                }
+            }
+            if (rem_days <= 0.0 && !payload.sub_to[0]) {
+                return access_status::subscription_expired;
+            }
+        }
+
+        if (payload.sub_to[0]) {
+            int y = 0, m = 0, d = 0, hr = 0, mn = 0, sc = 0;
+            bool parsed = false;
+            if (std::sscanf(payload.sub_to, "%d-%d-%d", &y, &m, &d) == 3 ||
+                std::sscanf(payload.sub_to, "%d/%d/%d", &y, &m, &d) == 3) {
+                std::sscanf(payload.sub_to, "%*d%*[-/]%*d%*[-/]%*d%*[ T]%d:%d:%d", &hr, &mn, &sc);
+                parsed = true;
+            } else if (std::sscanf(payload.sub_to, "%d.%d.%d", &d, &m, &y) == 3) {
+                std::sscanf(payload.sub_to, "%*d.%*d.%*d%*[ T]%d:%d:%d", &hr, &mn, &sc);
+                parsed = true;
+            }
+            if (parsed) {
+                if (y < 100) y += 2000;
+                if (y >= 1970 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+                    std::tm t{};
+                    t.tm_year = y - 1900;
+                    t.tm_mon = m - 1;
+                    t.tm_mday = d;
+                    t.tm_hour = hr;
+                    t.tm_min = mn;
+                    t.tm_sec = sc;
+                    t.tm_isdst = -1;
+                    const auto epoch = std::mktime(&t);
+                    if (epoch > 0) {
+                        const auto remaining = static_cast<std::int64_t>(epoch) - mintaly_session::now_unix();
+                        if (remaining <= 0) {
+                            return access_status::subscription_expired;
+                        }
+                    }
+                }
+            }
         }
 
         return access_status::granted;
@@ -117,6 +224,10 @@ inline access_status check_access() {
 
 inline bool has_access() {
     return check_access() == access_status::granted;
+}
+
+inline bool is_expired() {
+    return check_access() != access_status::granted;
 }
 
 // Connection remains alive until process exit. Do not unmap from a render callback

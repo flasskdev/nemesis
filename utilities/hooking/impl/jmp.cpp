@@ -314,20 +314,10 @@ namespace hooking {
 
 		this->disable( );
 
-		if ( this->m_trampoline )
-		{
-			allocator::free( this->m_trampoline );
-		}
-
-		this->m_target = nullptr;
-		this->m_hook = nullptr;
-		this->m_trampoline = nullptr;
-		this->m_original_length = 0;
-		this->m_patch_size = 0;
+		// Do not deallocate m_trampoline during unload/shutdown:
+		// in-flight game threads may still be returning through or executing inside the trampoline.
+		// Keeping the 64-byte block intact prevents access violation crashes.
 		this->m_enabled = false;
-
-		std::memset( this->m_original_bytes, 0, sizeof( this->m_original_bytes ) );
-		std::memset( this->m_hook_bytes, 0, sizeof( this->m_hook_bytes ) );
 	}
 
 } // namespace hooking

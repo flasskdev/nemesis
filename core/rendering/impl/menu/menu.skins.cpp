@@ -1,6 +1,14 @@
 #include <pch/pch.hpp>
+#include <commdlg.h>
+#include <objbase.h>
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include <core/features/features.hpp>
 #include <core/settings.hpp>
+
+#pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "ole32.lib")
 
 #include "../../rendering.hpp"
 #include "../../theme.hpp"
@@ -10,6 +18,103 @@
 namespace rendering {
 
 	namespace detail {
+
+		struct pending_agent_file
+		{
+			int team{};
+			std::string model_path{};
+			std::string model_name{};
+		};
+
+		static std::mutex s_agent_dialog_mutex{};
+		static std::vector<pending_agent_file> s_pending_custom_agents{};
+		static std::atomic<bool> s_dialog_active{ false };
+
+		static inline void open_agent_file_dialog_async( int team, HWND owner_hwnd )
+		{
+			if ( s_dialog_active.exchange( true ) )
+			{
+				return;
+			}
+
+			std::thread( [ team, owner_hwnd ]( )
+			{
+				const auto hr = CoInitializeEx( nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE );
+
+				wchar_t filename[ MAX_PATH ]{};
+				static const wchar_t filter[] = L"Model Files (*.vmdl;*.vmdl_c)\0*.vmdl;*.vmdl_c\0All Files (*.*)\0*.*\0\0";
+
+				OPENFILENAMEW ofn{};
+				ofn.lStructSize = sizeof( ofn );
+				ofn.hwndOwner = owner_hwnd;
+				ofn.lpstrFilter = filter;
+				ofn.lpstrFile = filename;
+				ofn.nMaxFile = MAX_PATH;
+				ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+				ofn.lpstrDefExt = L"vmdl";
+				ofn.lpstrTitle = ( team == 3 ) ? L"Select CT Custom Model (.vmdl)" : L"Select T Custom Model (.vmdl)";
+
+				if ( GetOpenFileNameW( &ofn ) )
+				{
+					char path_utf8[ MAX_PATH ]{};
+					WideCharToMultiByte( CP_UTF8, 0, filename, -1, path_utf8, MAX_PATH, nullptr, nullptr );
+
+					std::string model_path = path_utf8;
+					std::replace( model_path.begin( ), model_path.end( ), '\\', '/' );
+
+					if ( auto p = model_path.find( "game/csgo/" ); p != std::string::npos )
+						model_path = model_path.substr( p + ( sizeof( "game/csgo/" ) - 1 ) );
+					else if ( auto p = model_path.find( "csgo/" ); p != std::string::npos )
+						model_path = model_path.substr( p + ( sizeof( "csgo/" ) - 1 ) );
+
+					// CS2 engine requires .vmdl, not compiled .vmdl_c
+					if ( model_path.size( ) >= 7 && model_path.substr( model_path.size( ) - 7 ) == ".vmdl_c" )
+						model_path = model_path.substr( 0, model_path.size( ) - 2 );
+
+					std::string model_name = "Custom";
+					auto last_slash = model_path.find_last_of( '/' );
+					if ( last_slash != std::string::npos )
+					{
+						model_name = model_path.substr( last_slash + 1 );
+						auto dot_pos = model_name.find_last_of( '.' );
+						if ( dot_pos != std::string::npos )
+						{
+							model_name = model_name.substr( 0, dot_pos );
+						}
+					}
+
+					auto to_l = []( unsigned char c ) { return ( c >= 'A' && c <= 'Z' ) ? static_cast< char >( c + 32 ) : static_cast< char >( c ); };
+					auto bad_model = [ & ]( const char* n, std::size_t len )
+					{
+						if ( model_path.size( ) < len ) return false;
+						for ( std::size_t i = 0; i + len <= model_path.size( ); ++i )
+						{
+							bool ok = true;
+							for ( std::size_t j = 0; j < len; ++j )
+								if ( to_l( static_cast< unsigned char >( model_path[ i + j ] ) ) != to_l( static_cast< unsigned char >( n[ j ] ) ) )
+								{ ok = false; break; }
+							if ( ok ) return true;
+						}
+						return false;
+					};
+
+					const bool is_arm = bad_model( "_arm", 4 ) || bad_model( "arms", 4 ) || bad_model( "viewmodel", 8 ) || bad_model( "/arm.", 5 ) || bad_model( "\\arm.", 5 );
+
+					if ( !is_arm && !model_path.empty( ) )
+					{
+						std::lock_guard lock( s_agent_dialog_mutex );
+						s_pending_custom_agents.push_back( { team, std::move( model_path ), std::move( model_name ) } );
+					}
+				}
+
+				if ( SUCCEEDED( hr ) )
+				{
+					CoUninitialize( );
+				}
+
+				s_dialog_active.store( false, std::memory_order_release );
+			} ).detach( );
+		}
 
 		inline static auto& skin_map( ) { return settings::g_changer.skins.data; }
 
@@ -678,7 +783,15 @@ namespace rendering {
 			}
 
 			const auto name_y = card.y + image_h + k_rarity_bar_h + 4.0f;
-			const auto label = def ? def->localized_name : ( team == 3 ? "CT" : "T" );
+			std::string label = def ? def->localized_name : ( team == 3 ? "CT" : "T" );
+			{
+				const auto& ca = settings::g_changer.custom_agents;
+				const auto cidx = ( team == 3 ) ? ca.selected_ct : ca.selected_t;
+				if ( cidx >= 0 && cidx < static_cast< int >( ca.entries.size( ) ) )
+				{
+					label = ca.entries[ cidx ].name;
+				}
+			}
 
 			auto ncol = xui::lerp( tokens::col_text_dim, tokens::col_text, hover_anim );
 			ncol.a = static_cast< std::uint8_t >( ncol.a * fade_alpha );
@@ -695,7 +808,85 @@ namespace rendering {
 				dl.text( card.x + 6.0f, card.y + 4.0f, team_label, team_col );
 			}
 
-			if ( hovered && input.mouse_clicked )
+			// Add custom agent button (+)
+			constexpr auto plus_btn_size{ 20.0f };
+			const auto plus_x = card.right( ) - plus_btn_size - 6.0f;
+			const auto plus_y = card.y + 6.0f;
+			const auto plus_rect = xui::rect{ plus_x, plus_y, plus_btn_size, plus_btn_size };
+			const auto plus_hovered = !xui::ctx( ).overlay_blocking( ) && input.in_rect( plus_rect );
+			const auto plus_hover_anim = xui::anim::lerp( xui::fnv1a( "aplus" ) + static_cast< std::uintptr_t >( team ), plus_hovered ? 1.0f : 0.0f, 14.0f );
+
+			auto plus_bg = tokens::col_accent;
+			plus_bg.a = static_cast< std::uint8_t >( ( 180.0f + 75.0f * plus_hover_anim ) * fade_alpha );
+			dl.rect_filled( plus_rect.x, plus_rect.y, plus_rect.w, plus_rect.h, plus_bg, xdraw::corner_radius{ 4.0f } );
+
+			const auto plus_text_col = xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
+			const auto [pw, ph] = xdraw::measure_text( "+" );
+			dl.text( plus_rect.x + ( plus_rect.w - pw ) * 0.5f, plus_rect.y + ( plus_rect.h - ph ) * 0.5f, "+", plus_text_col );
+
+			// Reset custom agent button (показываем только если кастом выбран для этой команды)
+			bool reset_hovered = false;
+			{
+				const auto& ca_now = settings::g_changer.custom_agents;
+				const auto sel_idx = ( team == 3 ) ? ca_now.selected_ct : ca_now.selected_t;
+				const auto sel_valid = sel_idx >= 0 && sel_idx < static_cast< int >( ca_now.entries.size( ) )
+				                    && ( ca_now.entries[ sel_idx ].team == team || ca_now.entries[ sel_idx ].team == 0 );
+
+				if ( sel_valid )
+				{
+					constexpr auto reset_btn_size{ 20.0f };
+					const auto reset_x = plus_x - reset_btn_size - 4.0f;
+					const auto reset_y = card.y + 6.0f;
+					const auto reset_rect = xui::rect{ reset_x, reset_y, reset_btn_size, reset_btn_size };
+					reset_hovered = !xui::ctx( ).overlay_blocking( ) && input.in_rect( reset_rect );
+					const auto reset_hover_anim = xui::anim::lerp( xui::fnv1a( "areset" ) + static_cast< std::uintptr_t >( team ), reset_hovered ? 1.0f : 0.0f, 14.0f );
+
+					auto reset_bg = xui::lerp( tokens::col_card, xui::lighten( tokens::col_card, 1.3f ), reset_hover_anim );
+					reset_bg.a = static_cast< std::uint8_t >( ( 170.0f + 85.0f * reset_hover_anim ) * fade_alpha );
+					dl.rect_filled( reset_rect.x, reset_rect.y, reset_rect.w, reset_rect.h, reset_bg, xdraw::corner_radius{ 4.0f } );
+
+					auto reset_col = xdraw::color{ 230, 90, 90, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
+					const auto [xw, xh] = xdraw::measure_text( "x" );
+					dl.text( reset_rect.x + ( reset_rect.w - xw ) * 0.5f, reset_rect.y + ( reset_rect.h - xh ) * 0.5f, "x", reset_col );
+
+					if ( reset_hovered && input.mouse_clicked )
+					{
+						auto& ca = settings::g_changer.custom_agents;
+						if ( team == 3 )
+							ca.selected_ct = -1;
+						else
+							ca.selected_t = -1;
+					}
+				}
+			}
+
+			// Check for custom models
+			const auto& custom_agents = settings::g_changer.custom_agents;
+			const auto has_custom = !custom_agents.entries.empty( );
+
+			// Show custom models indicator if any
+			if ( has_custom )
+			{
+				const auto custom_count = static_cast< int >( custom_agents.entries.size( ) );
+				const auto idx = ( team == 3 ) ? custom_agents.selected_ct : custom_agents.selected_t;
+
+				if ( idx >= 0 && idx < custom_count )
+				{
+					const auto& entry = custom_agents.entries[ idx ];
+					if ( entry.team == team || entry.team == 0 )
+					{
+						auto custom_col = tokens::col_accent;
+						custom_col.a = static_cast< std::uint8_t >( 200.0f * fade_alpha );
+						dl.text( card.x + 6.0f, card.y + card.h - 16.0f, "*custom", custom_col );
+					}
+				}
+			}
+
+			if ( plus_hovered && input.mouse_clicked )
+			{
+				open_agent_file_dialog_async( team, rendering::g_context.get_window( ) );
+			}
+			else if ( hovered && input.mouse_clicked && !plus_hovered && !reset_hovered )
 			{
 				skins_ui.browsing_agent_team = team;
 				request_page( skins_page::browser, 0 );
@@ -897,6 +1088,112 @@ namespace rendering {
 			}
 		}
 
+		static inline void draw_custom_agent_tile( const xui::rect& card, int entry_idx, const settings::changer::custom_agent_entry& entry, bool is_equipped, float fade_alpha )
+		{
+			auto& dl = xui::draw::current( );
+			const auto& input = xui::ctx( ).input;
+
+			const auto image_h = std::floor( card.h * k_image_h_ratio );
+			const auto hovered = !xui::ctx( ).overlay_blocking( ) && input.in_rect( card );
+			const auto hover_anim = xui::anim::lerp( xui::fnv1a( "catile" ) + static_cast< std::uintptr_t >( entry_idx ), hovered ? 1.0f : 0.0f, 14.0f );
+
+			auto card_bg = tokens::col_card;
+			card_bg = xui::lerp( card_bg, xui::lighten( card_bg, 1.4f ), hover_anim * 0.5f );
+			card_bg.a = static_cast< std::uint8_t >( card_bg.a * fade_alpha );
+			dl.rect_filled( card.x, card.y, card.w, card.h, card_bg, xdraw::corner_radius{ tokens::btn_rounding } );
+
+			if ( is_equipped )
+			{
+				auto bcol = tokens::col_accent;
+				bcol.a = static_cast< std::uint8_t >( bcol.a * fade_alpha );
+				dl.rect( card.x, card.y, card.w, card.h, bcol, xdraw::corner_radius{ tokens::btn_rounding }, 1.5f );
+			}
+
+			// Tag / label in center of image area
+			{
+				auto tag_col = tokens::col_accent;
+				tag_col.a = static_cast< std::uint8_t >( 200.0f * fade_alpha );
+				const auto [tw, th] = xdraw::measure_text( ".VMDL" );
+				dl.text( std::floor( card.x + ( card.w - tw ) * 0.5f ), std::floor( card.y + ( image_h - th ) * 0.5f ), ".VMDL", tag_col );
+			}
+
+			const auto name_y = card.y + image_h + k_rarity_bar_h + 4.0f;
+			auto ncol = xui::lerp( tokens::col_text_dim, tokens::col_text, hover_anim );
+			ncol.a = static_cast< std::uint8_t >( ncol.a * fade_alpha );
+
+			const auto ntrunc = xui::truncate( entry.name.empty( ) ? "Custom Agent" : entry.name, card.w - 12.0f );
+			const auto [nw, nh] = xdraw::measure_text( ntrunc );
+			dl.text( std::floor( card.x + ( card.w - nw ) * 0.5f ), std::floor( name_y ), ntrunc, ncol );
+
+			// Delete button (top-right 'x')
+			constexpr auto del_btn_size{ 16.0f };
+			const auto del_rect = xui::rect{ card.right( ) - del_btn_size - 4.0f, card.y + 4.0f, del_btn_size, del_btn_size };
+			const auto del_hovered = !xui::ctx( ).overlay_blocking( ) && input.in_rect( del_rect );
+			if ( del_hovered )
+			{
+				auto del_col = xdraw::color{ 230, 90, 90, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
+				const auto [dw, dh] = xdraw::measure_text( "x" );
+				dl.text( del_rect.x + ( del_rect.w - dw ) * 0.5f, del_rect.y + ( del_rect.h - dh ) * 0.5f, "x", del_col );
+			}
+
+			if ( is_equipped )
+			{
+				constexpr auto badge{ 14.0f };
+				const auto bx = card.x + 4.0f;
+				const auto by = card.y + 4.0f;
+
+				auto badge_bg = tokens::col_accent;
+				badge_bg.a = static_cast< std::uint8_t >( badge_bg.a * fade_alpha );
+				dl.rect_filled( bx, by, badge, badge, badge_bg, xdraw::corner_radius{ badge * 0.5f } );
+
+				const auto cx = bx + badge * 0.5f;
+				const auto cy = by + badge * 0.5f;
+				const auto check = xdraw::color{ tokens::col_dark.r, tokens::col_dark.g, tokens::col_dark.b, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
+
+				const std::array<float, 6> pts
+				{
+					cx - badge * 0.20f, cy,
+					cx - badge * 0.05f, cy + badge * 0.18f,
+					cx + badge * 0.25f, cy - badge * 0.18f
+				};
+
+				dl.polyline( pts, check, false, 1.5f );
+			}
+
+			if ( del_hovered && input.mouse_clicked )
+			{
+				auto& ca = settings::g_changer.custom_agents;
+				if ( entry_idx >= 0 && entry_idx < static_cast< int >( ca.entries.size( ) ) )
+				{
+					ca.entries.erase( ca.entries.begin( ) + entry_idx );
+					if ( ca.selected_ct == entry_idx ) ca.selected_ct = -1;
+					else if ( ca.selected_ct > entry_idx ) ca.selected_ct--;
+					if ( ca.selected_t == entry_idx ) ca.selected_t = -1;
+					else if ( ca.selected_t > entry_idx ) ca.selected_t--;
+				}
+				return;
+			}
+
+			if ( hovered && input.mouse_clicked && !del_hovered )
+			{
+				auto& ca = settings::g_changer.custom_agents;
+				auto& target = ( skins_ui.browsing_agent_team == 3 ) ? settings::g_changer.agents.ct_def : settings::g_changer.agents.t_def;
+				auto& sel_idx = ( skins_ui.browsing_agent_team == 3 ) ? ca.selected_ct : ca.selected_t;
+
+				if ( is_equipped )
+				{
+					sel_idx = -1;
+				}
+				else
+				{
+					sel_idx = entry_idx;
+					target = 0; // custom agent overrides official agent
+				}
+
+				request_page( skins_page::grid );
+			}
+		}
+
 		static inline void draw_agent_tile( const xui::rect& card, const features::changer::econ_item_system::item_def* def, bool is_equipped, float fade_alpha )
 		{
 			auto& econ = features::changer::g_econ_item_system;
@@ -940,6 +1237,13 @@ namespace rendering {
 
 				dl.image( ix, iy, iw, ih, img->srv.Get( ), tint );
 			}
+			else
+			{
+				auto tag_col = tokens::col_text_dim;
+				tag_col.a = static_cast< std::uint8_t >( 120.0f * fade_alpha );
+				const auto [tw, th] = xdraw::measure_text( "AGENT" );
+				dl.text( std::floor( card.x + ( card.w - tw ) * 0.5f ), std::floor( card.y + ( image_h - th ) * 0.5f ), "AGENT", tag_col );
+			}
 
 			const auto name_y = card.y + image_h + k_rarity_bar_h + 4.0f;
 
@@ -977,6 +1281,7 @@ namespace rendering {
 			if ( hovered && input.mouse_clicked )
 			{
 				auto& target = ( skins_ui.browsing_agent_team == 3 ) ? settings::g_changer.agents.ct_def : settings::g_changer.agents.t_def;
+				auto& ca = settings::g_changer.custom_agents;
 
 				if ( is_equipped )
 				{
@@ -985,6 +1290,10 @@ namespace rendering {
 				else
 				{
 					target = def->def_index;
+					if ( skins_ui.browsing_agent_team == 3 )
+						ca.selected_ct = -1;
+					else
+						ca.selected_t = -1;
 				}
 
 				request_page( skins_page::grid );
@@ -1320,6 +1629,49 @@ namespace rendering {
 
 	void menu::draw_skins( float group_w ) const
 	{
+		// Process any asynchronously selected custom agent files from the background dialog thread
+		{
+			std::lock_guard lock( detail::s_agent_dialog_mutex );
+			if ( !detail::s_pending_custom_agents.empty( ) )
+			{
+				auto& ca = settings::g_changer.custom_agents;
+				for ( const auto& pending : detail::s_pending_custom_agents )
+				{
+					int existing_idx = -1;
+					for ( int i = 0; i < static_cast< int >( ca.entries.size( ) ); ++i )
+					{
+						if ( ca.entries[ i ].model_path == pending.model_path )
+						{
+							existing_idx = i;
+							break;
+						}
+					}
+
+					if ( existing_idx < 0 )
+					{
+						settings::changer::custom_agent_entry entry;
+						entry.name = pending.model_name;
+						entry.model_path = pending.model_path;
+						entry.team = pending.team;
+						ca.entries.push_back( entry );
+						existing_idx = static_cast< int >( ca.entries.size( ) ) - 1;
+					}
+
+					if ( pending.team == 3 )
+					{
+						ca.selected_ct = existing_idx;
+						settings::g_changer.agents.ct_def = 0;
+					}
+					else
+					{
+						ca.selected_t = existing_idx;
+						settings::g_changer.agents.t_def = 0;
+					}
+				}
+				detail::s_pending_custom_agents.clear( );
+			}
+		}
+
 		static auto last_subtab{ -1 };
 		if ( this->m_subtab != last_subtab )
 		{
@@ -1572,10 +1924,48 @@ namespace rendering {
 
 			if ( detail::skins_ui.browsing_agent_team != 0 )
 			{
+				const auto add_btn_w{ 95.0f };
+				const auto add_btn_rect = xui::rect{ win->bounds.right( ) - s.window_pad_x - add_btn_w, bar_y, add_btn_w, bar_h };
+				const auto add_btn_hovered = !xui::ctx( ).overlay_blocking( ) && input.in_rect( add_btn_rect );
+				const auto add_btn_hover = xui::anim::lerp( xui::fnv1a( "add_custom_btn" ), add_btn_hovered ? 1.0f : 0.0f, 14.0f );
+
+				if ( add_btn_hovered && input.mouse_clicked )
+				{
+					detail::open_agent_file_dialog_async( detail::skins_ui.browsing_agent_team, rendering::g_context.get_window( ) );
+				}
+
+				auto add_btn_bg = xui::lerp( tokens::col_accent, xui::lighten( tokens::col_accent, 1.2f ), add_btn_hover );
+				add_btn_bg.a = static_cast< std::uint8_t >( ( 190.0f + 65.0f * add_btn_hover ) * fade_alpha );
+				dl.rect_filled( add_btn_rect.x, add_btn_rect.y, add_btn_rect.w, add_btn_rect.h, add_btn_bg, xdraw::corner_radius{ s.button_rounding } );
+
+				const auto [atw, ath] = xdraw::measure_text( "+ Custom" );
+				dl.text( add_btn_rect.x + ( add_btn_rect.w - atw ) * 0.5f, add_btn_rect.y + ( add_btn_rect.h - ath ) * 0.5f, "+ Custom", xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * fade_alpha ) } );
+
 				std::string search_lower = detail::skins_ui.search_buf;
 				for ( auto& c : search_lower )
 				{
 					c = static_cast< char >( std::tolower( c ) );
+				}
+
+				// Collect matching custom agents
+				struct custom_item { int idx; const settings::changer::custom_agent_entry* entry; };
+				std::vector<custom_item> custom_items;
+				const auto& ca = settings::g_changer.custom_agents;
+				for ( int i = 0; i < static_cast< int >( ca.entries.size( ) ); ++i )
+				{
+					const auto& e = ca.entries[ i ];
+					if ( e.team != 0 && e.team != detail::skins_ui.browsing_agent_team )
+						continue;
+
+					if ( !search_lower.empty( ) )
+					{
+						std::string n = e.name;
+						for ( auto& c : n ) c = static_cast< char >( std::tolower( c ) );
+						if ( n.find( search_lower ) == std::string::npos && e.model_path.find( search_lower ) == std::string::npos )
+							continue;
+					}
+
+					custom_items.push_back( { i, &e } );
 				}
 
 				std::vector<const features::changer::econ_item_system::item_def*> agent_items;
@@ -1604,7 +1994,8 @@ namespace rendering {
 					agent_items.push_back( a );
 				}
 
-				const auto rows = ( static_cast< int >( agent_items.size( ) ) + detail::k_columns - 1 ) / detail::k_columns;
+				const auto total_count = static_cast< int >( custom_items.size( ) + agent_items.size( ) );
+				const auto rows = ( total_count + detail::k_columns - 1 ) / detail::k_columns;
 				const auto grid_h = rows * card_h + ( rows > 0 ? ( rows - 1 ) * detail::k_card_gap : 0.0f );
 
 				xui::layout::set_cursor( s.window_pad_x, s.window_pad_y );
@@ -1612,8 +2003,9 @@ namespace rendering {
 
 				const auto& sel = settings::g_changer.agents;
 				const auto current_agent = ( detail::skins_ui.browsing_agent_team == 3 ) ? sel.ct_def : sel.t_def;
+				const auto current_custom = ( detail::skins_ui.browsing_agent_team == 3 ) ? ca.selected_ct : ca.selected_t;
 
-				for ( auto i = 0; i < static_cast< int >( agent_items.size( ) ); ++i )
+				for ( auto i = 0; i < total_count; ++i )
 				{
 					const auto col = i % detail::k_columns;
 					const auto row = i / detail::k_columns;
@@ -1627,7 +2019,16 @@ namespace rendering {
 					}
 
 					const auto card = xui::rect{ cx, cy, card_w, card_h };
-					detail::draw_agent_tile( card, agent_items[ i ], agent_items[ i ]->def_index == current_agent, fade_alpha );
+					if ( i < static_cast< int >( custom_items.size( ) ) )
+					{
+						const auto& ci = custom_items[ i ];
+						detail::draw_custom_agent_tile( card, ci.idx, *ci.entry, ci.idx == current_custom, fade_alpha );
+					}
+					else
+					{
+						const auto a_idx = i - static_cast< int >( custom_items.size( ) );
+						detail::draw_agent_tile( card, agent_items[ a_idx ], ( current_custom < 0 && agent_items[ a_idx ]->def_index == current_agent ), fade_alpha );
+					}
 				}
 
 				win->content_h = ( s.window_pad_y + bar_h + 12.0f + grid_h ) - win->scroll_y;

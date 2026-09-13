@@ -377,7 +377,6 @@ namespace rendering {
 
         // Draw Window Background with Blur/Glass effect (full base opacities, scaled together at end)
         const auto amb_bg = tokens::col_dark.alpha(245);
-        const auto amb_border = tokens::col_border.alpha(200);
 
         // Blurred background layer
         modal_dl.rect_filled_blurred(final_x, final_y, final_w, final_h, xdraw::corner_radius{ tokens::window_rounding },
@@ -386,16 +385,8 @@ namespace rendering {
         // Solid background
         modal_dl.rect_filled(final_x, final_y, final_w, final_h, amb_bg, xdraw::corner_radius{ tokens::window_rounding });
 
-        // Subtle specular highlight at top rim of modal
-        modal_dl.rect_filled_gradient(final_x + 1.0f, final_y + 1.0f, final_w - 2.0f, 28.0f,
-            xdraw::color{ 255, 255, 255, 16 },
-            xdraw::color{ 255, 255, 255, 16 },
-            xdraw::color{ 255, 255, 255, 1 },
-            xdraw::color{ 255, 255, 255, 1 },
-            xdraw::corner_radius::top(tokens::window_rounding));
-
-        // Border
-        modal_dl.rect(final_x, final_y, final_w, final_h, amb_border, xdraw::corner_radius{ tokens::window_rounding }, 1.0f);
+        // Border in menu accent color
+        modal_dl.rect(final_x, final_y, final_w, final_h, tokens::col_accent.alpha(180), xdraw::corner_radius{ tokens::window_rounding }, 0.8f);
 
         // Header: Title "AMBIENCE"
         xdraw::push_font(rendering::g_fonts.inter_bold[rendering::fonts::size::big]);

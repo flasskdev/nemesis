@@ -172,4 +172,155 @@ namespace systems {
 		return current_listener->debug_id;
 	}
 
+	std::uintptr_t events::get_controller( void* event, const char* key_name )
+	{
+		if ( !event || !key_name )
+		{
+			return 0;
+		}
+
+		auto ent_to_controller = []( std::uintptr_t ent ) -> std::uintptr_t
+		{
+			if ( !ent ) return 0;
+			// If ent is a pawn, resolve its controller
+			const auto ctrl_handle = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_handle && ctrl_handle != 0xFFFFFFFF )
+			{
+				const auto ctrl = systems::g_entities.lookup( ctrl_handle );
+				if ( ctrl ) return ctrl;
+			}
+			// If ent has m_hPawn, it's already a controller
+			const auto pawn_handle = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_handle && pawn_handle != 0xFFFFFFFF )
+			{
+				return ent;
+			}
+			return ent;
+		};
+
+		// 1. Direct virtual call to event vtable[17] (0x88 / 8)
+		// CS2 CGameEvent internally appends "_pawn", searches the event fields,
+		// and returns the entity pointer (typically C_CSPlayerPawn*).
+		const auto vtable = *reinterpret_cast<void***>( event );
+		if ( vtable && vtable[ 17 ] )
+		{
+			using fn_t = std::uintptr_t( __fastcall* )( void*, const void* );
+			const auto fn = reinterpret_cast<fn_t>( vtable[ 17 ] );
+			const auto key = cstypes::event_hash{ key_name };
+			const auto ent = fn( event, &key );
+			if ( ent )
+			{
+				return ent_to_controller( ent );
+			}
+		}
+
+		// 2. Pattern fallback (points to vtable[17])
+		const auto pat_fn = PATTERN( patterns::game_event_get_controller );
+		if ( pat_fn )
+		{
+			const auto key = cstypes::event_hash{ key_name };
+			const auto ent = memory::call<std::uintptr_t>( pat_fn, event, &key );
+			if ( ent )
+			{
+				return ent_to_controller( ent );
+			}
+		}
+
+		// 3. Fallback: integer lookup (e.g. "userid", "attacker", "entityid", "id")
+		const auto pat_get_int = PATTERN( patterns::game_event_get_int );
+		if ( pat_get_int )
+		{
+			const auto id = memory::call<int>( pat_get_int, event, key_name, -1 );
+			if ( id >= 0 )
+			{
+				// Check as 0-based slot (0..64)
+				if ( id < 64 )
+				{
+					auto ctrl = systems::g_entities.get_by_index( id + 1 );
+					if ( ctrl )
+					{
+						return ent_to_controller( ctrl );
+					}
+					ctrl = systems::g_entities.get_by_index( id );
+					if ( ctrl )
+					{
+						return ent_to_controller( ctrl );
+					}
+				}
+
+				// Check as entity handle
+				const auto ent = systems::g_entities.lookup( static_cast<std::uint32_t>( id ) );
+				if ( ent )
+				{
+					return ent_to_controller( ent );
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	std::uintptr_t events::get_pawn( void* event, const char* key_name )
+	{
+		if ( !event || !key_name )
+		{
+			return 0;
+		}
+
+		auto ent_to_pawn = []( std::uintptr_t ent ) -> std::uintptr_t
+		{
+			if ( !ent ) return 0;
+			// If ent has m_hController, it's ALREADY a pawn!
+			const auto ctrl_handle = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_handle && ctrl_handle != 0xFFFFFFFF )
+			{
+				return ent;
+			}
+			// If ent has m_hPawn, it's a controller; resolve the pawn!
+			const auto pawn_handle = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_handle && pawn_handle != 0xFFFFFFFF )
+			{
+				const auto pawn = systems::g_entities.lookup( pawn_handle );
+				if ( pawn ) return pawn;
+			}
+			return ent;
+		};
+
+		// 1. Direct virtual call to event vtable[17] (0x88 / 8)
+		// CS2 CGameEvent internally appends "_pawn" and returns the C_CSPlayerPawn* directly!
+		const auto vtable = *reinterpret_cast<void***>( event );
+		if ( vtable && vtable[ 17 ] )
+		{
+			using fn_t = std::uintptr_t( __fastcall* )( void*, const void* );
+			const auto fn = reinterpret_cast<fn_t>( vtable[ 17 ] );
+			const auto key = cstypes::event_hash{ key_name };
+			const auto ent = fn( event, &key );
+			if ( ent )
+			{
+				return ent_to_pawn( ent );
+			}
+		}
+
+		// 2. Direct pattern fallback if available
+		const auto pat_pawn = PATTERN( patterns::game_event_get_pawn );
+		if ( pat_pawn )
+		{
+			const auto key = cstypes::event_hash{ key_name };
+			const auto ent = memory::call<std::uintptr_t>( pat_pawn, event, &key );
+			if ( ent )
+			{
+				return ent_to_pawn( ent );
+			}
+		}
+
+		// 3. Fallback: resolve via get_controller
+		const auto ctrl = get_controller( event, key_name );
+		if ( ctrl )
+		{
+			return ent_to_pawn( ctrl );
+		}
+
+		return 0;
+	}
+
 } // namespace systems

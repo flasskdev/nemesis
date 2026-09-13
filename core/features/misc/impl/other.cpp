@@ -40,6 +40,35 @@ namespace features::misc {
 			other::s_name_change_pending = false;
 		}
 
+		inline bool is_local_player( std::uintptr_t ent, const systems::local::snapshot& local )
+		{
+			if ( !ent || !local.is_valid( ) ) return false;
+			if ( ent == local.controller || ent == local.pawn ) return true;
+
+			const auto ctrl_h = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_h && ctrl_h != 0xFFFFFFFF && systems::g_entities.lookup( ctrl_h ) == local.controller ) return true;
+
+			const auto pawn_h = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_h && pawn_h != 0xFFFFFFFF && systems::g_entities.lookup( pawn_h ) == local.pawn ) return true;
+
+			return false;
+		}
+
+		inline std::uintptr_t resolve_pawn( std::uintptr_t ent )
+		{
+			if ( !ent ) return 0;
+			const auto ctrl_h = memory::read<std::uint32_t>( ent + SCHEMA( "C_BasePlayerPawn", "m_hController"_hash ) );
+			if ( ctrl_h && ctrl_h != 0xFFFFFFFF ) return ent;
+
+			const auto pawn_h = memory::read<std::uint32_t>( ent + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( pawn_h && pawn_h != 0xFFFFFFFF )
+			{
+				const auto pawn = systems::g_entities.lookup( pawn_h );
+				if ( pawn ) return pawn;
+			}
+			return ent;
+		}
+
 	} // namespace
 
 	void other::on_round_start()
@@ -55,19 +84,21 @@ namespace features::misc {
 			return;
 		}
 
-		const auto attacker_key = cstypes::event_hash{ 0, "attacker" };
-		const auto userid_key = cstypes::event_hash{ 0, "userid" };
-
-		const auto attacker = memory::call<std::uintptr_t>(PATTERN(patterns::game_event_get_controller), event, &attacker_key);
-		const auto victim = memory::call<std::uintptr_t>(PATTERN(patterns::game_event_get_controller), event, &userid_key);
+		const auto attacker = systems::events::get_controller(reinterpret_cast<void*>(event), "attacker");
+		const auto victim = systems::events::get_controller(reinterpret_cast<void*>(event), "userid");
 
 		const auto local = systems::g_local.get();
-		if (!local.is_valid() || !attacker || attacker != local.controller || victim == local.controller)
+		if (!local.is_valid() || !attacker || !is_local_player(attacker, local) || is_local_player(victim, local))
 		{
 			return;
 		}
 
-		const auto victim_pawn = memory::call<std::uintptr_t>(PATTERN(patterns::game_event_get_pawn), event, &userid_key);
+		auto victim_pawn = systems::events::get_pawn(reinterpret_cast<void*>(event), "userid");
+		if (!victim_pawn && victim)
+		{
+			victim_pawn = resolve_pawn(victim);
+		}
+
 		if (!victim_pawn)
 		{
 			return;

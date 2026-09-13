@@ -1689,7 +1689,7 @@ namespace xdraw {
 			return;
 		}
 
-		constexpr auto fringe{ 1.0f };
+		const auto fringe = std::min( 1.0f, thickness );
 		const auto half = ( thickness - fringe ) * 0.5f;
 		const auto half_stroke = std::max( half, 0.0f );
 		const auto half_outer = half_stroke + fringe;
@@ -1835,7 +1835,7 @@ namespace xdraw {
 			return;
 		}
 
-		constexpr auto fringe{ 1.0f };
+		const auto fringe = std::min( 1.0f, thickness );
 		const auto half = ( thickness - fringe ) * 0.5f;
 		const auto half_stroke = std::max( half, 0.0f );
 		const auto half_outer = half_stroke + fringe;

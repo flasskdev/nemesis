@@ -59,6 +59,31 @@ namespace features::changer {
 
 			[[nodiscard]] int team( ) const
 			{
+				if ( this->category == item_category::agent )
+				{
+					if ( this->model_player.find( "ctm_" ) != std::string::npos ||
+						 this->item_class.find( "ctm_" ) != std::string::npos ||
+						 this->name.find( "ctm_" ) != std::string::npos ||
+						 this->image_inventory.find( "ctm_" ) != std::string::npos ||
+						 this->item_class.find( "customplayer_ct" ) != std::string::npos ||
+						 this->name.find( "customplayer_ct" ) != std::string::npos ||
+						 this->image_inventory.find( "customplayer_ct" ) != std::string::npos )
+					{
+						return 3;
+					}
+
+					if ( this->model_player.find( "tm_" ) != std::string::npos ||
+						 this->item_class.find( "tm_" ) != std::string::npos ||
+						 this->name.find( "tm_" ) != std::string::npos ||
+						 this->image_inventory.find( "tm_" ) != std::string::npos ||
+						 this->item_class.find( "customplayer_t" ) != std::string::npos ||
+						 this->name.find( "customplayer_t" ) != std::string::npos ||
+						 this->image_inventory.find( "customplayer_tm" ) != std::string::npos )
+					{
+						return 2;
+					}
+				}
+
 				if ( ( this->used_by_classes & 0xc ) == 0xc )
 				{
 					return 0;
@@ -191,6 +216,7 @@ namespace features::changer {
 		void cycle_weapon_owners( std::uintptr_t pawn );
 
 		std::string m_original_model{};
+		std::string m_applied_model{};
 		std::uintptr_t m_tracked_pawn{};
 		std::uintptr_t m_applied_handle{};
 		std::int16_t m_applied_def{};

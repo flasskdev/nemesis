@@ -783,11 +783,14 @@ namespace rendering {
 		const auto master_alpha = container_alpha.alpha( );
 		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
 
-		constexpr auto header_h{ 30.0f };
-		constexpr auto row_h{ 24.0f };
+		constexpr auto header_h{ 28.0f };
+		constexpr auto header_gap{ 5.0f };
+		constexpr auto row_h{ 26.0f };
+		constexpr auto row_gap{ 4.0f };
+		const auto card_r = xdraw::corner_radius{ 6.0f };
 		const auto [header_tw, header_th] = xdraw::measure_text( "Keybinds" );
 
-		float max_w = 200.0f;
+		float max_w = 190.0f;
 		for ( auto i = 0; i < count; ++i )
 		{
 			const auto& e = entries[ i ];
@@ -796,16 +799,20 @@ namespace rendering {
 			const bool has_key = ( e.key[ 0 ] != '\0' );
 			const auto [kw, kh] = has_key ? xdraw::measure_text( e.key ) : std::pair{ 0.0f, 0.0f };
 			const float key_w = has_key ? ( kw + 10.0f + 4.0f ) : 0.0f;
-			const float row_w = 15.0f + 8.0f + nw + 18.0f + ( vw + 10.0f ) + key_w + 12.0f;
+			const float row_w = 14.0f + nw + 16.0f + ( vw + 10.0f ) + key_w + 7.0f;
 			if ( row_w > max_w )
 			{
 				max_w = row_w;
 			}
 		}
+		if ( header_tw + 45.0f > max_w )
+		{
+			max_w = header_tw + 45.0f;
+		}
 
 		const auto body_h = ( count > 0 )
-			? ( static_cast< float >( count ) * row_h + 6.0f )
-			: ( g_menu.is_open( ) ? 28.0f : 0.0f );
+			? ( header_gap + static_cast< float >( count ) * row_h + static_cast< float >( count - 1 ) * row_gap )
+			: ( g_menu.is_open( ) ? ( header_gap + row_h ) : 0.0f );
 		const auto total_h = header_h + body_h;
 
 		auto& widgets_cfg = settings::g_misc.m_widgets;
@@ -884,31 +891,29 @@ namespace rendering {
 		const auto x = current_x;
 		const auto base_ry = current_y;
 
-		// Soft modern drop shadow
-		draw_list.rect_filled( x - 2.0f, base_ry + 3.0f, max_w + 4.0f, total_h + 3.0f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 35.0f * master_alpha ) }, xdraw::corner_radius{ 11.0f } );
-		draw_list.rect_filled( x - 1.0f, base_ry + 1.5f, max_w + 2.0f, total_h + 1.5f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 55.0f * master_alpha ) }, xdraw::corner_radius{ 10.0f } );
+		// Header drop shadow
+		draw_list.rect_filled( x, base_ry + 2.0f, max_w, header_h, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 40.0f * master_alpha ) }, card_r );
 
-		// Floating glass capsule container
-		const auto card_r = xdraw::corner_radius{ 9.0f };
-		draw_list.rect_filled_blurred( x, base_ry, max_w, total_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
-		draw_list.rect_filled( x, base_ry, max_w, total_h, tokens::col_dark.alpha( static_cast< std::uint8_t >( 225.0f * master_alpha ) ), card_r );
+		// Floating glass capsule container for header
+		draw_list.rect_filled_blurred( x, base_ry, max_w, header_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+		draw_list.rect_filled( x, base_ry, max_w, header_h, tokens::col_dark.alpha( static_cast< std::uint8_t >( 230.0f * master_alpha ) ), card_r );
 
-		const auto border_col = ( menu_open && ( hovered || s_is_dragging ) )
+		const auto header_border_col = ( menu_open && ( hovered || s_is_dragging ) )
 			? s.accent.alpha( static_cast< std::uint8_t >( ( s_is_dragging ? 220.0f : 140.0f ) * master_alpha ) )
-			: tokens::col_border.alpha( static_cast< std::uint8_t >( 115.0f * master_alpha ) );
-		draw_list.rect( x, base_ry, max_w, total_h, border_col, card_r, 1.0f );
+			: tokens::col_border.alpha( static_cast< std::uint8_t >( 120.0f * master_alpha ) );
+		draw_list.rect( x, base_ry, max_w, header_h, header_border_col, card_r, 1.0f );
 
 		// Top subtle ambient neon reflection line
-		const auto half_w = ( max_w - 24.0f ) * 0.5f;
+		const auto half_w = ( max_w - 20.0f ) * 0.5f;
 		draw_list.rect_filled_gradient(
-			x + 12.0f, base_ry, half_w, 1.2f,
+			x + 10.0f, base_ry, half_w, 1.2f,
 			s.accent.alpha( 0 ),
 			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
 			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
 			s.accent.alpha( 0 )
 		);
 		draw_list.rect_filled_gradient(
-			x + 12.0f + half_w, base_ry, half_w, 1.2f,
+			x + 10.0f + half_w, base_ry, half_w, 1.2f,
 			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
 			s.accent.alpha( 0 ),
 			s.accent.alpha( 0 ),
@@ -916,97 +921,78 @@ namespace rendering {
 		);
 
 		// Modern glowing brand indicator on left of header
-		const auto dot_cx = x + 16.0f;
+		const auto dot_cx = x + 13.0f;
 		const auto dot_cy = base_ry + header_h * 0.5f;
-		draw_list.circle_filled( dot_cx, dot_cy, 5.0f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
-		draw_list.circle_filled( dot_cx, dot_cy, 2.5f, s.accent.alpha( static_cast< std::uint8_t >( 230.0f * master_alpha ) ) );
-		draw_list.circle_filled( dot_cx, dot_cy, 1.0f, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 240.0f * master_alpha ) } );
+		draw_list.circle_filled( dot_cx, dot_cy, 4.5f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 2.2f, s.accent.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 0.8f, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 240.0f * master_alpha ) } );
 
 		// Header title
-		const auto title_x = dot_cx + 9.0f;
+		const auto title_x = dot_cx + 8.0f;
 		const auto title_y = base_ry + ( header_h - header_th ) * 0.5f - 0.5f;
 		draw_list.text( title_x, title_y, "Keybinds", tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ), g_fonts.inter_bold[ fonts::size::petite ] );
 
-		// Header count capsule pill on right
-		if ( count > 0 )
-		{
-			char count_str[ 16 ]{};
-			std::snprintf( count_str, sizeof( count_str ), "%d", count );
-			const auto [ cw, ch ] = xdraw::measure_text( count_str );
-			const auto count_pill_w = cw + 10.0f;
-			const auto count_pill_h = 16.0f;
-			const auto cpx = x + max_w - count_pill_w - 10.0f;
-			const auto cpy = base_ry + ( header_h - count_pill_h ) * 0.5f;
-
-			draw_list.rect_filled( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 25.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f } );
-			draw_list.rect( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 85.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f }, 1.0f );
-			draw_list.text( cpx + 5.0f, cpy + ( count_pill_h - ch ) * 0.5f - 0.5f, count_str, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
-		}
-
-		// Divider below header with smooth edge fadeout
-		if ( total_h > header_h )
-		{
-			const auto div_y = base_ry + header_h;
-			const auto div_w = max_w - 20.0f;
-			const auto div_half = div_w * 0.5f;
-			const auto div_col = tokens::col_border.alpha( static_cast< std::uint8_t >( 90.0f * master_alpha ) );
-			const auto div_clear = tokens::col_border.alpha( 0 );
-			draw_list.rect_filled_gradient( x + 10.0f, div_y, div_half, 1.0f, div_clear, div_col, div_col, div_clear );
-			draw_list.rect_filled_gradient( x + 10.0f + div_half, div_y, div_half, 1.0f, div_col, div_clear, div_clear, div_col );
-		}
-
-		// Rows
+		// Rows (separated individual cards)
 		if ( count == 0 && g_menu.is_open( ) )
 		{
+			const auto empty_y = base_ry + header_h + header_gap;
+			draw_list.rect_filled( x, empty_y + 1.5f, max_w, row_h, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 30.0f * master_alpha ) }, card_r );
+			draw_list.rect_filled_blurred( x, empty_y, max_w, row_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+			draw_list.rect_filled( x, empty_y, max_w, row_h, tokens::col_card.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) ), card_r );
+			draw_list.rect( x, empty_y, max_w, row_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 100.0f * master_alpha ) ), card_r, 1.0f );
+
 			const auto empty_text = "No active binds";
 			const auto [ ew, eh ] = xdraw::measure_text( empty_text );
-			draw_list.text( x + ( max_w - ew ) * 0.5f, base_ry + header_h + ( 28.0f - eh ) * 0.5f, empty_text, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 135.0f * master_alpha ) ) );
+			draw_list.text( x + ( max_w - ew ) * 0.5f, empty_y + ( row_h - eh ) * 0.5f - 0.5f, empty_text, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 135.0f * master_alpha ) ) );
 		}
 		else
 		{
-			float current_offset_y = header_h + 3.0f;
 			for ( auto i = 0; i < count; ++i )
 			{
 				const auto& e = entries[ i ];
-				const auto row_y = base_ry + current_offset_y;
+				const auto row_y = base_ry + header_h + header_gap + static_cast< float >( i ) * ( row_h + row_gap );
 				const auto [ nw, nh ] = xdraw::measure_text( e.name );
 				const auto [ vw, vh ] = xdraw::measure_text( e.value );
 
-				// Subtle hover/row background
-				draw_list.rect_filled( x + 6.0f, row_y, max_w - 12.0f, row_h - 2.0f, tokens::col_card.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ), xdraw::corner_radius{ 5.0f } );
+				// Individual separated card
+				draw_list.rect_filled( x, row_y + 1.5f, max_w, row_h, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 30.0f * master_alpha ) }, card_r );
+				draw_list.rect_filled_blurred( x, row_y, max_w, row_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+				draw_list.rect_filled( x, row_y, max_w, row_h, tokens::col_card.alpha( static_cast< std::uint8_t >( 220.0f * master_alpha ) ), card_r );
+				draw_list.rect( x, row_y, max_w, row_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 110.0f * master_alpha ) ), card_r, 1.0f );
 
-				// Status indicator pip on left
-				const auto pip_x = x + 15.0f;
-				const auto pip_y = row_y + ( row_h - 2.0f ) * 0.5f;
+				// Vertical accent status bar on left
+				const float bar_h = 14.0f;
+				const float bar_y = row_y + ( row_h - bar_h ) * 0.5f;
+				const float bar_x = x + 4.0f;
 				if ( e.mode == xui::bind_mode::hold_off )
 				{
-					draw_list.circle_filled( pip_x, pip_y, 1.8f, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 100.0f * master_alpha ) ) );
+					draw_list.rect_filled( bar_x, bar_y, 2.5f, bar_h, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 110.0f * master_alpha ) ), xdraw::corner_radius{ 1.25f } );
 				}
 				else
 				{
-					draw_list.circle_filled( pip_x, pip_y, 3.2f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
-					draw_list.circle_filled( pip_x, pip_y, 1.8f, s.accent.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
+					draw_list.rect_filled( bar_x - 0.5f, bar_y - 0.5f, 3.5f, bar_h + 1.0f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ), xdraw::corner_radius{ 1.75f } );
+					draw_list.rect_filled( bar_x, bar_y, 2.5f, bar_h, s.accent.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ), xdraw::corner_radius{ 1.25f } );
 				}
 
-				// Name text on left
-				draw_list.text( pip_x + 8.0f, row_y + ( ( row_h - 2.0f ) - nh ) * 0.5f - 0.5f, e.name, tokens::col_text.alpha( static_cast< std::uint8_t >( 235.0f * master_alpha ) ) );
+				// Name text
+				draw_list.text( bar_x + 2.5f + 7.0f, row_y + ( row_h - nh ) * 0.5f - 0.5f, e.name, tokens::col_text.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
 
-				// Badges on right: Keycap badge on far right, mode badge immediately to its left
+				// Badges on right
 				const auto badge_h = 16.0f;
 				const auto badge_r = xdraw::corner_radius{ 4.0f };
-				const auto by = row_y + ( ( row_h - 2.0f ) - badge_h ) * 0.5f;
+				const auto by = row_y + ( row_h - badge_h ) * 0.5f;
 
 				const bool has_key = ( e.key[ 0 ] != '\0' );
 				const auto [kw, kh] = has_key ? xdraw::measure_text( e.key ) : std::pair{ 0.0f, 0.0f };
-				float current_right_x = x + max_w - 10.0f;
+				float current_right_x = x + max_w - 7.0f;
 
 				if ( has_key )
 				{
 					const auto key_w = kw + 10.0f;
 					const auto kx = current_right_x - key_w;
-					draw_list.rect_filled( kx, by, key_w, badge_h, tokens::col_elevated.alpha( static_cast< std::uint8_t >( 190.0f * master_alpha ) ), badge_r );
-					draw_list.rect( kx, by, key_w, badge_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 120.0f * master_alpha ) ), badge_r, 1.0f );
-					draw_list.text( kx + 5.0f, by + ( badge_h - kh ) * 0.5f - 0.5f, e.key, tokens::col_text.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
+					draw_list.rect_filled( kx, by, key_w, badge_h, tokens::col_elevated.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) ), badge_r );
+					draw_list.rect( kx, by, key_w, badge_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 140.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.text( kx + 5.0f, by + ( badge_h - kh ) * 0.5f - 0.5f, e.key, tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ) );
 					current_right_x = kx - 4.0f;
 				}
 
@@ -1016,23 +1002,21 @@ namespace rendering {
 				if ( e.has_value_pill )
 				{
 					draw_list.rect_filled( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 35.0f * master_alpha ) ), badge_r );
-					draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 110.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 120.0f * master_alpha ) ), badge_r, 1.0f );
 					draw_list.text( bx + 5.0f, by + ( badge_h - vh ) * 0.5f - 0.5f, e.value, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
 				}
 				else if ( e.mode == xui::bind_mode::hold_off )
 				{
-					draw_list.rect_filled( bx, by, badge_w, badge_h, tokens::col_card.alpha( static_cast< std::uint8_t >( 160.0f * master_alpha ) ), badge_r );
-					draw_list.rect( bx, by, badge_w, badge_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 80.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.rect_filled( bx, by, badge_w, badge_h, tokens::col_elevated.alpha( static_cast< std::uint8_t >( 160.0f * master_alpha ) ), badge_r );
+					draw_list.rect( bx, by, badge_w, badge_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 90.0f * master_alpha ) ), badge_r, 1.0f );
 					draw_list.text( bx + 5.0f, by + ( badge_h - vh ) * 0.5f - 0.5f, e.value, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ) );
 				}
 				else
 				{
 					draw_list.rect_filled( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 28.0f * master_alpha ) ), badge_r );
-					draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 95.0f * master_alpha ) ), badge_r, 1.0f );
+					draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 100.0f * master_alpha ) ), badge_r, 1.0f );
 					draw_list.text( bx + 5.0f, by + ( badge_h - vh ) * 0.5f - 0.5f, e.value, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
 				}
-
-				current_offset_y += row_h;
 			}
 		}
 	}
@@ -1201,25 +1185,32 @@ namespace rendering {
 		const auto master_alpha = container_alpha.alpha( );
 		const auto master_u8 = static_cast< std::uint8_t >( 255.0f * master_alpha );
 
-		constexpr auto header_h{ 30.0f };
-		constexpr auto row_h{ 25.0f };
+		constexpr auto header_h{ 28.0f };
+		constexpr auto header_gap{ 5.0f };
+		constexpr auto row_h{ 28.0f };
+		constexpr auto row_gap{ 4.0f };
+		const auto card_r = xdraw::corner_radius{ 6.0f };
 		const auto [header_tw, header_th] = xdraw::measure_text( "Spectators" );
 
-		float max_w = 195.0f;
+		float max_w = 180.0f;
 		for ( auto i = 0; i < count; ++i )
 		{
 			const auto& e = entries[ i ];
 			const auto [nw, nh] = xdraw::measure_text( e.name );
-			const float row_w = 14.0f + 18.0f + 8.0f + nw + 16.0f + 36.0f + 14.0f;
+			const float row_w = 7.0f + 18.0f + 7.0f + nw + 16.0f + 36.0f + 7.0f;
 			if ( row_w > max_w )
 			{
 				max_w = row_w;
 			}
 		}
+		if ( header_tw + 45.0f > max_w )
+		{
+			max_w = header_tw + 45.0f;
+		}
 
 		const auto body_h = ( count > 0 )
-			? ( static_cast< float >( count ) * row_h + 6.0f )
-			: ( g_menu.is_open( ) ? 28.0f : 0.0f );
+			? ( header_gap + static_cast< float >( count ) * row_h + static_cast< float >( count - 1 ) * row_gap )
+			: ( g_menu.is_open( ) ? ( header_gap + row_h ) : 0.0f );
 		const auto total_h = header_h + body_h;
 
 		auto& widgets_cfg = settings::g_misc.m_widgets;
@@ -1298,31 +1289,29 @@ namespace rendering {
 		const auto x = current_x;
 		const auto base_ry = current_y;
 
-		// Soft modern drop shadow
-		draw_list.rect_filled( x - 2.0f, base_ry + 3.0f, max_w + 4.0f, total_h + 3.0f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 35.0f * master_alpha ) }, xdraw::corner_radius{ 11.0f } );
-		draw_list.rect_filled( x - 1.0f, base_ry + 1.5f, max_w + 2.0f, total_h + 1.5f, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 55.0f * master_alpha ) }, xdraw::corner_radius{ 10.0f } );
+		// Header drop shadow
+		draw_list.rect_filled( x, base_ry + 2.0f, max_w, header_h, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 40.0f * master_alpha ) }, card_r );
 
-		// Floating glass capsule container
-		const auto card_r = xdraw::corner_radius{ 9.0f };
-		draw_list.rect_filled_blurred( x, base_ry, max_w, total_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
-		draw_list.rect_filled( x, base_ry, max_w, total_h, tokens::col_dark.alpha( static_cast< std::uint8_t >( 225.0f * master_alpha ) ), card_r );
+		// Floating glass capsule container for header
+		draw_list.rect_filled_blurred( x, base_ry, max_w, header_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+		draw_list.rect_filled( x, base_ry, max_w, header_h, tokens::col_dark.alpha( static_cast< std::uint8_t >( 230.0f * master_alpha ) ), card_r );
 
-		const auto border_col = ( menu_open && ( hovered || s_is_dragging ) )
+		const auto header_border_col = ( menu_open && ( hovered || s_is_dragging ) )
 			? s.accent.alpha( static_cast< std::uint8_t >( ( s_is_dragging ? 220.0f : 140.0f ) * master_alpha ) )
-			: tokens::col_border.alpha( static_cast< std::uint8_t >( 115.0f * master_alpha ) );
-		draw_list.rect( x, base_ry, max_w, total_h, border_col, card_r, 1.0f );
+			: tokens::col_border.alpha( static_cast< std::uint8_t >( 120.0f * master_alpha ) );
+		draw_list.rect( x, base_ry, max_w, header_h, header_border_col, card_r, 1.0f );
 
 		// Top subtle ambient neon reflection line
-		const auto half_w = ( max_w - 24.0f ) * 0.5f;
+		const auto half_w = ( max_w - 20.0f ) * 0.5f;
 		draw_list.rect_filled_gradient(
-			x + 12.0f, base_ry, half_w, 1.2f,
+			x + 10.0f, base_ry, half_w, 1.2f,
 			s.accent.alpha( 0 ),
 			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
 			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
 			s.accent.alpha( 0 )
 		);
 		draw_list.rect_filled_gradient(
-			x + 12.0f + half_w, base_ry, half_w, 1.2f,
+			x + 10.0f + half_w, base_ry, half_w, 1.2f,
 			s.accent.alpha( static_cast< std::uint8_t >( 170.0f * master_alpha ) ),
 			s.accent.alpha( 0 ),
 			s.accent.alpha( 0 ),
@@ -1330,76 +1319,56 @@ namespace rendering {
 		);
 
 		// Modern glowing brand indicator on left of header
-		const auto dot_cx = x + 16.0f;
+		const auto dot_cx = x + 13.0f;
 		const auto dot_cy = base_ry + header_h * 0.5f;
-		draw_list.circle_filled( dot_cx, dot_cy, 5.0f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
-		draw_list.circle_filled( dot_cx, dot_cy, 2.5f, s.accent.alpha( static_cast< std::uint8_t >( 230.0f * master_alpha ) ) );
-		draw_list.circle_filled( dot_cx, dot_cy, 1.0f, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 240.0f * master_alpha ) } );
+		draw_list.circle_filled( dot_cx, dot_cy, 4.5f, s.accent.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 2.2f, s.accent.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
+		draw_list.circle_filled( dot_cx, dot_cy, 0.8f, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 240.0f * master_alpha ) } );
 
 		// Header title
-		const auto title_x = dot_cx + 9.0f;
+		const auto title_x = dot_cx + 8.0f;
 		const auto title_y = base_ry + ( header_h - header_th ) * 0.5f - 0.5f;
 		draw_list.text( title_x, title_y, "Spectators", tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ), g_fonts.inter_bold[ fonts::size::petite ] );
 
-		// Header count capsule pill on right
-		if ( count > 0 )
-		{
-			char count_str[ 16 ]{};
-			std::snprintf( count_str, sizeof( count_str ), "%d", count );
-			const auto [ cw, ch ] = xdraw::measure_text( count_str );
-			const auto count_pill_w = cw + 10.0f;
-			const auto count_pill_h = 16.0f;
-			const auto cpx = x + max_w - count_pill_w - 10.0f;
-			const auto cpy = base_ry + ( header_h - count_pill_h ) * 0.5f;
-
-			draw_list.rect_filled( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 25.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f } );
-			draw_list.rect( cpx, cpy, count_pill_w, count_pill_h, s.accent.alpha( static_cast< std::uint8_t >( 85.0f * master_alpha ) ), xdraw::corner_radius{ 8.0f }, 1.0f );
-			draw_list.text( cpx + 5.0f, cpy + ( count_pill_h - ch ) * 0.5f - 0.5f, count_str, s.accent.alpha( static_cast< std::uint8_t >( 255.0f * master_alpha ) ) );
-		}
-
-		// Divider below header with smooth edge fadeout
-		if ( total_h > header_h )
-		{
-			const auto div_y = base_ry + header_h;
-			const auto div_w = max_w - 20.0f;
-			const auto div_half = div_w * 0.5f;
-			const auto div_col = tokens::col_border.alpha( static_cast< std::uint8_t >( 90.0f * master_alpha ) );
-			const auto div_clear = tokens::col_border.alpha( 0 );
-			draw_list.rect_filled_gradient( x + 10.0f, div_y, div_half, 1.0f, div_clear, div_col, div_col, div_clear );
-			draw_list.rect_filled_gradient( x + 10.0f + div_half, div_y, div_half, 1.0f, div_col, div_clear, div_clear, div_col );
-		}
-
-		// Rows
+		// Rows (separated individual cards)
 		if ( count == 0 && g_menu.is_open( ) )
 		{
+			const auto empty_y = base_ry + header_h + header_gap;
+			draw_list.rect_filled( x, empty_y + 1.5f, max_w, row_h, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 30.0f * master_alpha ) }, card_r );
+			draw_list.rect_filled_blurred( x, empty_y, max_w, row_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+			draw_list.rect_filled( x, empty_y, max_w, row_h, tokens::col_card.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) ), card_r );
+			draw_list.rect( x, empty_y, max_w, row_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 100.0f * master_alpha ) ), card_r, 1.0f );
+
 			const auto empty_text = "No spectators";
 			const auto [ ew, eh ] = xdraw::measure_text( empty_text );
-			draw_list.text( x + ( max_w - ew ) * 0.5f, base_ry + header_h + ( 28.0f - eh ) * 0.5f, empty_text, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 135.0f * master_alpha ) ) );
+			draw_list.text( x + ( max_w - ew ) * 0.5f, empty_y + ( row_h - eh ) * 0.5f - 0.5f, empty_text, tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 135.0f * master_alpha ) ) );
 		}
 		else
 		{
-			float current_offset_y = header_h + 3.0f;
 			for ( auto i = 0; i < count; ++i )
 			{
 				const auto& e = entries[ i ];
-				const auto row_y = base_ry + current_offset_y;
+				const auto row_y = base_ry + header_h + header_gap + static_cast< float >( i ) * ( row_h + row_gap );
 				const auto [ nw, nh ] = xdraw::measure_text( e.name );
 				const auto avatar_tex = avatars.get( e.steam_id );
 				constexpr auto av_size = 18.0f;
-				const auto av_x = x + 10.0f;
+				const auto av_x = x + 7.0f;
 				const auto av_y = row_y + ( ( row_h - 2.0f ) - av_size ) * 0.5f;
 
-				// Subtle row background
-				draw_list.rect_filled( x + 6.0f, row_y, max_w - 12.0f, row_h - 2.0f, tokens::col_card.alpha( static_cast< std::uint8_t >( 45.0f * master_alpha ) ), xdraw::corner_radius{ 5.0f } );
+				// Individual separated card
+				draw_list.rect_filled( x, row_y + 1.5f, max_w, row_h, xdraw::color{ 0, 0, 0, static_cast< std::uint8_t >( 30.0f * master_alpha ) }, card_r );
+				draw_list.rect_filled_blurred( x, row_y, max_w, row_h, card_r, xdraw::color{ 255, 255, 255, master_u8 } );
+				draw_list.rect_filled( x, row_y, max_w, row_h, tokens::col_card.alpha( static_cast< std::uint8_t >( 220.0f * master_alpha ) ), card_r );
+				draw_list.rect( x, row_y, max_w, row_h, tokens::col_border.alpha( static_cast< std::uint8_t >( 110.0f * master_alpha ) ), card_r, 1.0f );
 
 				// Circular avatar
 				if ( avatar_tex )
 				{
 					draw_list.image( av_x, av_y, av_size, av_size, avatar_tex, xdraw::corner_radius{ av_size * 0.5f }, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * master_alpha ) } );
+					draw_list.circle( av_x + av_size * 0.5f, av_y + av_size * 0.5f, av_size * 0.5f, tokens::col_border.alpha( static_cast< std::uint8_t >( 120.0f * master_alpha ) ), 1.0f );
 				}
 				else
 				{
-					// Sleek circular avatar placeholder
 					const auto cx_av = av_x + av_size * 0.5f;
 					const auto cy_av = av_y + av_size * 0.5f;
 					draw_list.circle_filled( cx_av, cy_av, av_size * 0.5f, tokens::col_elevated.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) ) );
@@ -1409,21 +1378,19 @@ namespace rendering {
 				}
 
 				// Name text
-				draw_list.text( av_x + av_size + 8.0f, row_y + ( ( row_h - 2.0f ) - nh ) * 0.5f - 0.5f, e.name, tokens::col_text.alpha( static_cast< std::uint8_t >( 235.0f * master_alpha ) ) );
+				draw_list.text( av_x + av_size + 7.0f, row_y + ( row_h - nh ) * 0.5f - 0.5f, e.name, tokens::col_text.alpha( static_cast< std::uint8_t >( 240.0f * master_alpha ) ) );
 
 				// SPEC badge on right
 				const auto badge_h = 16.0f;
-				const auto badge_w = 34.0f;
-				const auto bx = x + max_w - badge_w - 10.0f;
-				const auto by = row_y + ( ( row_h - 2.0f ) - badge_h ) * 0.5f;
+				const auto badge_w = 36.0f;
+				const auto bx = x + max_w - badge_w - 7.0f;
+				const auto by = row_y + ( row_h - badge_h ) * 0.5f;
 				const auto badge_r = xdraw::corner_radius{ 4.0f };
 
 				draw_list.rect_filled( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 25.0f * master_alpha ) ), badge_r );
-				draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 85.0f * master_alpha ) ), badge_r, 1.0f );
+				draw_list.rect( bx, by, badge_w, badge_h, s.accent.alpha( static_cast< std::uint8_t >( 90.0f * master_alpha ) ), badge_r, 1.0f );
 				const auto [ sw, sh ] = xdraw::measure_text( "SPEC" );
-				draw_list.text( bx + ( badge_w - sw ) * 0.5f, by + ( badge_h - sh ) * 0.5f - 0.5f, "SPEC", s.accent.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ) );
-
-				current_offset_y += row_h;
+				draw_list.text( bx + ( badge_w - sw ) * 0.5f, by + ( badge_h - sh ) * 0.5f - 0.5f, "SPEC", s.accent.alpha( static_cast< std::uint8_t >( 250.0f * master_alpha ) ) );
 			}
 		}
 	}

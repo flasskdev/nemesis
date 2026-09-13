@@ -318,13 +318,11 @@ namespace features::misc {
 
 		if ( !controller )
 		{
-			const auto entityid_key = cstypes::event_hash{ 0, "entityid" };
-			controller = memory::call<std::uintptr_t>( PATTERN( patterns::game_event_get_controller ), event, &entityid_key );
+			controller = systems::events::get_controller( reinterpret_cast< void* >( event ), "entityid" );
 		}
 		if ( !controller )
 		{
-			const auto userid_key = cstypes::event_hash{ 0, "userid" };
-			controller = memory::call<std::uintptr_t>( PATTERN( patterns::game_event_get_controller ), event, &userid_key );
+			controller = systems::events::get_controller( reinterpret_cast< void* >( event ), "userid" );
 		}
 
 		std::string player_name{};
