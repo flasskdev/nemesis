@@ -76,43 +76,27 @@ namespace rendering {
 		char fps_val[ 8 ]{};
 		std::snprintf( fps_val, sizeof( fps_val ), "%.0f", smoothed_fps );
 
-		// ── ping ────────────────────────────────────────────────────────────
+		// ── ping (game scoreboard ping: CCSPlayerController::m_iPing) ───────
 		auto ping{ 0 };
-		if ( addresses::globals::network_client_service )
+		const auto ctrl = local.controller ? local.controller : ( addresses::globals::local_player_controller ? memory::safe_read<std::uintptr_t>( addresses::globals::local_player_controller ).value_or( 0 ) : 0 );
+		if ( ctrl )
+		{
+			const auto ping_offset = SCHEMA( "CCSPlayerController", "m_iPing"_hash );
+			if ( ping_offset > 0 )
+			{
+				const auto raw_ping = memory::safe_read<std::uint32_t>( ctrl + ping_offset ).value_or( 0 );
+				if ( raw_ping < 1000 )
+					ping = static_cast<int>( raw_ping );
+			}
+		}
+		else if ( addresses::globals::network_client_service )
 		{
 			const auto net_channel = memory::call<std::uintptr_t>( PATTERN( patterns::get_net_channel ), 0, 0 );
 			if ( net_channel )
 			{
-				const auto lat_out = memory::call_vfunc<float>( net_channel, 10, 0 );
-				const auto lat_in  = memory::call_vfunc<float>( net_channel, 10, 1 );
-				if ( std::isfinite( lat_out ) && lat_out > 0.0f )
-				{
-					float total_lat = lat_out;
-					if ( std::isfinite( lat_in ) && lat_in > 0.0f )
-						total_lat += lat_in;
-					ping = static_cast<int>( std::round( total_lat * 1000.0f ) );
-				}
-				else
-				{
-					const auto avg_out = memory::call_vfunc<float>( net_channel, 9, 0 );
-					const auto avg_in  = memory::call_vfunc<float>( net_channel, 9, 1 );
-					if ( std::isfinite( avg_out ) && avg_out > 0.0f )
-					{
-						float total_lat = avg_out;
-						if ( std::isfinite( avg_in ) && avg_in > 0.0f )
-							total_lat += avg_in;
-						ping = static_cast<int>( std::round( total_lat * 1000.0f ) );
-					}
-				}
-			}
-		}
-
-		if ( ping <= 0 )
-		{
-			const auto ctrl = local.controller ? local.controller : memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-			if ( ctrl )
-			{
-				ping = static_cast<int>( memory::read<std::uint32_t>( ctrl + SCHEMA( "CCSPlayerController", "m_iPing"_hash ) ) );
+				const auto lat = memory::call_vfunc<float>( net_channel, 10, 0 );
+				if ( std::isfinite( lat ) && lat > 0.0f && lat < 2.0f )
+					ping = static_cast<int>( std::round( lat * 1000.0f ) );
 			}
 		}
 

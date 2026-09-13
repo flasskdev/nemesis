@@ -386,8 +386,8 @@ namespace features::misc {
 				}
 			}
 
-			cb->ignore_hud = settings::g_misc.m_motion_blur.ignore_hud.value ? 1.0f : 0.0f;
-			cb->ignore_viewmodel = settings::g_misc.m_motion_blur.ignore_viewmodel.value ? 1.0f : 0.0f;
+			cb->ignore_hud = 1.0f;
+			cb->ignore_viewmodel = 1.0f;
 			cb->viewmodel_handedness = vm_handedness;
 			cb->pad = 0.0f;
 

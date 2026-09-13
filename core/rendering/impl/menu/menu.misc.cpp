@@ -1,4 +1,4 @@
-﻿#include <pch/pch.hpp>
+#include <pch/pch.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
 #include <utilities/addresses/addresses.hpp>
@@ -127,8 +127,6 @@ namespace rendering {
                                 xui::toggle( "Preserve Killfeed", m.preserve_killfeed );
                                 xui::layout::spacing( 6.0f );
                                 xui::toggle( "Reveal Radar", m.reveal_radar );
-                                xui::layout::spacing( 6.0f );
-                                xui::toggle( "Server Lagger", m.server_lagger );
                                 xui::layout::spacing( 6.0f );
                                 xui::toggle( "Penetration Crosshair", pen.enabled );
                                 if ( xui::begin_popup( "##pen_popup", 220.0f ) )
@@ -331,8 +329,6 @@ namespace rendering {
                                         xui::slider_int( "samples##mb", m.m_motion_blur.samples.value, 4, 24 );
                                         xui::slider_float( "center clarity##mb", m.m_motion_blur.center_protection, 0.0f, 1.0f, "%.2f" );
                                         xui::checkbox( "movement blur##mb", m.m_motion_blur.movement_blur );
-                                        xui::checkbox( "ignore HUD##mb", m.m_motion_blur.ignore_hud );
-                                        xui::checkbox( "ignore viewmodel##mb", m.m_motion_blur.ignore_viewmodel );
                                         xui::end_popup( );
                                 }
 

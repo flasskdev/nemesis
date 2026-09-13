@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <array>
 #include <limits>
@@ -405,7 +405,6 @@ namespace features::misc {
 
         private:
                 void do_autobuy( ) const;
-                void do_server_lagger( ) const;
                 void do_player_alpha_changing( );
                 void do_reveal_radar( ) const;
                 void do_name_changing( );
