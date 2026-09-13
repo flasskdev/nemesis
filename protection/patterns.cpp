@@ -126,9 +126,9 @@ namespace patterns {
 		"client.dll:488B0D*????????EB028BC6");
 
 	const ::protection::addresses::address_t& game_event_get_controller = ADDRESS_IMPL(
-		::protection::addresses::hash("client.dll:488D05*????????4D8BF8488901+88~"),
+		::protection::addresses::hash("client.dll:488D05*????????4D8BF8488901+80~"),
 		::protection::addresses::address_type::pattern,
-		"client.dll:488D05*????????4D8BF8488901+88~");
+		"client.dll:488D05*????????4D8BF8488901+80~");
 
 	const ::protection::addresses::address_t& game_event_get_float = ADDRESS_IMPL(
 		::protection::addresses::hash("client.dll:>E8????????0F28D8895C2420"),

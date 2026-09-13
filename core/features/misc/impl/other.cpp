@@ -27,6 +27,38 @@ namespace features::misc {
 			return memory::read_string(name_ptr, 127);
 		}
 
+		[[nodiscard]] std::string get_steam_nickname(std::uintptr_t controller = 0)
+		{
+			if (const auto* persona = steam::friends::get_persona_name(); persona && *persona)
+			{
+				std::string name(persona);
+				if (!name.empty() && name != "x")
+				{
+					return name;
+				}
+			}
+
+			if (controller)
+			{
+				const auto name_ptr = memory::safe_read<std::uintptr_t>(
+					controller + SCHEMA("CCSPlayerController", "m_sSanitizedPlayerName"_hash)).value_or(0);
+				auto name = memory::read_string(name_ptr, 127);
+				if (!name.empty() && name != "x")
+				{
+					return name;
+				}
+
+				auto raw_name = memory::read_string(
+					controller + SCHEMA("CBasePlayerController", "m_iszPlayerName"_hash), 127);
+				if (!raw_name.empty() && raw_name != "x")
+				{
+					return raw_name;
+				}
+			}
+
+			return {};
+		}
+
 		void submit_name_change(const std::string& display_name)
 		{
 			if (display_name.empty())
@@ -34,10 +66,17 @@ namespace features::misc {
 				return;
 			}
 
+			std::string sanitized = display_name;
+			std::erase(sanitized, '"');
+			std::erase(sanitized, '\n');
+			std::erase(sanitized, '\r');
+			std::erase(sanitized, ';');
+
 			other::s_display_name = display_name;
 			other::s_name_change_pending = true;
-			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, xs("setinfo name x"), 0x7ffef001);
-			other::s_name_change_pending = false;
+
+			const auto cmd = std::format("setinfo name \"{}\"", sanitized);
+			memory::call<void>(PATTERN(patterns::engine_client_cmd), addresses::globals::source2engine_to_client, 0, cmd.c_str(), 0x7ffef001);
 		}
 
 		inline bool is_local_player( std::uintptr_t ent, const systems::local::snapshot& local )
@@ -84,8 +123,16 @@ namespace features::misc {
 			return;
 		}
 
-		const auto attacker = systems::events::get_controller(reinterpret_cast<void*>(event), "attacker");
-		const auto victim = systems::events::get_controller(reinterpret_cast<void*>(event), "userid");
+		auto attacker = systems::events::get_controller(reinterpret_cast<void*>(event), "attacker");
+		if (!attacker)
+		{
+			attacker = systems::events::get_pawn(reinterpret_cast<void*>(event), "attacker");
+		}
+		auto victim = systems::events::get_controller(reinterpret_cast<void*>(event), "userid");
+		if (!victim)
+		{
+			victim = systems::events::get_pawn(reinterpret_cast<void*>(event), "userid");
+		}
 
 		const auto local = systems::g_local.get();
 		if (!local.is_valid() || !attacker || !is_local_player(attacker, local) || is_local_player(victim, local))
@@ -361,9 +408,32 @@ namespace features::misc {
 
 		if (!enabled)
 		{
-			if (this->m_name_changer_active && local.controller && !this->m_original_name.empty())
+			bool need_restore = this->m_name_changer_active;
+			if (!need_restore && local.controller)
 			{
-				submit_name_change(this->m_original_name);
+				const auto cur_name = controller_name(local.controller);
+				if (cur_name == "x")
+				{
+					need_restore = true;
+				}
+			}
+
+			if (need_restore && local.controller)
+			{
+				auto steam_name = get_steam_nickname(local.controller);
+				if (steam_name.empty() || steam_name == "x")
+				{
+					if (!this->m_original_name.empty() && this->m_original_name != "x")
+					{
+						steam_name = this->m_original_name;
+					}
+				}
+
+				if (!steam_name.empty() && steam_name != "x" && this->m_last_sent_name != steam_name)
+				{
+					submit_name_change(steam_name);
+					this->m_last_sent_name = steam_name;
+				}
 			}
 
 			this->m_name_changer_active = false;
@@ -371,8 +441,7 @@ namespace features::misc {
 			this->m_name_changer_controller = 0;
 			this->m_original_name.clear();
 			this->m_original_steam_id = 0;
-			this->m_last_sent_name.clear();
-			other::s_display_name.clear();
+			this->m_override_name_was_active = false;
 			return;
 		}
 
@@ -386,12 +455,17 @@ namespace features::misc {
 			this->m_avatar_overridden = false;
 		}
 
+		const auto steam_name = get_steam_nickname(local.controller);
+		if (!steam_name.empty() && steam_name != "x")
+		{
+			this->m_original_name = steam_name;
+		}
+
 		if (!this->m_name_changer_active)
 		{
-			this->m_original_name = controller_name(local.controller);
-			if (this->m_original_name.empty())
+			if (this->m_original_name.empty() || this->m_original_name == "x")
 			{
-				this->m_original_name = xs("x");
+				this->m_original_name = !steam_name.empty() ? steam_name : "Player";
 			}
 
 			this->m_name_changer_active = true;
@@ -405,10 +479,18 @@ namespace features::misc {
 			this->m_last_sent_name.clear();
 		}
 
+		const bool override_name_active = cfg.override_name.value && !cfg.name.value.empty();
+		if (this->m_override_name_was_active && !override_name_active)
+		{
+			// Override was toggled off while clantag is still active - force immediate update
+			this->m_last_sent_name.clear();
+		}
+		this->m_override_name_was_active = override_name_active;
+
 		const auto& configured_name = cfg.name.value;
-		const auto& base_name = cfg.override_name.value && !configured_name.empty()
+		const auto& base_name = override_name_active
 			? configured_name
-			: this->m_original_name;
+			: (!this->m_original_name.empty() && this->m_original_name != "x" ? this->m_original_name : (!steam_name.empty() && steam_name != "x" ? steam_name : "Player"));
 
 		std::string display_name = base_name;
 		if (cfg.clantag.value)
@@ -440,6 +522,7 @@ namespace features::misc {
 				display_name += base_name;
 			}
 		}
+
 		if (display_name == this->m_last_sent_name)
 		{
 			return;

@@ -49,6 +49,10 @@ namespace proto {
 
 		[[nodiscard]] T* mutable_at( int index )
 		{
+			if ( !this->m_rep || index < 0 || index >= this->m_current_size )
+			{
+				return nullptr;
+			}
 			return impl_ptr<T>( this->m_rep->elements[ index ] );
 		}
 

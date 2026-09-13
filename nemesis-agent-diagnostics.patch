@@ -1,0 +1,213 @@
+--- a/core/rendering/impl/menu/menu.skins.cpp
++++ b/core/rendering/impl/menu/menu.skins.cpp
+@@ -19,6 +19,36 @@
+ 
+ 	namespace detail {
+ 
++	// Diagnostic-only: append checkpoints to %TEMP%/nemesis-agent-diagnostics.log.
++	static void write_agent_diagnostic(const char* message) noexcept
++	{
++		wchar_t path[MAX_PATH]{};
++		const DWORD length = GetTempPathW(MAX_PATH, path);
++		constexpr wchar_t filename[] = L"nemesis-agent-diagnostics.log";
++		if (length == 0 || length >= MAX_PATH ||
++			static_cast<std::size_t>(length) + std::size(filename) > MAX_PATH)
++			return;
++		for (std::size_t i = 0; i < std::size(filename); ++i)
++			path[length + i] = filename[i];
++
++		char line[1536]{};
++		const int size = std::snprintf(line, sizeof(line), "[%llu][tid=%lu] %s\r\n",
++			static_cast<unsigned long long>(GetTickCount64()),
++			static_cast<unsigned long>(GetCurrentThreadId()), message);
++		if (size <= 0) return;
++		const DWORD bytes = static_cast<DWORD>(
++			static_cast<std::size_t>(size) < sizeof(line) ? size : sizeof(line) - 1);
++		OutputDebugStringA(line);
++		HANDLE file = CreateFileW(path, FILE_APPEND_DATA,
++			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
++			OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
++		if (file == INVALID_HANDLE_VALUE) return;
++		DWORD written{};
++		WriteFile(file, line, bytes, &written, nullptr);
++		FlushFileBuffers(file);
++		CloseHandle(file);
++	}
++
+ 		struct pending_agent_file
+ 		{
+ 			int team{};
+@@ -32,14 +62,23 @@
+ 
+ 		static inline void open_agent_file_dialog_async( int team, HWND owner_hwnd )
+ 		{
++			write_agent_diagnostic("dialog: plus pressed; before active flag");
+ 			if ( s_dialog_active.exchange( true ) )
+ 			{
+ 				return;
+ 			}
+ 
++			write_agent_diagnostic("dialog: before std::thread construction");
+ 			std::thread( [ team, owner_hwnd ]( )
+ 			{
++				write_agent_diagnostic("dialog: worker entered; before CoInitializeEx");
+ 				const auto hr = CoInitializeEx( nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE );
++				char checkpoint[256]{};
++				std::snprintf(checkpoint, sizeof(checkpoint),
++					"dialog: CoInitializeEx returned hr=0x%08lX; owner=%p; owner_valid=%d",
++					static_cast<unsigned long>(hr), static_cast<void*>(owner_hwnd),
++					static_cast<int>(IsWindow(owner_hwnd)));
++				write_agent_diagnostic(checkpoint);
+ 
+ 				wchar_t filename[ MAX_PATH ]{};
+ 				static const wchar_t filter[] = L"Model Files (*.vmdl;*.vmdl_c)\0*.vmdl;*.vmdl_c\0All Files (*.*)\0*.*\0\0";
+@@ -54,7 +93,14 @@
+ 				ofn.lpstrDefExt = L"vmdl";
+ 				ofn.lpstrTitle = ( team == 3 ) ? L"Select CT Custom Model (.vmdl)" : L"Select T Custom Model (.vmdl)";
+ 
+-				if ( GetOpenFileNameW( &ofn ) )
++				write_agent_diagnostic("dialog: before GetOpenFileNameW");
++				const BOOL selected_file = GetOpenFileNameW(&ofn);
++				const DWORD dialog_error = selected_file ? 0 : CommDlgExtendedError();
++				std::snprintf(checkpoint, sizeof(checkpoint),
++					"dialog: GetOpenFileNameW returned selected=%d; extended_error=0x%08lX",
++					static_cast<int>(selected_file), static_cast<unsigned long>(dialog_error));
++				write_agent_diagnostic(checkpoint);
++				if ( selected_file )
+ 				{
+ 					char path_utf8[ MAX_PATH ]{};
+ 					WideCharToMultiByte( CP_UTF8, 0, filename, -1, path_utf8, MAX_PATH, nullptr, nullptr );
+@@ -112,6 +158,7 @@
+ 					CoUninitialize( );
+ 				}
+ 
++				write_agent_diagnostic("dialog: worker completed");
+ 				s_dialog_active.store( false, std::memory_order_release );
+ 			} ).detach( );
+ 		}
+@@ -1994,6 +2041,28 @@
+ 					agent_items.push_back( a );
+ 				}
+ 
++				// Emit only when the active team, search, or counts change.
++				static bool diagnostic_initialized = false;
++				static int diagnostic_team = 0;
++				static std::size_t diagnostic_total = 0;
++				static std::size_t diagnostic_visible = 0;
++				static std::string diagnostic_search;
++				if (!diagnostic_initialized || diagnostic_team != detail::skins_ui.browsing_agent_team ||
++					diagnostic_total != econ.agents().size() || diagnostic_visible != agent_items.size() ||
++					diagnostic_search != detail::skins_ui.search_buf)
++				{
++					diagnostic_initialized = true;
++					diagnostic_team = detail::skins_ui.browsing_agent_team;
++					diagnostic_total = econ.agents().size();
++					diagnostic_visible = agent_items.size();
++					diagnostic_search = detail::skins_ui.search_buf;
++					char checkpoint[512]{};
++					std::snprintf(checkpoint, sizeof(checkpoint),
++						"ui: team=%d; schema_agents=%zu; visible_agents=%zu; search_bytes=%zu",
++						diagnostic_team, diagnostic_total, diagnostic_visible, diagnostic_search.size());
++					detail::write_agent_diagnostic(checkpoint);
++				}
++
+ 				const auto total_count = static_cast< int >( custom_items.size( ) + agent_items.size( ) );
+ 				const auto rows = ( total_count + detail::k_columns - 1 ) / detail::k_columns;
+ 				const auto grid_h = rows * card_h + ( rows > 0 ? ( rows - 1 ) * detail::k_card_gap : 0.0f );
+--- a/core/features/changer/impl/econ_item_system.cpp
++++ b/core/features/changer/impl/econ_item_system.cpp
+@@ -10,8 +10,39 @@
+ 
+ namespace features::changer {
+ 
++	// Diagnostic-only: append checkpoints to %TEMP%/nemesis-agent-diagnostics.log.
++	static void write_agent_diagnostic(const char* message) noexcept
++	{
++		wchar_t path[MAX_PATH]{};
++		const DWORD length = GetTempPathW(MAX_PATH, path);
++		constexpr wchar_t filename[] = L"nemesis-agent-diagnostics.log";
++		if (length == 0 || length >= MAX_PATH ||
++			static_cast<std::size_t>(length) + std::size(filename) > MAX_PATH)
++			return;
++		for (std::size_t i = 0; i < std::size(filename); ++i)
++			path[length + i] = filename[i];
++
++		char line[1536]{};
++		const int size = std::snprintf(line, sizeof(line), "[%llu][tid=%lu] %s\r\n",
++			static_cast<unsigned long long>(GetTickCount64()),
++			static_cast<unsigned long>(GetCurrentThreadId()), message);
++		if (size <= 0) return;
++		const DWORD bytes = static_cast<DWORD>(
++			static_cast<std::size_t>(size) < sizeof(line) ? size : sizeof(line) - 1);
++		OutputDebugStringA(line);
++		HANDLE file = CreateFileW(path, FILE_APPEND_DATA,
++			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
++			OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
++		if (file == INVALID_HANDLE_VALUE) return;
++		DWORD written{};
++		WriteFile(file, line, bytes, &written, nullptr);
++		FlushFileBuffers(file);
++		CloseHandle(file);
++	}
++
+ 	bool econ_item_system::initialize( )
+ 	{
++		write_agent_diagnostic("econ: initialize entered");
+ 		std::uintptr_t schema{};
+ 		auto schema_ready{ false };
+ 		constexpr auto max_attempts{ 300 };
+@@ -51,18 +82,21 @@
+ 
+ 		if ( !schema_ready )
+ 		{
++			write_agent_diagnostic("econ: timed out waiting for item schema");
+ 			logging::console::print( xs( "[econ] timed out waiting for item schema" ) );
+ 			return false;
+ 		}
+ 
+ 		if ( !this->parse_item_defs( schema ) )
+ 		{
++			write_agent_diagnostic("econ: failed to parse item definitions");
+ 			logging::console::print( xs( "[econ] failed to parse item definitions" ) );
+ 			return false;
+ 		}
+ 
+ 		if ( !this->parse_paint_kits( schema ) )
+ 		{
++			write_agent_diagnostic("econ: failed to parse paint kits");
+ 			logging::console::print( xs( "[econ] failed to parse paint kits" ) );
+ 			return false;
+ 		}
+@@ -70,10 +104,32 @@
+ 		this->parse_music_kits( schema );
+ 
+ 		this->build_indices( );
++		char checkpoint[1400]{};
++		std::snprintf(checkpoint, sizeof(checkpoint),
++			"econ: indices built; defs=%zu; guns=%zu; knives=%zu; gloves=%zu; agents=%zu",
++			this->m_item_defs.size(), this->m_guns.size(), this->m_knives.size(),
++			this->m_gloves.size(), this->m_agents.size());
++		write_agent_diagnostic(checkpoint);
++		std::size_t agent_samples = 0;
++		std::size_t other_samples = 0;
++		for (const auto& item : this->m_item_defs)
++		{
++			const bool agent = item.category == item_category::agent;
++			if (agent ? agent_samples >= 16 : other_samples >= 24) continue;
++			if (agent) ++agent_samples; else ++other_samples;
++			std::snprintf(checkpoint, sizeof(checkpoint),
++				"econ: sample def=%d; slot=%d; category=%u; classes=0x%08lX; team=%d; class=%.160s; model=%.320s",
++				static_cast<int>(item.def_index), item.loadout_slot,
++				static_cast<unsigned int>(item.category), static_cast<unsigned long>(item.used_by_classes),
++				item.team(), item.item_class.c_str(), item.model_player.c_str());
++			write_agent_diagnostic(checkpoint);
++		}
++
+ 		this->resolve_localized_names( );
+ 
+ 		if ( !this->build_vpk_index( ) )
+ 		{
++			write_agent_diagnostic("econ: failed to build VPK index");
+ 			logging::console::print( xs( "[econ] failed to build VPK index" ) );
+ 			return false;
+ 		}

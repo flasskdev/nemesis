@@ -144,6 +144,11 @@ namespace features::misc {
 
 	void camera::on_override_view( std::uintptr_t view_setup )
 	{
+		if ( !view_setup )
+		{
+			return;
+		}
+
 		const auto local = systems::g_local.get( );
 		if ( !systems::g_local.is_in_cinematic( ) )
 		{
@@ -207,6 +212,11 @@ namespace features::misc {
 
 	void camera::do_thirdperson( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const
 	{
+		if ( !view_setup || !target_pawn )
+		{
+			return;
+		}
+
 		const auto& cfg = settings::g_misc.m_camera;
 		const auto local = systems::g_local.get( );
 
@@ -346,6 +356,11 @@ namespace features::misc {
 
 	void camera::do_fov_change( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const
 	{
+		if ( !view_setup || !target_pawn )
+		{
+			return;
+		}
+
 		const auto& cfg = settings::g_misc.m_camera;
 		if ( !cfg.change_fov.value )
 		{
@@ -362,6 +377,11 @@ namespace features::misc {
 
 	void camera::do_aspect_ratio_change( std::uintptr_t view_setup )
 	{
+		if ( !view_setup )
+		{
+			return;
+		}
+
 		const auto& cfg = settings::g_misc.m_camera;
 
 		if ( cfg.change_aspect_ratio.value )
@@ -384,6 +404,11 @@ namespace features::misc {
 
 	bool camera::do_freecam( std::uintptr_t view_setup )
 	{
+		if ( !view_setup )
+		{
+			return false;
+		}
+
 		const auto& cfg = settings::g_misc.m_camera;
 		if ( !cfg.freecam.value )
 		{
@@ -429,6 +454,11 @@ namespace features::misc {
 		if ( !this->m_was_freecam_active )
 		{
 			this->m_freecam_pos = memory::read<math::vector3>( view_setup + 0x4a0 );
+			if ( !std::isfinite( this->m_freecam_pos.x ) || !std::isfinite( this->m_freecam_pos.y ) || !std::isfinite( this->m_freecam_pos.z ) )
+			{
+				this->m_freecam_pos = {};
+			}
+
 			this->m_saved_viewangles = systems::g_input.get_view_angles( );
 			this->m_last_override_time = now;
 			this->m_was_freecam_active = true;
@@ -436,6 +466,10 @@ namespace features::misc {
 			s_global_mouse_valid = false;
 			s_win_cursor_valid = false;
 			s_spec_freecam_angles = memory::read<math::vector3>( view_setup + 0x4b8 );
+			if ( !std::isfinite( s_spec_freecam_angles.x ) || !std::isfinite( s_spec_freecam_angles.y ) || !std::isfinite( s_spec_freecam_angles.z ) )
+			{
+				s_spec_freecam_angles = {};
+			}
 		}
 
 		const float dt = std::clamp( std::chrono::duration<float>( now - this->m_last_override_time ).count( ), 0.0f, 0.1f );
@@ -555,20 +589,31 @@ namespace features::misc {
 			}
 		}
 
-		memory::write<math::vector3>( view_setup + 0x4a0, this->m_freecam_pos );
-		memory::write<math::vector3>( view_setup + 0x4b8, view_angles );
+		if ( std::isfinite( this->m_freecam_pos.x ) && std::isfinite( this->m_freecam_pos.y ) && std::isfinite( this->m_freecam_pos.z ) )
+		{
+			memory::write<math::vector3>( view_setup + 0x4a0, this->m_freecam_pos );
+		}
+		if ( std::isfinite( view_angles.x ) && std::isfinite( view_angles.y ) && std::isfinite( view_angles.z ) )
+		{
+			memory::write<math::vector3>( view_setup + 0x4b8, view_angles );
+		}
 		return true;
 	}
 
 	void camera::on_create_move( systems::input::usercmd* cmd )
 	{
+		if ( !cmd )
+		{
+			return;
+		}
+
 		const auto& cfg = settings::g_misc.m_camera;
 		if ( !cfg.freecam.value || !cfg.freecam_block_input.value )
 		{
 			return;
 		}
 
-		if ( !this->m_was_freecam_active )
+		if ( !this->m_was_freecam_active || !std::isfinite( this->m_saved_viewangles.x ) || !std::isfinite( this->m_saved_viewangles.y ) || !std::isfinite( this->m_saved_viewangles.z ) )
 		{
 			this->m_saved_viewangles = systems::g_input.get_view_angles( );
 		}
@@ -579,11 +624,6 @@ namespace features::misc {
 			base->set_forwardmove( 0.0f );
 			base->set_leftmove( 0.0f );
 			base->set_upmove( 0.0f );
-
-			if ( const auto subticks = base->mutable_subtick_moves( ) )
-			{
-				subticks->clear( );
-			}
 
 			if ( const auto va = base->mutable_viewangles( ) )
 			{

@@ -138,6 +138,7 @@ namespace features::misc {
 		struct shot_record
 		{
 			std::uintptr_t victim_pawn{};
+			std::uintptr_t victim_controller{};
 			int hitgroup{};
 			float damage{};
 			float hitchance{};
@@ -410,6 +411,7 @@ namespace features::misc {
 		void do_chat_spam( );
 		bool m_is_alpha_changed{};
 		bool m_name_changer_active{};
+		bool m_override_name_was_active{};
 		std::uintptr_t m_name_changer_controller{};
 		std::string m_original_name{};
 		std::string m_last_sent_name{};

@@ -909,7 +909,7 @@ namespace hooks {
 	{
 		m_override_view.call<void>( thisptr, view_setup );
 
-		if ( lifecycle::is_unloading( ) )
+		if ( lifecycle::is_unloading( ) || !view_setup )
 		{
 			return;
 		}
@@ -1321,7 +1321,7 @@ namespace hooks {
 		}
 
 		const auto& cfg = settings::g_misc.m_name_changer;
-		const auto should_override = cfg.clantag.value || cfg.override_name.value || features::misc::other::s_name_change_pending;
+		const auto should_override = cfg.clantag.value || cfg.override_name.value || features::misc::other::s_name_change_pending || !features::misc::other::s_display_name.empty();
 		if ( should_override && a2 )
 		{
 			const auto arg_list = memory::safe_read<std::uintptr_t>( a2 + 0x440 ).value_or( 0 );
@@ -1353,6 +1353,11 @@ namespace hooks {
 				{
 					static_cast<void>( memory::safe_write<const char*>( arg_list + 0x10, display.c_str( ) ) );
 				}
+				if ( !cfg.clantag.value && !cfg.override_name.value )
+				{
+					features::misc::other::s_display_name.clear( );
+				}
+				features::misc::other::s_name_change_pending = false;
 			}
 		}
 
@@ -1401,8 +1406,17 @@ namespace hooks {
 			offsets[ 0 ] = 0.0f;
 			offsets[ 1 ] = -500.0f;
 			offsets[ 2 ] = -500.0f;
-			fov[ 0 ]     = 0.0f;
+			// Keep fov intact to avoid dividing by zero in engine projection matrix!
+			if ( fov[ 0 ] < 10.0f || !std::isfinite( fov[ 0 ] ) )
+			{
+				fov[ 0 ] = 68.0f;
+			}
 			return;
+		}
+
+		if ( fov[ 0 ] < 10.0f || !std::isfinite( fov[ 0 ] ) )
+		{
+			fov[ 0 ] = 68.0f;
 		}
 
 		const auto& cfg = settings::g_misc.m_viewmodel_adjust;
@@ -1440,7 +1454,7 @@ namespace hooks {
 			if ( std::isfinite( cfg.offset_x.value ) ) target_x = cfg.offset_x.value;
 			if ( std::isfinite( cfg.offset_y.value ) ) target_y = cfg.offset_y.value;
 			if ( std::isfinite( cfg.offset_z.value ) ) target_z = cfg.offset_z.value;
-			if ( std::isfinite( cfg.fov.value ) )      target_fov = cfg.fov.value;
+			if ( std::isfinite( cfg.fov.value ) && cfg.fov.value >= 10.0f ) target_fov = std::clamp( cfg.fov.value, 10.0f, 170.0f );
 		}
 
 		if ( dt > 0.0f )

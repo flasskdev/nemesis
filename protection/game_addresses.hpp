@@ -114,6 +114,7 @@ namespace protection::addresses {
 #ifndef CONVAR
 #define CONVAR(str) \
     []() -> c_convar* { \
+        if ( !addresses::globals::cvar ) return nullptr; \
         static const auto val = addresses::globals::cvar->find(::protection::addresses::hash(str)); \
         return val; \
     }()

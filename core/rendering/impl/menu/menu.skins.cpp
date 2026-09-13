@@ -1,14 +1,20 @@
 #include <pch/pch.hpp>
+#include <cstdio>
+#include <iterator>
 #include <commdlg.h>
 #include <objbase.h>
+#include <shobjidl.h>
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <optional>
 #include <core/features/features.hpp>
 #include <core/settings.hpp>
+#include <utilities/diag.hpp>
 
 #pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "shell32.lib")
 
 #include "../../rendering.hpp"
 #include "../../theme.hpp"
@@ -19,102 +25,230 @@ namespace rendering {
 
 	namespace detail {
 
-		struct pending_agent_file
-		{
-			int team{};
-			std::string model_path{};
-			std::string model_name{};
-		};
+	struct pending_agent_file
+	{
+		int team{};
+		std::string model_path{};
+		std::string model_name{};
+	};
 
-		static std::mutex s_agent_dialog_mutex{};
-		static std::vector<pending_agent_file> s_pending_custom_agents{};
-		static std::atomic<bool> s_dialog_active{ false };
+	inline std::atomic<bool> s_dialog_active{ false };
+	inline std::mutex s_agent_dialog_mutex{};
+	inline std::vector<pending_agent_file> s_pending_agents{};
 
-		static inline void open_agent_file_dialog_async( int team, HWND owner_hwnd )
+	static bool show_agent_dialog_seh( wchar_t* out_path, std::size_t max_path_len, int team )
+	{
+		bool success = false;
+		__try
 		{
-			if ( s_dialog_active.exchange( true ) )
+			const HRESULT co_hr = CoInitializeEx( nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE );
+
+			IFileOpenDialog* pFileOpen = nullptr;
+			HRESULT hr = CoCreateInstance( __uuidof( FileOpenDialog ), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &pFileOpen ) );
+			if ( SUCCEEDED( hr ) && pFileOpen )
 			{
-				return;
+				static const COMDLG_FILTERSPEC rgSpec[] = {
+					{ L"Model Files (*.vmdl;*.vmdl_c)", L"*.vmdl;*.vmdl_c" },
+					{ L"All Files (*.*)", L"*.*" }
+				};
+				pFileOpen->SetFileTypes( ARRAYSIZE( rgSpec ), rgSpec );
+				pFileOpen->SetTitle( ( team == 3 ) ? L"Select CT Custom Model (.vmdl)" : L"Select T Custom Model (.vmdl)" );
+
+				DWORD dwFlags{};
+				if ( SUCCEEDED( pFileOpen->GetOptions( &dwFlags ) ) )
+				{
+					pFileOpen->SetOptions( dwFlags | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_NOCHANGEDIR | FOS_DONTADDTORECENT );
+				}
+
+				if ( SUCCEEDED( pFileOpen->Show( nullptr ) ) )
+				{
+					IShellItem* pItem = nullptr;
+					if ( SUCCEEDED( pFileOpen->GetResult( &pItem ) ) && pItem )
+					{
+						PWSTR pszFilePath = nullptr;
+						if ( SUCCEEDED( pItem->GetDisplayName( SIGDN_FILESYSPATH, &pszFilePath ) ) && pszFilePath )
+						{
+							wcsncpy_s( out_path, max_path_len, pszFilePath, _TRUNCATE );
+							CoTaskMemFree( pszFilePath );
+							success = true;
+						}
+						pItem->Release( );
+					}
+				}
+				pFileOpen->Release( );
 			}
 
-			std::thread( [ team, owner_hwnd ]( )
+			if ( !success && hr != HRESULT_FROM_WIN32( ERROR_CANCELLED ) )
 			{
-				const auto hr = CoInitializeEx( nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE );
-
 				wchar_t filename[ MAX_PATH ]{};
-				static const wchar_t filter[] = L"Model Files (*.vmdl;*.vmdl_c)\0*.vmdl;*.vmdl_c\0All Files (*.*)\0*.*\0\0";
-
 				OPENFILENAMEW ofn{};
 				ofn.lStructSize = sizeof( ofn );
-				ofn.hwndOwner = owner_hwnd;
-				ofn.lpstrFilter = filter;
+				ofn.hwndOwner = nullptr;
+				ofn.lpstrFilter = L"Model Files (*.vmdl;*.vmdl_c)\0*.vmdl;*.vmdl_c\0All Files (*.*)\0*.*\0\0";
 				ofn.lpstrFile = filename;
 				ofn.nMaxFile = MAX_PATH;
-				ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+				ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_DONTADDTORECENT;
 				ofn.lpstrDefExt = L"vmdl";
 				ofn.lpstrTitle = ( team == 3 ) ? L"Select CT Custom Model (.vmdl)" : L"Select T Custom Model (.vmdl)";
 
 				if ( GetOpenFileNameW( &ofn ) )
 				{
-					char path_utf8[ MAX_PATH ]{};
-					WideCharToMultiByte( CP_UTF8, 0, filename, -1, path_utf8, MAX_PATH, nullptr, nullptr );
-
-					std::string model_path = path_utf8;
-					std::replace( model_path.begin( ), model_path.end( ), '\\', '/' );
-
-					if ( auto p = model_path.find( "game/csgo/" ); p != std::string::npos )
-						model_path = model_path.substr( p + ( sizeof( "game/csgo/" ) - 1 ) );
-					else if ( auto p = model_path.find( "csgo/" ); p != std::string::npos )
-						model_path = model_path.substr( p + ( sizeof( "csgo/" ) - 1 ) );
-
-					// CS2 engine requires .vmdl, not compiled .vmdl_c
-					if ( model_path.size( ) >= 7 && model_path.substr( model_path.size( ) - 7 ) == ".vmdl_c" )
-						model_path = model_path.substr( 0, model_path.size( ) - 2 );
-
-					std::string model_name = "Custom";
-					auto last_slash = model_path.find_last_of( '/' );
-					if ( last_slash != std::string::npos )
-					{
-						model_name = model_path.substr( last_slash + 1 );
-						auto dot_pos = model_name.find_last_of( '.' );
-						if ( dot_pos != std::string::npos )
-						{
-							model_name = model_name.substr( 0, dot_pos );
-						}
-					}
-
-					auto to_l = []( unsigned char c ) { return ( c >= 'A' && c <= 'Z' ) ? static_cast< char >( c + 32 ) : static_cast< char >( c ); };
-					auto bad_model = [ & ]( const char* n, std::size_t len )
-					{
-						if ( model_path.size( ) < len ) return false;
-						for ( std::size_t i = 0; i + len <= model_path.size( ); ++i )
-						{
-							bool ok = true;
-							for ( std::size_t j = 0; j < len; ++j )
-								if ( to_l( static_cast< unsigned char >( model_path[ i + j ] ) ) != to_l( static_cast< unsigned char >( n[ j ] ) ) )
-								{ ok = false; break; }
-							if ( ok ) return true;
-						}
-						return false;
-					};
-
-					const bool is_arm = bad_model( "_arm", 4 ) || bad_model( "arms", 4 ) || bad_model( "viewmodel", 8 ) || bad_model( "/arm.", 5 ) || bad_model( "\\arm.", 5 );
-
-					if ( !is_arm && !model_path.empty( ) )
-					{
-						std::lock_guard lock( s_agent_dialog_mutex );
-						s_pending_custom_agents.push_back( { team, std::move( model_path ), std::move( model_name ) } );
-					}
+					wcsncpy_s( out_path, max_path_len, filename, _TRUNCATE );
+					success = true;
 				}
+			}
 
-				if ( SUCCEEDED( hr ) )
-				{
-					CoUninitialize( );
-				}
-
-				s_dialog_active.store( false, std::memory_order_release );
-			} ).detach( );
+			if ( SUCCEEDED( co_hr ) )
+			{
+				CoUninitialize( );
+			}
 		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+			success = false;
+		}
+
+		return success;
+	}
+
+	static inline void process_pending_agents( )
+	{
+		std::vector<pending_agent_file> ready;
+		{
+			std::lock_guard lock( s_agent_dialog_mutex );
+			if ( !s_pending_agents.empty( ) )
+			{
+				ready = std::move( s_pending_agents );
+				s_pending_agents.clear( );
+			}
+		}
+
+		if ( ready.empty( ) )
+			return;
+
+		auto& ca = settings::g_changer.custom_agents;
+		for ( const auto& pa : ready )
+		{
+			if ( pa.model_path.empty( ) )
+				continue;
+
+			int existing_idx = -1;
+			for ( int i = 0; i < static_cast< int >( ca.entries.size( ) ); ++i )
+			{
+				if ( ca.entries[ i ].model_path == pa.model_path )
+				{
+					existing_idx = i;
+					break;
+				}
+			}
+
+			if ( existing_idx < 0 )
+			{
+				settings::changer::custom_agent_entry entry;
+				entry.name = pa.model_name;
+				entry.model_path = pa.model_path;
+				entry.team = pa.team;
+				ca.entries.push_back( entry );
+				existing_idx = static_cast< int >( ca.entries.size( ) ) - 1;
+			}
+
+			if ( pa.team == 3 )
+			{
+				ca.selected_ct = existing_idx;
+				settings::g_changer.agents.ct_def = 0;
+			}
+			else
+			{
+				ca.selected_t = existing_idx;
+				settings::g_changer.agents.t_def = 0;
+			}
+
+			diag::writef( diag::level::info, "custom agent applied: team=%d name=%s path=%s",
+				pa.team, pa.model_name.c_str( ), pa.model_path.c_str( ) );
+		}
+	}
+
+	static inline void open_agent_file_dialog( int team )
+	{
+		if ( s_dialog_active.exchange( true ) )
+		{
+			diag::write( diag::level::info, "agent file dialog already active, ignoring request" );
+			return;
+		}
+
+		diag::writef( diag::level::info, "spawning agent file dialog worker for team %d", team );
+
+		std::thread( [ team ]( )
+		{
+			struct raii_active
+			{
+				~raii_active( ) { s_dialog_active.store( false, std::memory_order_release ); }
+			} active_guard;
+
+			wchar_t filename[ MAX_PATH * 2 ]{};
+			const bool selected = show_agent_dialog_seh( filename, std::size( filename ), team );
+
+			if ( !selected || filename[ 0 ] == L'\0' )
+			{
+				diag::write( diag::level::info, "agent file dialog cancelled or failed" );
+				return;
+			}
+
+			char path_utf8[ MAX_PATH * 2 ]{};
+			const int utf8_len = WideCharToMultiByte( CP_UTF8, 0, filename, -1, path_utf8, static_cast< int >( sizeof( path_utf8 ) ), nullptr, nullptr );
+			if ( utf8_len <= 1 )
+			{
+				return;
+			}
+
+			std::string model_path = path_utf8;
+			std::replace( model_path.begin( ), model_path.end( ), '\\', '/' );
+
+			if ( auto p = model_path.find( "game/csgo/" ); p != std::string::npos )
+				model_path = model_path.substr( p + ( sizeof( "game/csgo/" ) - 1 ) );
+			else if ( auto p = model_path.find( "csgo/" ); p != std::string::npos )
+				model_path = model_path.substr( p + ( sizeof( "csgo/" ) - 1 ) );
+
+			// CS2 engine requires .vmdl, not compiled .vmdl_c
+			if ( model_path.size( ) >= 7 && model_path.substr( model_path.size( ) - 7 ) == ".vmdl_c" )
+				model_path = model_path.substr( 0, model_path.size( ) - 2 );
+
+			std::string model_name = "Custom";
+			auto last_slash = model_path.find_last_of( '/' );
+			if ( last_slash != std::string::npos )
+			{
+				model_name = model_path.substr( last_slash + 1 );
+				auto dot_pos = model_name.find_last_of( '.' );
+				if ( dot_pos != std::string::npos )
+				{
+					model_name = model_name.substr( 0, dot_pos );
+				}
+			}
+
+			auto to_l = []( unsigned char c ) { return ( c >= 'A' && c <= 'Z' ) ? static_cast< char >( c + 32 ) : static_cast< char >( c ); };
+			auto bad_model = [ & ]( const char* n, std::size_t len )
+			{
+				if ( model_path.size( ) < len ) return false;
+				for ( std::size_t i = 0; i + len <= model_path.size( ); ++i )
+				{
+					bool ok = true;
+					for ( std::size_t j = 0; j < len; ++j )
+						if ( to_l( static_cast< unsigned char >( model_path[ i + j ] ) ) != to_l( static_cast< unsigned char >( n[ j ] ) ) )
+						{ ok = false; break; }
+					if ( ok ) return true;
+				}
+				return false;
+			};
+
+			const bool is_arm = bad_model( "_arm", 4 ) || bad_model( "arms", 4 ) || bad_model( "viewmodel", 8 ) || bad_model( "/arm.", 5 ) || bad_model( "\\arm.", 5 );
+
+			if ( !is_arm && !model_path.empty( ) )
+			{
+				std::lock_guard lock( s_agent_dialog_mutex );
+				s_pending_agents.push_back( { team, std::move( model_path ), std::move( model_name ) } );
+			}
+		} ).detach( );
+	}
 
 		inline static auto& skin_map( ) { return settings::g_changer.skins.data; }
 
@@ -821,8 +955,9 @@ namespace rendering {
 			dl.rect_filled( plus_rect.x, plus_rect.y, plus_rect.w, plus_rect.h, plus_bg, xdraw::corner_radius{ 4.0f } );
 
 			const auto plus_text_col = xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * fade_alpha ) };
-			const auto [pw, ph] = xdraw::measure_text( "+" );
-			dl.text( plus_rect.x + ( plus_rect.w - pw ) * 0.5f, plus_rect.y + ( plus_rect.h - ph ) * 0.5f, "+", plus_text_col );
+			const auto plus_text = s_dialog_active ? "..." : "+";
+			const auto [pw, ph] = xdraw::measure_text( plus_text );
+			dl.text( plus_rect.x + ( plus_rect.w - pw ) * 0.5f, plus_rect.y + ( plus_rect.h - ph ) * 0.5f, plus_text, plus_text_col );
 
 			// Reset custom agent button (показываем только если кастом выбран для этой команды)
 			bool reset_hovered = false;
@@ -884,7 +1019,7 @@ namespace rendering {
 
 			if ( plus_hovered && input.mouse_clicked )
 			{
-				open_agent_file_dialog_async( team, rendering::g_context.get_window( ) );
+				open_agent_file_dialog( team );
 			}
 			else if ( hovered && input.mouse_clicked && !plus_hovered && !reset_hovered )
 			{
@@ -1629,48 +1764,7 @@ namespace rendering {
 
 	void menu::draw_skins( float group_w ) const
 	{
-		// Process any asynchronously selected custom agent files from the background dialog thread
-		{
-			std::lock_guard lock( detail::s_agent_dialog_mutex );
-			if ( !detail::s_pending_custom_agents.empty( ) )
-			{
-				auto& ca = settings::g_changer.custom_agents;
-				for ( const auto& pending : detail::s_pending_custom_agents )
-				{
-					int existing_idx = -1;
-					for ( int i = 0; i < static_cast< int >( ca.entries.size( ) ); ++i )
-					{
-						if ( ca.entries[ i ].model_path == pending.model_path )
-						{
-							existing_idx = i;
-							break;
-						}
-					}
-
-					if ( existing_idx < 0 )
-					{
-						settings::changer::custom_agent_entry entry;
-						entry.name = pending.model_name;
-						entry.model_path = pending.model_path;
-						entry.team = pending.team;
-						ca.entries.push_back( entry );
-						existing_idx = static_cast< int >( ca.entries.size( ) ) - 1;
-					}
-
-					if ( pending.team == 3 )
-					{
-						ca.selected_ct = existing_idx;
-						settings::g_changer.agents.ct_def = 0;
-					}
-					else
-					{
-						ca.selected_t = existing_idx;
-						settings::g_changer.agents.t_def = 0;
-					}
-				}
-				detail::s_pending_custom_agents.clear( );
-			}
-		}
+		detail::process_pending_agents( );
 
 		static auto last_subtab{ -1 };
 		if ( this->m_subtab != last_subtab )
@@ -1931,15 +2025,16 @@ namespace rendering {
 
 				if ( add_btn_hovered && input.mouse_clicked )
 				{
-					detail::open_agent_file_dialog_async( detail::skins_ui.browsing_agent_team, rendering::g_context.get_window( ) );
+					detail::open_agent_file_dialog( detail::skins_ui.browsing_agent_team );
 				}
 
 				auto add_btn_bg = xui::lerp( tokens::col_accent, xui::lighten( tokens::col_accent, 1.2f ), add_btn_hover );
 				add_btn_bg.a = static_cast< std::uint8_t >( ( 190.0f + 65.0f * add_btn_hover ) * fade_alpha );
 				dl.rect_filled( add_btn_rect.x, add_btn_rect.y, add_btn_rect.w, add_btn_rect.h, add_btn_bg, xdraw::corner_radius{ s.button_rounding } );
 
-				const auto [atw, ath] = xdraw::measure_text( "+ Custom" );
-				dl.text( add_btn_rect.x + ( add_btn_rect.w - atw ) * 0.5f, add_btn_rect.y + ( add_btn_rect.h - ath ) * 0.5f, "+ Custom", xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * fade_alpha ) } );
+				const auto add_btn_text = detail::s_dialog_active ? "... Loading" : "+ Custom";
+				const auto [atw, ath] = xdraw::measure_text( add_btn_text );
+				dl.text( add_btn_rect.x + ( add_btn_rect.w - atw ) * 0.5f, add_btn_rect.y + ( add_btn_rect.h - ath ) * 0.5f, add_btn_text, xdraw::color{ 255, 255, 255, static_cast< std::uint8_t >( 255.0f * fade_alpha ) } );
 
 				std::string search_lower = detail::skins_ui.search_buf;
 				for ( auto& c : search_lower )
@@ -1992,6 +2087,28 @@ namespace rendering {
 					}
 
 					agent_items.push_back( a );
+				}
+
+				// Log only when the team, search, or counts change.
+				static bool diagnostic_initialized = false;
+				static int diagnostic_team = 0;
+				static std::size_t diagnostic_total = 0;
+				static std::size_t diagnostic_visible = 0;
+				static std::string diagnostic_search;
+				if (!diagnostic_initialized || diagnostic_team != detail::skins_ui.browsing_agent_team ||
+					diagnostic_total != econ.agents().size() || diagnostic_visible != agent_items.size() ||
+					diagnostic_search != detail::skins_ui.search_buf)
+				{
+					diagnostic_initialized = true;
+					diagnostic_team = detail::skins_ui.browsing_agent_team;
+					diagnostic_total = econ.agents().size();
+					diagnostic_visible = agent_items.size();
+					diagnostic_search = detail::skins_ui.search_buf;
+					char checkpoint[512]{};
+					std::snprintf(checkpoint, sizeof(checkpoint),
+						"ui: team=%d; schema_agents=%zu; visible_agents=%zu; search_bytes=%zu",
+						diagnostic_team, diagnostic_total, diagnostic_visible, diagnostic_search.size());
+					diag::write( diag::level::info, checkpoint );
 				}
 
 				const auto total_count = static_cast< int >( custom_items.size( ) + agent_items.size( ) );

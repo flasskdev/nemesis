@@ -1,4 +1,6 @@
 #include <pch/pch.hpp>
+#include <cstdio>
+#include <iterator>
 #include <wincodec.h>
 #pragma comment( lib, "windowscodecs.lib" )
 #include <utilities/memory/memory.hpp>
@@ -10,8 +12,46 @@
 
 namespace features::changer {
 
+	// Diagnostic checkpoints only. The original dialog/model logic is unchanged.
+	static void write_agent_diagnostic(const char* message) noexcept
+	{
+		struct preserve_last_error
+		{
+			DWORD value{GetLastError()};
+			~preserve_last_error() noexcept { SetLastError(value); }
+		} last_error;
+
+		char line[1536]{};
+		const int size = std::snprintf(line, sizeof(line), "[%llu][tid=%lu] %s\r\n",
+			static_cast<unsigned long long>(GetTickCount64()),
+			static_cast<unsigned long>(GetCurrentThreadId()), message);
+		if (size <= 0) return;
+		const DWORD bytes = static_cast<DWORD>(
+			static_cast<std::size_t>(size) < sizeof(line) ? size : sizeof(line) - 1);
+		OutputDebugStringA(line);
+
+		wchar_t path[MAX_PATH]{};
+		const DWORD length = GetTempPathW(MAX_PATH, path);
+		constexpr wchar_t filename[] = L"nemesis-agent-diagnostics.log";
+		if (length == 0 || length >= MAX_PATH ||
+			static_cast<std::size_t>(length) + std::size(filename) > MAX_PATH)
+			return;
+		for (std::size_t i = 0; i < std::size(filename); ++i)
+			path[length + i] = filename[i];
+
+		HANDLE file = CreateFileW(path, FILE_APPEND_DATA,
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+			OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		if (file == INVALID_HANDLE_VALUE) return;
+		DWORD written{};
+		WriteFile(file, line, bytes, &written, nullptr);
+		FlushFileBuffers(file);
+		CloseHandle(file);
+	}
+
 	bool econ_item_system::initialize( )
 	{
+		write_agent_diagnostic("econ: initialize entered; local diagnostics v2");
 		std::uintptr_t schema{};
 		auto schema_ready{ false };
 		constexpr auto max_attempts{ 300 };
@@ -51,29 +91,57 @@ namespace features::changer {
 
 		if ( !schema_ready )
 		{
+			write_agent_diagnostic("econ: timed out waiting for item schema");
 			logging::console::print( xs( "[econ] timed out waiting for item schema" ) );
 			return false;
 		}
 
+		write_agent_diagnostic("econ: before parse_item_defs");
 		if ( !this->parse_item_defs( schema ) )
 		{
+			write_agent_diagnostic("econ: failed to parse item definitions");
 			logging::console::print( xs( "[econ] failed to parse item definitions" ) );
 			return false;
 		}
 
+		write_agent_diagnostic("econ: before parse_paint_kits");
 		if ( !this->parse_paint_kits( schema ) )
 		{
+			write_agent_diagnostic("econ: failed to parse paint kits");
 			logging::console::print( xs( "[econ] failed to parse paint kits" ) );
 			return false;
 		}
 
 		this->parse_music_kits( schema );
 
+		write_agent_diagnostic("econ: before build_indices");
 		this->build_indices( );
+		char checkpoint[1400]{};
+		std::snprintf(checkpoint, sizeof(checkpoint),
+			"econ: indices built; defs=%zu; guns=%zu; knives=%zu; gloves=%zu; agents=%zu",
+			this->m_item_defs.size(), this->m_guns.size(), this->m_knives.size(),
+			this->m_gloves.size(), this->m_agents.size());
+		write_agent_diagnostic(checkpoint);
+		std::size_t agent_samples = 0;
+		std::size_t other_samples = 0;
+		for (const auto& item : this->m_item_defs)
+		{
+			const bool agent = item.category == item_category::agent;
+			if (agent ? agent_samples >= 16 : other_samples >= 24) continue;
+			if (agent) ++agent_samples; else ++other_samples;
+			std::snprintf(checkpoint, sizeof(checkpoint),
+				"econ: sample def=%d; slot=%d; category=%u; classes=0x%08lX; team=%d; class=%.160s; model=%.320s",
+				static_cast<int>(item.def_index), item.loadout_slot,
+				static_cast<unsigned int>(item.category), static_cast<unsigned long>(item.used_by_classes),
+				item.team(), item.item_class.c_str(), item.model_player.c_str());
+			write_agent_diagnostic(checkpoint);
+		}
+
 		this->resolve_localized_names( );
 
 		if ( !this->build_vpk_index( ) )
 		{
+			write_agent_diagnostic("econ: failed to build VPK index");
 			logging::console::print( xs( "[econ] failed to build VPK index" ) );
 			return false;
 		}
@@ -207,6 +275,11 @@ namespace features::changer {
 	{
 		const auto count = memory::read<int>( schema + 0x128 );
 		const auto array = memory::read<std::uintptr_t>( schema + 0x130 );
+		char schema_checkpoint[192]{};
+		std::snprintf(schema_checkpoint, sizeof(schema_checkpoint),
+			"econ: parse_item_defs table_count=%d; array_present=%d", count, static_cast<int>(array != 0));
+		write_agent_diagnostic(schema_checkpoint);
+
 
 		if ( !array || count <= 0 || count > 10000 )
 		{
