@@ -7,6 +7,7 @@
 #include <shared_mutex>
 #include <chrono>
 #include <atomic>
+#include <mutex>
 #include <vector>
 #include <core/settings.hpp>
 
@@ -42,10 +43,10 @@ namespace features::changer {
 
 	private:
 		void worker_loop( );
-		void perform_push( );
+		bool perform_push( );
 		void perform_pull( );
 		void perform_users_update( );
-		[[nodiscard]] std::uint64_t compute_local_cosmetics_hash( ) const;
+		void capture_local_snapshot(std::uint64_t steam_id);
 
 		mutable std::shared_mutex m_mutex{};
 		std::unordered_map<std::uint64_t, remote_player_skin> m_cache{};
@@ -56,7 +57,9 @@ namespace features::changer {
 		std::atomic<bool> m_push_pending{ true };
 		std::atomic<bool> m_initialized{ false };
 		std::atomic<std::uint64_t> m_last_local_steam_id{ 0 };
-		std::atomic<std::uint64_t> m_last_pushed_hash{ 0 };
+		std::string m_local_payload{}; // Protected by m_mutex.
+		std::uint64_t m_payload_steam_id{};
+		std::chrono::steady_clock::time_point m_last_snapshot_time{}; // Producer thread only.
 		std::chrono::steady_clock::time_point m_last_push_time{};
 		std::chrono::steady_clock::time_point m_last_pull_time{};
 		std::chrono::steady_clock::time_point m_last_users_time{};

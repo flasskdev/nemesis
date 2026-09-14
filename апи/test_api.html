@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product API Tester & Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0c10;
+            --bg-secondary: #12161f;
+            --bg-card: rgba(22, 27, 34, 0.8);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --accent-glow: rgba(99, 102, 241, 0.25);
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --font-sans: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            line-height: 1.5;
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 24px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header-title h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a5b4fc, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .server-url-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-secondary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .server-url-bar input {
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            width: 250px;
+            outline: none;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            padding: 2px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        .badge-post { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+        .badge-get  { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-dev  { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .form-control {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            font-family: var(--font-mono);
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+        .btn-secondary:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .response-box {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            min-height: 260px;
+            max-height: 480px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #e6edf3;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .status-ok { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .status-err { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+        .session-info {
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+        }
+
+        .session-info p {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        .session-info p:last-child { margin-bottom: 0; }
+        .session-info strong { font-family: var(--font-mono); color: #a5b4fc; }
+
+        .actions-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .actions-row .btn {
+            width: auto;
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="header-title">
+            <h1>Product API Console</h1>
+            <p>Тестирование эндпоинтов авторизации, регистрации, подписок и банов</p>
+        </div>
+        <div class="server-url-bar">
+            <span style="color: var(--text-muted); font-size: 0.8rem;">API URL:</span>
+            <input type="text" id="apiUrlInput" value="index.php">
+        </div>
+    </header>
+
+    <div class="session-info" id="sessionBar">
+        <p><span>Текущий токен сессии:</span> <strong id="activeToken">Не авторизован</strong></p>
+        <p><span>ID пользователя:</span> <strong id="activeUserId">—</strong></p>
+        <p><span>HWID:</span> <strong id="activeHwid">HWID-PC-USER-001</strong></p>
+    </div>
+
+    <div class="main-grid">
+        <!-- Левая колонка: форма запроса -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title" id="currentActionTitle">Авторизация (auth)</span>
+                <span class="badge badge-post" id="methodBadge">POST</span>
+            </div>
+
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('auth')">🔐 auth</button>
+                <button class="tab-btn" onclick="switchTab('reg')">📝 reg</button>
+                <button class="tab-btn" onclick="switchTab('profile')">👤 profile</button>
+                <button class="tab-btn" onclick="switchTab('subs_list')">📋 subs_list</button>
+                <button class="tab-btn" onclick="switchTab('sub_buy')">💳 sub_buy</button>
+                <button class="tab-btn" onclick="switchTab('ban')">⛔ ban (dev)</button>
+                <button class="tab-btn" onclick="switchTab('unban')">✅ unban (dev)</button>
+                <button class="tab-btn" onclick="switchTab('hwid_reset')">🔄 hwid_reset</button>
+                <button class="tab-btn" onclick="switchTab('balance_add')">💰 balance_add</button>
+                <button class="tab-btn" onclick="switchTab('get_ver')">📦 get_ver</button>
+            </div>
+
+            <form id="apiForm" onsubmit="handleSend(event)">
+                <div id="dynamicFields">
+                    <!-- Заполняется динамически -->
+                </div>
+
+                <div class="actions-row">
+                    <button type="submit" class="btn" id="submitBtn">Отправить запрос</button>
+                    <button type="button" class="btn btn-secondary" onclick="fillAdminData()">Заполнить Admin</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Правая колонка: ответ сервера -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Ответ сервера (JSON)</span>
+                <span id="responseStatus" class="status-pill status-ok" style="display: none;">200 OK</span>
+            </div>
+            <pre class="response-box" id="responsePre">// Нажмите "Отправить запрос", чтобы увидеть результат...</pre>
+            <div class="actions-row" style="margin-top: 12px;">
+                <button type="button" class="btn btn-secondary" onclick="copyResponse()">📋 Скопировать ответ</button>
+                <button type="button" class="btn btn-secondary" onclick="clearSession()">Очистить токен</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentAction = 'auth';
+    let storedToken = localStorage.getItem('api_token') || '';
+    let storedUserId = localStorage.getItem('api_user_id') || '';
+    let storedHwid = localStorage.getItem('api_hwid') || 'HWID-PC-USER-001';
+
+    function updateSessionBar() {
+        document.getElementById('activeToken').innerText = storedToken ? (storedToken.substring(0, 16) + '...') : 'Не авторизован';
+        document.getElementById('activeUserId').innerText = storedUserId || '—';
+        document.getElementById('activeHwid').innerText = storedHwid || '—';
+    }
+
+    function clearSession() {
+        storedToken = '';
+        storedUserId = '';
+        localStorage.removeItem('api_token');
+        localStorage.removeItem('api_user_id');
+        updateSessionBar();
+        renderFields();
+    }
+
+    function switchTab(action) {
+        currentAction = action;
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('currentActionTitle').innerText = action;
+        const badge = document.getElementById('methodBadge');
+        if (action === 'subs_list' || action === 'profile' || action === 'get_ver') {
+            badge.innerText = 'GET / POST';
+        } else {
+            badge.innerText = 'POST';
+        }
+        renderFields();
+    }
+
+    function renderFields() {
+        const container = document.getElementById('dynamicFields');
+        let html = '';
+
+        if (currentAction === 'auth') {
+            html = `
+                <div class="form-group">
+                    <label>Email</label>
+                    <input class="form-control" name="email" id="f_email" value="admin@product.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input class="form-control" type="password" name="password" id="f_password" value="admin123" required>
+                </div>
+                <div class="form-group">
+                    <label>HWID (Hardware ID)</label>
+                    <input class="form-control" name="hwid" id="f_hwid" value="${storedHwid}">
+                </div>
+            `;
+        } else if (currentAction === 'reg') {
+            html = `
+                <div class="form-group">
+                    <label>Email</label>
+                    <input class="form-control" name="email" id="f_email" value="user_new@product.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Password (min 6 chars)</label>
+                    <input class="form-control" type="password" name="password" id="f_password" value="secret123" required>
+                </div>
+                <div class="form-group">
+                    <label>HWID (опционально)</label>
+                    <input class="form-control" name="hwid" id="f_hwid" value="HWID-TEST-PC-999">
+                </div>
+            `;
+        } else if (currentAction === 'profile') {
+            html = `
+                <div class="form-group">
+                    <label>Токен авторизации (Bearer)</label>
+                    <input class="form-control" name="token" id="f_token" value="${storedToken}" placeholder="Авторизуйтесь через auth">
+                </div>
+            `;
+        } else if (currentAction === 'subs_list') {
+            html = `<p style="color: var(--text-muted); margin-bottom: 12px;">Запрос возвращает список всех тарифов и скидок. Параметры не требуются.</p>`;
+        } else if (currentAction === 'sub_buy') {
+            html = `
+                <div class="form-group">
+                    <label>Токен пользователя</label>
+                    <input class="form-control" name="token" id="f_token" value="${storedToken}" required>
+                </div>
+                <div class="form-group">
+                    <label>ID тарифа (sub_id)</label>
+                    <select class="form-control" name="sub_id" id="f_sub_id">
+                        <option value="1">1 - Тестовый (1 день) / 49.99 руб.</option>
+                        <option value="2">2 - Стандарт (30 дней) / 499.00 руб. (Скидка 10%)</option>
+                        <option value="3">3 - Квартальный (90 дней) / 1199.50 руб. (Скидка 20%)</option>
+                        <option value="4">4 - Навсегда (Lifetime) / 2999.00 руб.</option>
+                    </select>
+                </div>
+            `;
+        } else if (currentAction === 'ban') {
+            html = `
+                <div class="form-group">
+                    <label>Токен администратора (dev = 1)</label>
+                    <input class="form-control" name="admin_token" id="f_admin_token" value="${storedToken}" required>
+                </div>
+                <div class="form-group">
+                    <label>Target User ID (или Email)</label>
+                    <input class="form-control" name="target_id" id="f_target_id" value="2">
+                </div>
+                <div class="form-group">
+                    <label>Target Email (если ID не указан)</label>
+                    <input class="form-control" name="target_email" id="f_target_email" placeholder="user@product.com">
+                </div>
+                <div class="form-group">
+                    <label>Причина бана</label>
+                    <input class="form-control" name="reason" value="Использование запрещенных модификаций">
+                </div>
+            `;
+        } else if (currentAction === 'unban') {
+            html = `
+                <div class="form-group">
+                    <label>Токен администратора (dev = 1)</label>
+                    <input class="form-control" name="admin_token" id="f_admin_token" value="${storedToken}" required>
+                </div>
+                <div class="form-group">
+                    <label>Target User ID</label>
+                    <input class="form-control" name="target_id" id="f_target_id" value="2">
+                </div>
+            `;
+        } else if (currentAction === 'hwid_reset') {
+            html = `
+                <div class="form-group">
+                    <label>Токен (свой или админа)</label>
+                    <input class="form-control" name="token" id="f_token" value="${storedToken}">
+                </div>
+                <div class="form-group">
+                    <label>Target User ID (для админа, опционально)</label>
+                    <input class="form-control" name="target_id" id="f_target_id" placeholder="Оставьте пустым для сброса своего HWID">
+                </div>
+            `;
+        } else if (currentAction === 'balance_add') {
+            html = `
+                <div class="form-group">
+                    <label>Токен администратора (dev = 1)</label>
+                    <input class="form-control" name="admin_token" id="f_admin_token" value="${storedToken}" required>
+                </div>
+                <div class="form-group">
+                    <label>Target User ID</label>
+                    <input class="form-control" name="target_id" id="f_target_id" value="2">
+                </div>
+                <div class="form-group">
+                    <label>Сумма пополнения (amount)</label>
+                    <input class="form-control" type="number" step="0.01" name="amount" id="f_amount" value="500.00">
+                </div>
+            `;
+        } else if (currentAction === 'get_ver') {
+            html = `
+                <p style="color: var(--text-muted); margin-bottom: 12px;">Получение актуальной версии лоадера из таблицы <code>loader</code> (ID: 1, колонка <code>ver</code>).</p>
+                <div class="form-group">
+                    <label>ID записи лоадера (по умолчанию 1)</label>
+                    <input class="form-control" type="number" name="id" id="f_loader_id" value="1">
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function fillAdminData() {
+        if (currentAction === 'auth') {
+            document.getElementById('f_email').value = 'admin@product.com';
+            document.getElementById('f_password').value = 'admin123';
+            document.getElementById('f_hwid').value = 'HWID-ADMIN-TEST-PC-12345';
+        }
+    }
+
+    async function handleSend(e) {
+        e.preventDefault();
+        const url = document.getElementById('apiUrlInput').value;
+        const form = document.getElementById('apiForm');
+        const formData = new FormData(form);
+
+        const payload = { action: currentAction };
+        for (let [k, v] of formData.entries()) {
+            if (v !== '') payload[k] = v;
+        }
+
+        // Add headers
+        const headers = { 'Content-Type': 'application/json' };
+        if (payload.token) {
+            headers['Authorization'] = 'Bearer ' + payload.token;
+        } else if (payload.admin_token) {
+            headers['Authorization'] = 'Bearer ' + payload.admin_token;
+        }
+
+        document.getElementById('responsePre').innerText = 'Отправка запроса...';
+        const statusPill = document.getElementById('responseStatus');
+
+        try {
+            const start = performance.now();
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(payload)
+            });
+            const elapsed = Math.round(performance.now() - start);
+
+            const json = await res.json();
+            statusPill.style.display = 'inline-flex';
+            statusPill.className = 'status-pill ' + (res.ok && json.success ? 'status-ok' : 'status-err');
+            statusPill.innerText = `${res.status} ${res.statusText} (${elapsed}ms)`;
+
+            document.getElementById('responsePre').innerText = JSON.stringify(json, null, 2);
+
+            // Auto store token if auth or reg
+            if (json.token) {
+                storedToken = json.token;
+                localStorage.setItem('api_token', storedToken);
+            }
+            if (json.id) {
+                storedUserId = json.id;
+                localStorage.setItem('api_user_id', storedUserId);
+            }
+            if (payload.hwid) {
+                storedHwid = payload.hwid;
+                localStorage.setItem('api_hwid', storedHwid);
+            }
+
+            updateSessionBar();
+
+        } catch (err) {
+            statusPill.style.display = 'inline-flex';
+            statusPill.className = 'status-pill status-err';
+            statusPill.innerText = 'Network Error';
+            document.getElementById('responsePre').innerText = 'Ошибка соединения:\n' + err.message + '\n\nУбедитесь, что веб-сервер (XAMPP, OpenServer, Apache, PHP built-in server) запущен и база данных создана через database.sql!';
+        }
+    }
+
+    function copyResponse() {
+        const text = document.getElementById('responsePre').innerText;
+        navigator.clipboard.writeText(text);
+        alert('Ответ скопирован в буфер обмена!');
+    }
+
+    // Init
+    updateSessionBar();
+    renderFields();
+</script>
+
+</body>
+</html>

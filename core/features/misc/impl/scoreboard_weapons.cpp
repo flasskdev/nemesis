@@ -7,6 +7,7 @@
 #include <utilities/logging/logging.hpp>
 #include <utilities/steam/steam.hpp>
 #include <core/settings.hpp>
+#include <external/nlohmann/json.hpp>
 #include <core/features/features.hpp>
 #include <core/features/changer/skin_sync.hpp>
 #include <protection/game_addresses.hpp>
@@ -212,32 +213,19 @@ namespace features::misc {
 	})();
 
 	SIndicatorManager = (function () {
-
-		function isValid(panel) {
-			return panel && panel.IsValid();
-		}
-
+		function isValid(panel) { return panel && panel.IsValid(); }
 		function getScoreboard() {
 			var root = $.GetContextPanel();
-			if (!isValid(root)) return null;
-			var scoreboard = root.id === "Scoreboard" ? root : root.FindChildTraverse("Scoreboard");
-			return isValid(scoreboard) ? scoreboard : null;
-		}
-
-		function getRow(sb, xuid, account_id, name) {
-			if (typeof MyPersonaAPI !== "undefined" && typeof MyPersonaAPI.GetXuid === "function") {
-				var myXuid = MyPersonaAPI.GetXuid();
-				if (myXuid && (myXuid === xuid || myXuid === "" + xuid)) {
-					var r = sb.FindChildTraverse("player-" + myXuid);
-					if (isValid(r)) return r;
-					r = sb.FindChildTraverse("id-player-" + myXuid);
-					if (isValid(r)) return r;
-					var localRows = sb.FindChildrenWithClassTraverse("sb-row--local");
-					if (localRows && localRows.length > 0 && isValid(localRows[0])) return localRows[0];
-				}
+			while (isValid(root)) {
+				if (root.id === "Scoreboard") return root;
+				var sb = root.FindChildTraverse("Scoreboard");
+				if (isValid(sb)) return sb;
+				root = typeof root.GetParent === "function" ? root.GetParent() : null;
 			}
-
-			var keys = [xuid, account_id];
+			return null;
+		}
+		function getRow(sb, xuid, account_id, name) {
+			var keys = [String(xuid || ""), String(account_id || "")];
 			var prefixes = ["player-", "id-", "id-player-", "player_"];
 			for (var i = 0; i < keys.length; ++i) {
 				if (!keys[i] || keys[i] === "0") continue;
@@ -246,132 +234,99 @@ namespace features::misc {
 					if (isValid(row)) return row;
 				}
 			}
-			if (name) {
-				var nameLabels = sb.FindChildrenWithClassTraverse("sb-name__label");
-				if (!nameLabels || nameLabels.length === 0) {
-					nameLabels = sb.FindChildrenWithClassTraverse("id-sb-name__label");
-				}
-				for (var k = 0; nameLabels && k < nameLabels.length; ++k) {
-					var nl = nameLabels[k];
-					if (isValid(nl) && (nl.text === name || (typeof nl.GetText === "function" && nl.GetText() === name))) {
-						var cur = nl;
-						while (isValid(cur) && cur !== sb) {
-							if (cur.id && cur.id.indexOf("player") !== -1) return cur;
-							cur = cur.GetParent();
-						}
-						var p = nl.GetParent();
-						if (isValid(p)) {
-							var pp = p.GetParent();
-							if (isValid(pp)) return pp;
-						}
+			if (typeof MyPersonaAPI !== "undefined" && typeof MyPersonaAPI.GetXuid === "function" &&
+				String(MyPersonaAPI.GetXuid()) === keys[0]) {
+				var localRows = sb.FindChildrenWithClassTraverse("sb-row--local");
+				if (localRows && localRows.length === 1 && isValid(localRows[0])) return localRows[0];
+			}
+			// Name fallback is allowed only for one unambiguous row.
+			if (!name) return null;
+			var labels = sb.FindChildrenWithClassTraverse("sb-name__label");
+			if (!labels || !labels.length) labels = sb.FindChildrenWithClassTraverse("id-sb-name__label");
+			var match = null;
+			for (var k = 0; labels && k < labels.length; ++k) {
+				var label = labels[k];
+				if (!isValid(label) || label.text !== name) continue;
+				var parent = label.GetParent();
+				while (isValid(parent) && parent !== sb) {
+					if (isValid(parent.FindChildTraverse("id-sb-name__nameicons"))) {
+						if (match && match !== parent) return null;
+						match = parent;
+						break;
 					}
+					parent = parent.GetParent();
 				}
 			}
-			return null;
+			return match;
 		}
-
+		function visibleBranch(panel, row) {
+			for (var p = panel; isValid(p); p = p.GetParent()) {
+				if (p.visible === false || p.style.visibility === "collapse" || p.style.visibility === "hidden") return false;
+				if (p === row) return true;
+			}
+			return false;
+		}
 		function updateIndicator(xuid, account_id, name, show) {
 			var sb = getScoreboard();
 			if (!sb) return;
-
 			var row = getRow(sb, xuid, account_id, name);
 			if (!row) return;
-
-			// Target parent: medals / pins / flair cell
-			var targetParent = row.FindChildTraverse("id-sb-flair");
-			if (!isValid(targetParent)) {
-				targetParent = row.FindChildTraverse("sb-row__cell--flair");
-			}
-			if (!isValid(targetParent)) {
-				var flairList = row.FindChildrenWithClassTraverse("sb-row__cell--flair");
-				if (flairList && flairList.length > 0 && isValid(flairList[0])) {
-					targetParent = flairList[0];
-				}
-			}
-			if (!isValid(targetParent)) {
-				targetParent = row.FindChildTraverse("id-sb-rank");
-			}
-			if (!isValid(targetParent)) {
-				targetParent = row.FindChildTraverse("sb-row__cell--rank");
-			}
-			if (!isValid(targetParent)) {
-				targetParent = row;
-			}
-			if (!isValid(targetParent)) return;
-
-			var id = "mintaly_user_indicator_" + (xuid && xuid !== "0" ? xuid : (name ? name.replace(/[^a-zA-Z0-9]/g, "_") : account_id));
-			var badge = targetParent.FindChildTraverse(id);
-			if (!isValid(badge)) {
-				badge = row.FindChildTraverse(id);
-			}
-
-			// If flair cell has an existing medal/pin image, hide it while indicator is shown
-			if (targetParent !== row && typeof targetParent.GetChildCount === "function") {
-				var childCount = targetParent.GetChildCount();
-				for (var c = 0; c < childCount; ++c) {
-					var ch = targetParent.GetChild(c);
-					if (isValid(ch) && ch !== badge && ch.id !== id) {
-						ch.style.visibility = show ? "collapse" : "visible";
-					}
-				}
-			}
-
+			// A fixed ID is safe within a row and survives SteamID/name changes.
+			var id = "mintaly_user_indicator";
+			var badge = row.FindChildTraverse(id);
 			if (!show) {
 				if (isValid(badge)) badge.style.visibility = "collapse";
 				return;
 			}
-
+			// The medals column can be collapsed for players without medals.
+			// Use name icons instead, without hiding any native UI children.
+			var parent = row.FindChildTraverse("id-sb-name__nameicons");
+			if (!isValid(parent) || !visibleBranch(parent, row)) parent = row;
+			if (isValid(badge) && badge.GetParent() !== parent) {
+				if (typeof badge.SetParent !== "function") return;
+				badge.SetParent(parent);
+			}
 			if (!isValid(badge)) {
-				badge = $.CreatePanel("Panel", targetParent, id);
+				badge = $.CreatePanel("Panel", parent, id);
 				badge.AddClass("mintaly-indicator-badge");
 			}
-
+			badge.visible = true;
 			badge.style.verticalAlign = "center";
-			badge.style.horizontalAlign = "center";
+			badge.style.horizontalAlign = "left";
 			badge.style.flowChildren = "none";
 			badge.style.height = "18px";
 			badge.style.width = "18px";
-			badge.style.margin = "0px auto";
+			badge.style.minWidth = "18px";
+			badge.style.margin = "0px 3px";
 			badge.style.padding = "0px";
 			badge.style.borderRadius = "3px";
-			badge.style.backgroundColor = "rgba(12, 12, 16, 0.95)";
-			badge.style.border = "1px solid rgba(255, 255, 255, 0.28)";
-			badge.style.boxShadow = "0px 0px 4px rgba(0, 0, 0, 0.7)";
-
-			var iconLabel = badge.FindChildTraverse(id + "_txt");
-			if (!isValid(iconLabel)) {
-				iconLabel = $.CreatePanel("Label", badge, id + "_txt");
-			}
-			if (isValid(iconLabel)) {
-				iconLabel.text = "M";
-				if (typeof iconLabel.SetText === "function") iconLabel.SetText("M");
-				iconLabel.style.width = "100%";
-				iconLabel.style.height = "18px";
-				iconLabel.style.color = "#FFFFFF";
-				iconLabel.style.fontSize = "11px";
-				iconLabel.style.fontWeight = "bold";
-				iconLabel.style.fontFamily = "Stratum2, Arial, sans-serif";
-				iconLabel.style.textAlign = "center";
-				iconLabel.style.verticalAlign = "center";
-				iconLabel.style.horizontalAlign = "center";
-				iconLabel.style.lineHeight = "16px";
-				iconLabel.style.margin = "0px";
-				iconLabel.style.padding = "0px";
-			}
-
+			badge.style.backgroundColor = "#0C0C10F2";
+			badge.style.border = "1px solid #FFFFFF47";
+			badge.style.opacity = "1";
+			var label = badge.FindChildTraverse(id + "_txt");
+			if (!isValid(label)) label = $.CreatePanel("Label", badge, id + "_txt");
+			label.text = "M";
+			label.visible = true;
+			label.style.color = "#FFFFFF";
+			label.style.fontSize = "12px";
+			label.style.fontWeight = "bold";
+			label.style.fontFamily = "Stratum2";
+			label.style.textAlign = "center";
+			label.style.verticalAlign = "center";
+			label.style.horizontalAlign = "center";
+			label.style.margin = "0px";
+			label.style.padding = "0px";
+			label.style.visibility = "visible";
 			badge.style.visibility = "visible";
 		}
-
 		return {
-			update: function (xuid, account_id, name, show) {
-				updateIndicator(xuid, account_id, name, show);
-			},
+			update: updateIndicator,
 			clear: function () {
 				var sb = getScoreboard();
 				if (!sb) return;
-				var all = sb.FindChildrenWithClassTraverse("mintaly-indicator-badge");
-				for (var i = 0; all && i < all.length; ++i) {
-					if (isValid(all[i])) all[i].style.visibility = "collapse";
+				var badges = sb.FindChildrenWithClassTraverse("mintaly-indicator-badge");
+				for (var i = 0; badges && i < badges.length; ++i) {
+					if (isValid(badges[i])) badges[i].style.visibility = "collapse";
 				}
 			}
 		};
@@ -873,21 +828,17 @@ namespace features::misc {
 			player_name = memory::read_string(controller + SCHEMA("CBasePlayerController", "m_iszPlayerName"_hash), 127);
 		}
 
-		std::string escaped_name{};
-		for (char c : player_name) {
-			if (c == '\\') escaped_name += "\\\\";
-			else if (c == '"') escaped_name += "\\\"";
-			else if (c == '\'') escaped_name += "\\'";
-			else escaped_name += c;
-		}
-
-		const auto script = std::format (
-			R"(if(typeof(SClient)!=='undefined'){{SClient.receive({{type:"updateIndicator",content:{{xuid:"{}",account_id:"{}",name:"{}",show:{}}}}});}})",
-			steamid,
-			account_id,
-			escaped_name,
-			show ? "true" : "false"
-		);
+		const nlohmann::json message = {
+			{"type", "updateIndicator"},
+			{"content", {
+				{"xuid", std::to_string(steamid)},
+				{"account_id", std::to_string(account_id)},
+				{"name", player_name}, {"show", show}
+			}}
+		};
+		// JSON escaping includes line breaks, control characters and Unicode separators.
+		const auto script = std::string("if(typeof(SClient)!=='undefined'){SClient.receive(") +
+			message.dump(-1, ' ', true, nlohmann::json::error_handler_t::replace) + ");}";
 
 		run_script (script);
 	}
