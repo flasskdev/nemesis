@@ -69,125 +69,234 @@ namespace features::changer {
 			return;
 		}
 
-		const auto weapon_services = memory::read<std::uintptr_t>( local.pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
-		if ( !weapon_services )
+		const auto local_ctrl = local.controller;
+		const auto local_pawn = local.pawn;
+
+		if ( true )
 		{
-			return;
+			const auto weapon_services = memory::read<std::uintptr_t>( local_pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
+			if ( weapon_services )
+			{
+				const settings::changer::applied_skin* selected_skin{ nullptr };
+				const econ_item_system::item_def* selected_knife_def{ nullptr };
+
+				for ( const auto& [def_idx, skin] : settings::g_changer.skins.data )
+				{
+					const auto def = g_econ_item_system.find_def( def_idx );
+					if ( !def || def->category != econ_item_system::item_category::knife )
+					{
+						continue;
+					}
+
+					selected_skin = &skin;
+					selected_knife_def = def;
+					break;
+				}
+
+				const auto weapons_base = weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hMyWeapons"_hash );
+				const auto weapons_size = memory::read<int>( weapons_base );
+				const auto weapons_data = memory::read<std::uintptr_t>( weapons_base + 0x8 );
+
+				if ( weapons_data && weapons_size > 0 )
+				{
+					const auto active_handle = memory::read<std::uint32_t>( weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
+					const auto active_weapon = systems::g_entities.lookup( active_handle );
+
+					if ( this->m_tracked_pawn != local_pawn )
+					{
+						this->m_original = {};
+						this->m_overridden = false;
+						this->m_last_active_handle = 0;
+						this->m_tracked_pawn = local_pawn;
+					}
+
+					for ( auto i = 0; i < weapons_size; ++i )
+					{
+						const auto handle = memory::read<std::uint32_t>( weapons_data + i * sizeof( std::uint32_t ) );
+						const auto weapon = systems::g_entities.lookup( handle );
+
+						if ( !weapon )
+						{
+							continue;
+						}
+
+						const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
+						const auto current_def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+						const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
+
+						if ( !current_def || current_def->category != econ_item_system::item_category::knife )
+						{
+							continue;
+						}
+
+						if ( !memory::read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ) )
+						{
+							continue;
+						}
+
+						if ( !selected_knife_def )
+						{
+							this->restore( weapon, iv, active_weapon, local_pawn );
+							break;
+						}
+
+						if ( !this->m_overridden )
+						{
+							this->capture_original( weapon, iv );
+						}
+
+						if (!this->m_original.captured) continue;
+						const auto normalized_skin = cosmetic_attributes::normalize(*selected_skin);
+						selected_skin = &normalized_skin;
+						const auto target_token = detail::make_subclass_token( selected_knife_def->def_index );
+						const auto current_subclass = memory::read<std::uint32_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) );
+						const auto current_pk = memory::read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
+
+						if ( this->m_overridden && current_subclass == target_token && current_pk == selected_skin->paint_kit_id
+							&& memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackSeed"_hash)) == selected_skin->seed
+							&& memory::read<float>(weapon + SCHEMA("C_EconEntity", "m_flFallbackWear"_hash)) == selected_skin->wear
+							&& memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackStatTrak"_hash)) == (selected_skin->stattrak ? selected_skin->stattrak_count : -1) )
+						{
+							break;
+						}
+
+						auto steam_id = steam::user::get_steam_id( );
+						if ( !steam_id && local_ctrl )
+						{
+							steam_id = memory::read<std::uint64_t>( local_ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+						}
+						const auto account_id = static_cast< std::uint32_t >( steam_id & 0xffffffff );
+
+						this->apply( weapon, iv, selected_knife_def, selected_skin, account_id, active_weapon, local_pawn );
+						break;
+					}
+
+					if ( active_handle != this->m_last_active_handle )
+					{
+						this->m_last_active_handle = active_handle;
+
+						if ( this->m_overridden && active_weapon )
+						{
+							const auto iv = active_weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
+							const auto def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+							const auto def = g_econ_item_system.find_def( static_cast< std::int16_t >( def_index ) );
+
+							if ( def && def->category == econ_item_system::item_category::knife )
+							{
+								const auto paint_kit_id = memory::read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
+								const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
+								this->update_view_model( local_pawn, pk );
+							}
+						}
+					}
+				}
+			}
 		}
 
-		const settings::changer::applied_skin* selected_skin{ nullptr };
-		const econ_item_system::item_def* selected_knife_def{ nullptr };
-
-		for ( const auto& [def_idx, skin] : settings::g_changer.skins.data )
+		// Apply synced knives for remote players
+		const auto all_players = systems::g_entities.get_by_type( systems::entities::type::player );
+		for ( const auto& p : all_players )
 		{
-			const auto def = g_econ_item_system.find_def( def_idx );
-			if ( !def || def->category != econ_item_system::item_category::knife )
+			const auto ctrl = p.ptr;
+			if ( !ctrl || ctrl == local_ctrl )
 			{
 				continue;
 			}
 
-			selected_skin = &skin;
-			selected_knife_def = def;
-			break;
-		}
-
-		const auto weapons_base = weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hMyWeapons"_hash );
-		const auto weapons_size = memory::read<int>( weapons_base );
-		const auto weapons_data = memory::read<std::uintptr_t>( weapons_base + 0x8 );
-
-		if ( !weapons_data || weapons_size <= 0 )
-		{
-			return;
-		}
-
-		const auto active_handle = memory::read<std::uint32_t>( weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
-		const auto active_weapon = systems::g_entities.lookup( active_handle );
-
-		if ( this->m_tracked_pawn != local.pawn )
-		{
-			this->m_original = {};
-			this->m_overridden = false;
-			this->m_last_active_handle = 0;
-			this->m_tracked_pawn = local.pawn;
-		}
-
-		for ( auto i = 0; i < weapons_size; ++i )
-		{
-			const auto handle = memory::read<std::uint32_t>( weapons_data + i * sizeof( std::uint32_t ) );
-			const auto weapon = systems::g_entities.lookup( handle );
-
-			if ( !weapon )
+			const auto sid = memory::read<std::uint64_t>( ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+			constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+			if ( sid < steam_id_base && !g_skin_sync.m_bot_sync_test.load( ) )
 			{
 				continue;
 			}
 
-			const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
-			const auto current_def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
-			const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
-
-			if ( !current_def || current_def->category != econ_item_system::item_category::knife )
+			const auto remote_skin_data = g_skin_sync.get_remote_skin( sid );
+			if ( !remote_skin_data || remote_skin_data->skins.empty( ) )
 			{
 				continue;
 			}
 
-			if ( !memory::read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ) )
+			const settings::changer::applied_skin* remote_knife_skin{ nullptr };
+			const econ_item_system::item_def* remote_knife_def{ nullptr };
+			for ( const auto& [def_idx, skin] : remote_skin_data->skins )
 			{
-				continue;
-			}
-
-			if ( !selected_knife_def )
-			{
-				this->restore( weapon, iv, active_weapon, local.pawn );
-				break;
-			}
-
-			if ( !this->m_overridden )
-			{
-				this->capture_original( weapon, iv );
-			}
-
-			if (!this->m_original.captured) continue;
-            const auto normalized_skin = cosmetic_attributes::normalize(*selected_skin);
-            selected_skin = &normalized_skin;
-            const auto target_token = detail::make_subclass_token( selected_knife_def->def_index );
-			const auto current_subclass = memory::read<std::uint32_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) );
-			const auto current_pk = memory::read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
-
-			if ( this->m_overridden && current_subclass == target_token && current_pk == selected_skin->paint_kit_id
-                && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackSeed"_hash)) == selected_skin->seed
-                && memory::read<float>(weapon + SCHEMA("C_EconEntity", "m_flFallbackWear"_hash)) == selected_skin->wear
-                && memory::read<int>(weapon + SCHEMA("C_EconEntity", "m_nFallbackStatTrak"_hash)) == (selected_skin->stattrak ? selected_skin->stattrak_count : -1) )
-			{
-				break;
-			}
-
-			auto steam_id = steam::user::get_steam_id( );
-			if ( !steam_id && local.controller )
-			{
-				steam_id = memory::read<std::uint64_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
-			}
-			const auto account_id = static_cast< std::uint32_t >( steam_id & 0xffffffff );
-
-			this->apply( weapon, iv, selected_knife_def, selected_skin, account_id, active_weapon, local.pawn );
-			break;
-		}
-
-		if ( active_handle != this->m_last_active_handle )
-		{
-			this->m_last_active_handle = active_handle;
-
-			if ( this->m_overridden && active_weapon )
-			{
-				const auto iv = active_weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
-				const auto def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
-				const auto def = g_econ_item_system.find_def( static_cast< std::int16_t >( def_index ) );
-
+				const auto def = g_econ_item_system.find_def( def_idx );
 				if ( def && def->category == econ_item_system::item_category::knife )
 				{
-					const auto paint_kit_id = memory::read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
-					const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
-					this->update_view_model( local.pawn, pk );
+					remote_knife_skin = &skin;
+					remote_knife_def = def;
+					break;
 				}
+			}
+
+			if ( !remote_knife_def || !remote_knife_skin )
+			{
+				continue;
+			}
+
+			const auto pawn_handle = memory::read<std::uint32_t>( ctrl + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( !pawn_handle )
+			{
+				continue;
+			}
+
+			const auto pawn = systems::g_entities.lookup( pawn_handle );
+			if ( !pawn || pawn < 0x10000 )
+			{
+				continue;
+			}
+
+			const auto remote_weapon_services = memory::read<std::uintptr_t>( pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
+			if ( !remote_weapon_services )
+			{
+				continue;
+			}
+
+			const auto remote_weapons_base = remote_weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hMyWeapons"_hash );
+			const auto remote_weapons_size = memory::read<int>( remote_weapons_base );
+			const auto remote_weapons_data = memory::read<std::uintptr_t>( remote_weapons_base + 0x8 );
+			if ( !remote_weapons_data || remote_weapons_size <= 0 )
+			{
+				continue;
+			}
+
+			const auto remote_active_handle = memory::read<std::uint32_t>( remote_weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
+			const auto remote_active_weapon = systems::g_entities.lookup( remote_active_handle );
+			const auto remote_account_id = static_cast< std::uint32_t >( sid & 0xffffffff );
+
+			for ( auto i = 0; i < remote_weapons_size; ++i )
+			{
+				const auto handle = memory::safe_read<std::uint32_t>( remote_weapons_data + i * sizeof( std::uint32_t ) ).value_or( 0 );
+				if ( !handle )
+				{
+					continue;
+				}
+
+				const auto weapon = systems::g_entities.lookup( handle );
+				if ( !weapon || weapon < 0x10000 )
+				{
+					continue;
+				}
+
+				const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
+				const auto current_def_index = memory::read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+				const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
+				if ( !current_def || current_def->category != econ_item_system::item_category::knife )
+				{
+					continue;
+				}
+
+				const auto target_token = detail::make_subclass_token( remote_knife_def->def_index );
+				const auto current_subclass = memory::read<std::uint32_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) );
+				const auto current_pk = memory::read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) );
+
+				if ( current_subclass == target_token && current_pk == remote_knife_skin->paint_kit_id )
+				{
+					break;
+				}
+
+				this->apply( weapon, iv, remote_knife_def, remote_knife_skin, remote_account_id, remote_active_weapon, pawn );
+				break;
 			}
 		}
 	}
@@ -286,12 +395,21 @@ namespace features::changer {
 		const auto token = detail::make_subclass_token( static_cast< std::int16_t >( def_index ) );
 
 		memory::write<std::uint32_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ), token );
-		memory::call<void>(PATTERN (patterns::weapon_get_viewmodel), weapon );
+		memory::call<void>( PATTERN (patterns::weapon_get_viewmodel), weapon );
 
-		const auto model_path = memory::call<const char*>(PATTERN (patterns::weapon_get_model_path), iv );
-		if ( model_path && *model_path )
+		const char* target_model = memory::call<const char*>( PATTERN (patterns::weapon_get_model_path), iv );
+		if ( !target_model || !*target_model )
 		{
-			memory::call<void>(PATTERN (patterns::set_player_model), weapon, model_path );
+			const auto def = g_econ_item_system.find_def( static_cast< std::int16_t >( def_index ) );
+			if ( def && !def->model_player.empty( ) )
+			{
+				target_model = def->model_player.c_str( );
+			}
+		}
+
+		if ( target_model && *target_model )
+		{
+			memory::call<void>( PATTERN (patterns::set_player_model), weapon, target_model );
 		}
 	}
 

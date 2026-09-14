@@ -283,7 +283,7 @@ namespace features::misc {
 		const auto b = tokens::col_accent.b;
 
 		const auto formatted = std::format(
-			"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> <font color='#38BDF8'>{} start vote for {}</font>",
+			"<font color='#{:02X}{:02X}{:02X}'>[<b> mintaly </b>]</font> <font color='#888888'>:</font> <font color='#38BDF8'>{} start vote for {}</font>",
 			r, g, b, caller_name, reason
 		);
 
@@ -364,7 +364,7 @@ namespace features::misc {
 		{
 			this->m_yes_votes++;
 			const auto formatted = std::format(
-				"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> {} <font color='#4ADE80'>vote yes</font>",
+				"<font color='#{:02X}{:02X}{:02X}'>[<b> mintaly </b>]</font> <font color='#888888'>:</font> {} <font color='#4ADE80'>vote yes</font>",
 				r, g, b, player_name
 			);
 			detail::chat_print_raw( formatted.c_str( ) );
@@ -373,7 +373,7 @@ namespace features::misc {
 		{
 			this->m_no_votes++;
 			const auto formatted = std::format(
-				"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> {} <font color='#FF5C80'>vote no</font>",
+				"<font color='#{:02X}{:02X}{:02X}'>[<b> mintaly </b>]</font> <font color='#888888'>:</font> {} <font color='#FF5C80'>vote no</font>",
 				r, g, b, player_name
 			);
 			detail::chat_print_raw( formatted.c_str( ) );
@@ -411,7 +411,7 @@ namespace features::misc {
 			const auto b = tokens::col_accent.b;
 
 			const auto formatted = std::format(
-				"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> <font color='#38BDF8'>vote results</font> <font color='#4ADE80'>{} yes</font>, <font color='#FF5C80'>{} no</font>",
+				"<font color='#{:02X}{:02X}{:02X}'>[<b> mintaly </b>]</font> <font color='#888888'>:</font> <font color='#38BDF8'>vote results</font> <font color='#4ADE80'>{} yes</font>, <font color='#FF5C80'>{} no</font>",
 				r, g, b, this->m_yes_votes, this->m_no_votes
 			);
 

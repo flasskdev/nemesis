@@ -29,7 +29,9 @@ namespace systems {
 			&patterns::resource_system_precache,
 			&patterns::particle_create_effect,
 			&patterns::particle_set_control_point,
-			&patterns::particle_set_entity_binding
+			&patterns::particle_set_entity_binding,
+			&patterns::econ_item_view_set_attribute,
+			&patterns::engine_client_cmd
 		};
 
 		const auto warmup_started = std::chrono::steady_clock::now( );

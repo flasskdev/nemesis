@@ -831,12 +831,24 @@ namespace rendering {
 			max_w = header_tw + 45.0f;
 		}
 
+		auto& widgets_cfg = settings::g_misc.m_widgets;
+		const bool show_td = widgets_cfg.keybinds_teammates_damage.value;
+		const auto td_text = show_td ? std::format( "{}/3 • {}/300", s_team_kills, s_team_damage ) : std::string{};
+		const auto [td_tw, td_th] = show_td ? xdraw::measure_text( td_text ) : std::pair{ 0.0f, 0.0f };
+		if ( show_td )
+		{
+			const float needed_w = 21.0f + header_tw + 16.0f + td_tw + 20.0f;
+			if ( needed_w > max_w )
+			{
+				max_w = needed_w;
+			}
+		}
+
 		const auto body_h = ( count > 0 )
 			? ( header_gap + static_cast< float >( count ) * row_h + static_cast< float >( count - 1 ) * row_gap )
 			: ( g_menu.is_open( ) ? ( header_gap + row_h ) : 0.0f );
 		const auto total_h = header_h + body_h;
 
-		auto& widgets_cfg = settings::g_misc.m_widgets;
 		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - max_w );
 		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - total_h );
 
@@ -952,6 +964,35 @@ namespace rendering {
 		const auto title_x = dot_cx + 8.0f;
 		const auto title_y = base_ry + ( header_h - header_th ) * 0.5f - 0.5f;
 		draw_list.text( title_x, title_y, "Keybinds", tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ), g_fonts.inter_bold[ fonts::size::petite ] );
+
+		if ( show_td )
+		{
+			const float badge_w = td_tw + 12.0f;
+			const float badge_h = 16.0f;
+			const float badge_x = x + max_w - badge_w - 8.0f;
+			const float badge_y = base_ry + ( header_h - badge_h ) * 0.5f;
+
+			xdraw::color badge_bg{ 255, 255, 255, static_cast< std::uint8_t >( 12.0f * master_alpha ) };
+			xdraw::color badge_border{ 255, 255, 255, static_cast< std::uint8_t >( 24.0f * master_alpha ) };
+			xdraw::color badge_col = tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) );
+
+			if ( s_team_kills >= 2 || s_team_damage >= 200 )
+			{
+				badge_bg = xdraw::color{ 255, 65, 65, static_cast< std::uint8_t >( 35.0f * master_alpha ) };
+				badge_border = xdraw::color{ 255, 65, 65, static_cast< std::uint8_t >( 90.0f * master_alpha ) };
+				badge_col = xdraw::color{ 255, 100, 100, static_cast< std::uint8_t >( 255.0f * master_alpha ) };
+			}
+			else if ( s_team_kills >= 1 || s_team_damage >= 100 )
+			{
+				badge_bg = xdraw::color{ 255, 180, 50, static_cast< std::uint8_t >( 30.0f * master_alpha ) };
+				badge_border = xdraw::color{ 255, 180, 50, static_cast< std::uint8_t >( 80.0f * master_alpha ) };
+				badge_col = xdraw::color{ 255, 200, 80, static_cast< std::uint8_t >( 255.0f * master_alpha ) };
+			}
+
+			draw_list.rect_filled( badge_x, badge_y, badge_w, badge_h, badge_bg, xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( badge_x, badge_y, badge_w, badge_h, badge_border, xdraw::corner_radius{ 4.0f }, 1.0f );
+			draw_list.text( badge_x + ( badge_w - td_tw ) * 0.5f, badge_y + ( badge_h - td_th ) * 0.5f - 0.5f, td_text, badge_col, g_fonts.inter_bold[ fonts::size::petite ] );
+		}
 
 		// Rows (separated individual cards)
 		if ( count == 0 && g_menu.is_open( ) )
@@ -1229,12 +1270,24 @@ namespace rendering {
 			max_w = header_tw + 45.0f;
 		}
 
+		auto& widgets_cfg = settings::g_misc.m_widgets;
+		const bool show_td = widgets_cfg.spectator_teammates_damage.value;
+		const auto td_text = show_td ? std::format( "{}/3 • {}/300", s_team_kills, s_team_damage ) : std::string{};
+		const auto [td_tw, td_th] = show_td ? xdraw::measure_text( td_text ) : std::pair{ 0.0f, 0.0f };
+		if ( show_td )
+		{
+			const float needed_w = 21.0f + header_tw + 16.0f + td_tw + 20.0f;
+			if ( needed_w > max_w )
+			{
+				max_w = needed_w;
+			}
+		}
+
 		const auto body_h = ( count > 0 )
 			? ( header_gap + static_cast< float >( count ) * row_h + static_cast< float >( count - 1 ) * row_gap )
 			: ( g_menu.is_open( ) ? ( header_gap + row_h ) : 0.0f );
 		const auto total_h = header_h + body_h;
 
-		auto& widgets_cfg = settings::g_misc.m_widgets;
 		const auto max_screen_x = std::max( 0.0f, static_cast< float >( screen_w ) - max_w );
 		const auto max_screen_y = std::max( 0.0f, static_cast< float >( screen_h ) - total_h );
 
@@ -1350,6 +1403,35 @@ namespace rendering {
 		const auto title_x = dot_cx + 8.0f;
 		const auto title_y = base_ry + ( header_h - header_th ) * 0.5f - 0.5f;
 		draw_list.text( title_x, title_y, "Spectators", tokens::col_text.alpha( static_cast< std::uint8_t >( 245.0f * master_alpha ) ), g_fonts.inter_bold[ fonts::size::petite ] );
+
+		if ( show_td )
+		{
+			const float badge_w = td_tw + 12.0f;
+			const float badge_h = 16.0f;
+			const float badge_x = x + max_w - badge_w - 8.0f;
+			const float badge_y = base_ry + ( header_h - badge_h ) * 0.5f;
+
+			xdraw::color badge_bg{ 255, 255, 255, static_cast< std::uint8_t >( 12.0f * master_alpha ) };
+			xdraw::color badge_border{ 255, 255, 255, static_cast< std::uint8_t >( 24.0f * master_alpha ) };
+			xdraw::color badge_col = tokens::col_text_dim.alpha( static_cast< std::uint8_t >( 210.0f * master_alpha ) );
+
+			if ( s_team_kills >= 2 || s_team_damage >= 200 )
+			{
+				badge_bg = xdraw::color{ 255, 65, 65, static_cast< std::uint8_t >( 35.0f * master_alpha ) };
+				badge_border = xdraw::color{ 255, 65, 65, static_cast< std::uint8_t >( 90.0f * master_alpha ) };
+				badge_col = xdraw::color{ 255, 100, 100, static_cast< std::uint8_t >( 255.0f * master_alpha ) };
+			}
+			else if ( s_team_kills >= 1 || s_team_damage >= 100 )
+			{
+				badge_bg = xdraw::color{ 255, 180, 50, static_cast< std::uint8_t >( 30.0f * master_alpha ) };
+				badge_border = xdraw::color{ 255, 180, 50, static_cast< std::uint8_t >( 80.0f * master_alpha ) };
+				badge_col = xdraw::color{ 255, 200, 80, static_cast< std::uint8_t >( 255.0f * master_alpha ) };
+			}
+
+			draw_list.rect_filled( badge_x, badge_y, badge_w, badge_h, badge_bg, xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( badge_x, badge_y, badge_w, badge_h, badge_border, xdraw::corner_radius{ 4.0f }, 1.0f );
+			draw_list.text( badge_x + ( badge_w - td_tw ) * 0.5f, badge_y + ( badge_h - td_th ) * 0.5f - 0.5f, td_text, badge_col, g_fonts.inter_bold[ fonts::size::petite ] );
+		}
 
 		// Rows (separated individual cards)
 		if ( count == 0 && g_menu.is_open( ) )

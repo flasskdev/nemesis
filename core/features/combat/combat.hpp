@@ -263,22 +263,29 @@ namespace features::combat {
                         void on_create_move( systems::input::usercmd* cmd );
                         void on_render( xdraw::draw_list& draw_list ) const;
 
-                        [[nodiscard]] bool has_modified_angles( ) const { return this->m_should_correct || this->m_modified_angles.y != this->m_old_angles.y; }
+                        [[nodiscard]] bool has_modified_angles( ) const { return this->m_antiaim_active; }
                         [[nodiscard]] const math::vector3& get_modified_angles( ) const { return this->m_modified_angles; }
+                        [[nodiscard]] const math::vector3& get_old_angles( ) const { return this->m_old_angles; }
+                        [[nodiscard]] std::uintptr_t get_original_buttons( ) const { return this->m_original_buttons; }
 
                 private:
-                        [[nodiscard]] float get_pitch( float view_pitch );
-                        [[nodiscard]] float get_yaw( const math::vector3& view_angles, const systems::local::snapshot& local );
+                        [[nodiscard]] float get_pitch( systems::input::usercmd* cmd, float view_pitch );
+                        [[nodiscard]] float get_yaw( systems::input::usercmd* cmd, const math::vector3& view_angles, const systems::local::snapshot& local );
                         void correct_movement( systems::input::usercmd* cmd );
                         [[nodiscard]] bool is_near_ladder( std::uintptr_t local_pawn ) const;
 
                         math::vector3 m_old_angles{};
                         math::vector3 m_modified_angles{};
 
+                        std::uintptr_t m_original_buttons{};
                         int m_yaw_side{};
                         bool m_should_correct{};
                         bool m_antiaim_active{};
                         float m_indicator_yaw{};
+                        float m_spin_yaw{};
+                        bool m_was_spinning{};
+                        bool m_jitter_flip{};
+                        int m_jitter_ticks{};
                 };
 
                 class duckpeek
@@ -571,6 +578,8 @@ namespace features::combat {
                 float m_trigger_delay_start{};
                 float m_trigger_release_time{};
                 std::uintptr_t m_trigger_pending_pawn{};
+                int m_revolver_cock_ticks{};
+                int m_revolver_cock_clip{};
 
                 math::vector3 m_cached_view_angles{};
                 math::vector3 m_cached_aim_punch{};

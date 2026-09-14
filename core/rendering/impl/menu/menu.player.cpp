@@ -7,13 +7,6 @@ namespace rendering {
 
 	namespace detail {
 
-		constexpr const char* k_cham_material_names[ ]{
-			"liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl",
-			"liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)",
-			"outline glow", "outline glow (iz)"
-		};
-		constexpr auto k_cham_material_count = static_cast< int >( settings::esp::cham_ids::count );
-
 		inline static void draw_outline_glow_sliders( const char* id_suffix, settings::esp::outline_glow_config& cfg )
 		{
 			char buf[ 64 ]{};
@@ -39,7 +32,7 @@ namespace rendering {
 			xui::slider_float( buf, cfg.pulse_speed, 0.0f, 5.0f, "%.1f" );
 		}
 
-		inline static void draw_chams_layer( const char* label, const char* popup_id, settings::esp::chams_layer& layer )
+		inline static void draw_chams_layer( const char* label, const char* popup_id, settings::esp::chams_layer& layer, bool is_through_wall = false )
 		{
 			xui::toggle( label, layer.enabled );
 			if ( xui::begin_popup( popup_id, 220.0f ) )
@@ -49,14 +42,33 @@ namespace rendering {
 				                               layer.material.value == settings::esp::cham_ids::outline_glow_ignorez );
 
 				const auto prev_mat = layer.material.value;
-				if ( xui::combo( "material", layer.material.value, k_cham_material_names, k_cham_material_count ) )
+				if ( is_through_wall )
 				{
-					if ( ( layer.material.value == settings::esp::cham_ids::outline_glow || layer.material.value == settings::esp::cham_ids::outline_glow_ignorez ) &&
-					     ( prev_mat != settings::esp::cham_ids::outline_glow && prev_mat != settings::esp::cham_ids::outline_glow_ignorez ) )
+					int mat_idx = settings::esp::get_iz_index( layer.material.value );
+					if ( xui::combo( "material", mat_idx, settings::esp::k_iz_material_names, settings::esp::k_iz_material_count ) )
 					{
-						layer.filled.value = true;
+						layer.material.value = settings::esp::k_iz_materials[ mat_idx ];
+						if ( ( layer.material.value == settings::esp::cham_ids::outline_glow || layer.material.value == settings::esp::cham_ids::outline_glow_ignorez ) &&
+						     ( prev_mat != settings::esp::cham_ids::outline_glow && prev_mat != settings::esp::cham_ids::outline_glow_ignorez ) )
+						{
+							layer.filled.value = true;
+						}
 					}
 				}
+				else
+				{
+					int mat_idx = settings::esp::get_non_iz_index( layer.material.value );
+					if ( xui::combo( "material", mat_idx, settings::esp::k_non_iz_material_names, settings::esp::k_non_iz_material_count ) )
+					{
+						layer.material.value = settings::esp::k_non_iz_materials[ mat_idx ];
+						if ( ( layer.material.value == settings::esp::cham_ids::outline_glow || layer.material.value == settings::esp::cham_ids::outline_glow_ignorez ) &&
+						     ( prev_mat != settings::esp::cham_ids::outline_glow && prev_mat != settings::esp::cham_ids::outline_glow_ignorez ) )
+						{
+							layer.filled.value = true;
+						}
+					}
+				}
+
 				xui::color_picker( "color", layer.color, 0.0f, true, is_outline ? &layer.filled.value : nullptr );
 				if ( is_outline )
 				{
@@ -81,17 +93,17 @@ namespace rendering {
 
 			std::snprintf( label_buf, sizeof( label_buf ), "primary layer##%s", id_suffix );
 			std::snprintf( popup_id, sizeof( popup_id ), "##primary_%s", id_suffix );
-			draw_chams_layer( label_buf, popup_id, cfg.primary );
+			draw_chams_layer( label_buf, popup_id, cfg.primary, false );
 
-			std::snprintf( label_buf, sizeof( label_buf ), "secondary layer##%s", id_suffix );
+			std::snprintf( label_buf, sizeof( label_buf ), "through wall##%s", id_suffix );
 			std::snprintf( popup_id, sizeof( popup_id ), "##secondary_%s", id_suffix );
-			draw_chams_layer( label_buf, popup_id, cfg.secondary );
+			draw_chams_layer( label_buf, popup_id, cfg.secondary, true );
 
 			if ( show_overlay )
 			{
-				std::snprintf( label_buf, sizeof( label_buf ), "overlay layer##%s", id_suffix );
+				std::snprintf( label_buf, sizeof( label_buf ), "overlay##%s", id_suffix );
 				std::snprintf( popup_id, sizeof( popup_id ), "##overlay_%s", id_suffix );
-				draw_chams_layer( label_buf, popup_id, cfg.overlay );
+				draw_chams_layer( label_buf, popup_id, cfg.overlay, false );
 			}
 		}
 
@@ -113,6 +125,13 @@ namespace rendering {
 			if (xui::begin_child("##player_esp", col_w, this->m_body_h, true))
 			{
 				xui::toggle("enable", ov.enabled);
+				char popup_enable_id[32]{};
+				std::snprintf(popup_enable_id, sizeof(popup_enable_id), "##ov_enable_popup_%d", subtab);
+				if (xui::begin_popup(popup_enable_id, 220.0f))
+				{
+					xui::checkbox("only visible", ov.only_visible);
+					xui::end_popup();
+				}
 				xui::toggle("box", ov.m_box.enabled);
 				if (xui::begin_popup("##box_popup", 220.0f))
 				{
@@ -271,15 +290,16 @@ namespace rendering {
 			{
 				xui::toggle("player chams", chams.enabled);
 				chams.primary.enabled.value = chams.enabled.value;
-				if (xui::begin_popup("##player_chams_popup", 220.0f))
+				if (xui::begin_popup("##player_chams_popup", 235.0f))
 				{
-					constexpr int k_visible_material_count = 11;
 					const bool is_vis_outline = settings::esp::is_outline_material(chams.primary.material.value);
 					const bool is_vis_glow = ( chams.primary.material.value == settings::esp::cham_ids::outline_glow || chams.primary.material.value == settings::esp::cham_ids::outline_glow_ignorez );
 					const auto prev_vis_mat = chams.primary.material.value;
 					xui::color_picker("color##visible", chams.primary.color, 0.0f, true, is_vis_outline ? &chams.primary.filled.value : nullptr);
-					if ( xui::combo("material##visible", chams.primary.material.value, detail::k_cham_material_names, k_visible_material_count) )
+					int vis_mat_idx = settings::esp::get_non_iz_index(chams.primary.material.value);
+					if ( xui::combo("material##visible", vis_mat_idx, settings::esp::k_non_iz_material_names, settings::esp::k_non_iz_material_count) )
 					{
+						chams.primary.material.value = settings::esp::k_non_iz_materials[vis_mat_idx];
 						if ( ( chams.primary.material.value == settings::esp::cham_ids::outline_glow || chams.primary.material.value == settings::esp::cham_ids::outline_glow_ignorez ) &&
 						     ( prev_vis_mat != settings::esp::cham_ids::outline_glow && prev_vis_mat != settings::esp::cham_ids::outline_glow_ignorez ) )
 						{
@@ -299,21 +319,18 @@ namespace rendering {
 
 					xui::layout::spacing(5.0f);
 
-					// Through Wall checkbox (secondary layer, ignorez materials)
+					// Through Wall checkbox (secondary layer, ignorez materials without (iz) in name)
 					xui::checkbox("through wall", chams.secondary.enabled);
 					if (chams.secondary.enabled)
 					{
-						constexpr int k_occluded_material_count = 8;
-						const char* const* iz_materials = &detail::k_cham_material_names[k_visible_material_count];
 						const bool is_wall_outline = settings::esp::is_outline_material(chams.secondary.material.value);
 						const bool is_wall_glow = ( chams.secondary.material.value == settings::esp::cham_ids::outline_glow || chams.secondary.material.value == settings::esp::cham_ids::outline_glow_ignorez );
 						const auto prev_wall_mat = chams.secondary.material.value;
 						xui::color_picker("color##wall", chams.secondary.color, 0.0f, true, is_wall_outline ? &chams.secondary.filled.value : nullptr);
-						int wall_mat_idx = static_cast<int>(chams.secondary.material.value) - 11;
-						if (wall_mat_idx < 0 || wall_mat_idx >= k_occluded_material_count) wall_mat_idx = 2;
-						if (xui::combo("material##wall", wall_mat_idx, iz_materials, k_occluded_material_count))
+						int wall_mat_idx = settings::esp::get_iz_index(chams.secondary.material.value);
+						if (xui::combo("material##wall", wall_mat_idx, settings::esp::k_iz_material_names, settings::esp::k_iz_material_count))
 						{
-							chams.secondary.material.value = static_cast<settings::esp::cham_ids>(wall_mat_idx + 11);
+							chams.secondary.material.value = settings::esp::k_iz_materials[wall_mat_idx];
 							if ( ( chams.secondary.material.value == settings::esp::cham_ids::outline_glow || chams.secondary.material.value == settings::esp::cham_ids::outline_glow_ignorez ) &&
 							     ( prev_wall_mat != settings::esp::cham_ids::outline_glow && prev_wall_mat != settings::esp::cham_ids::outline_glow_ignorez ) )
 							{
@@ -334,7 +351,7 @@ namespace rendering {
 
 					xui::layout::spacing(5.0f);
 
-					// Overlay checkbox (overlay layer)
+					// Overlay checkbox (overlay layer, non-iz materials)
 					xui::checkbox("overlay", chams.overlay.enabled);
 					if (chams.overlay.enabled)
 					{
@@ -342,8 +359,10 @@ namespace rendering {
 						const bool is_ov_glow = ( chams.overlay.material.value == settings::esp::cham_ids::outline_glow || chams.overlay.material.value == settings::esp::cham_ids::outline_glow_ignorez );
 						const auto prev_ov_mat = chams.overlay.material.value;
 						xui::color_picker("color##overlay", chams.overlay.color, 0.0f, true, is_ov_outline ? &chams.overlay.filled.value : nullptr);
-						if ( xui::combo("material##overlay", chams.overlay.material.value, detail::k_cham_material_names, detail::k_cham_material_count) )
+						int ov_mat_idx = settings::esp::get_non_iz_index(chams.overlay.material.value);
+						if ( xui::combo("material##overlay", ov_mat_idx, settings::esp::k_non_iz_material_names, settings::esp::k_non_iz_material_count) )
 						{
+							chams.overlay.material.value = settings::esp::k_non_iz_materials[ov_mat_idx];
 							if ( ( chams.overlay.material.value == settings::esp::cham_ids::outline_glow || chams.overlay.material.value == settings::esp::cham_ids::outline_glow_ignorez ) &&
 							     ( prev_ov_mat != settings::esp::cham_ids::outline_glow && prev_ov_mat != settings::esp::cham_ids::outline_glow_ignorez ) )
 							{

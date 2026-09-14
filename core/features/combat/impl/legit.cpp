@@ -29,6 +29,8 @@ namespace features::combat {
         this->m_trigger_release_time = 0.0f;
         this->m_trigger_pending_pawn = 0;
         this->m_trigger_delay_start = 0.0f;
+        this->m_revolver_cock_ticks = 0;
+        this->m_revolver_cock_clip = 0;
     }
 
     bool legit::local_checks_pass(const settings::combat::legitbot::weapon_group& config, const systems::local::snapshot& local) const
@@ -53,11 +55,22 @@ namespace features::combat {
         // This does not use the modified rendering alpha from removals.
         if (config.flash_check.value)
         {
+            bool is_flashed = false;
             const auto offset = SCHEMA("C_CSPlayerPawnBase", "m_flFlashBangTime"_hash);
-            if (!offset)
-                return false;
-            const auto flash = memory::safe_read<float>(local.pawn + offset);
-            if (!flash || !std::isfinite(*flash) || *flash > 0.0f)
+            if (offset)
+            {
+                const auto flash = memory::safe_read<float>(local.pawn + offset);
+                if (flash && std::isfinite(*flash) && *flash > 0.0f)
+                    is_flashed = true;
+            }
+            const auto dur_offset = SCHEMA("C_CSPlayerPawnBase", "m_flFlashDuration"_hash);
+            if (!is_flashed && dur_offset)
+            {
+                const auto dur = memory::safe_read<float>(local.pawn + dur_offset);
+                if (dur && std::isfinite(*dur) && *dur > 0.0f)
+                    is_flashed = true;
+            }
+            if (is_flashed)
                 return false;
         }
 
@@ -379,7 +392,93 @@ namespace features::combat {
                 }
             }
 
-            if (!g_shared.can_shoot(cmd, local.controller))
+            const auto is_revolver = (ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver);
+
+            // R8 Revolver handling for legitbot
+            if (is_revolver)
+            {
+                if (settings::g_combat.m_autos.revolver_quick.value)
+                {
+                    // Quick shot mode: convert manual attack1 to attack2 for instant fan-fire
+                    this->m_revolver_cock_ticks = 0;
+                    if (cmd->buttons.value & cstypes::command_buttons::in_attack)
+                    {
+                        cmd->buttons.value &= ~cstypes::command_buttons::in_attack;
+                        cmd->buttons.value |= cstypes::command_buttons::in_second_attack;
+                        cmd->buttons.value_changed |= (cstypes::command_buttons::in_attack | cstypes::command_buttons::in_second_attack);
+                        cmd->buttons.value_scroll &= ~cstypes::command_buttons::in_attack;
+
+                        const auto history_index = cmd->csgo_user_cmd.input_history_size() - 1;
+                        if (history_index >= 0)
+                        {
+                            cmd->csgo_user_cmd.set_attack2_start_history_index(history_index);
+                            cmd->csgo_user_cmd.set_attack1_start_history_index(-1);
+                        }
+                    }
+                }
+                else
+                {
+                    // Primary fire cocking mode
+                    if (this->m_revolver_cock_ticks > 0)
+                    {
+                        const auto cur_clip = memory::read<int>(ctx.weapon + SCHEMA("C_BasePlayerWeapon", "m_iClip1"_hash));
+                        const auto next_primary = memory::read<int>(ctx.weapon + SCHEMA("C_BasePlayerWeapon", "m_nNextPrimaryAttackTick"_hash));
+                        const auto tick_base = memory::read<int>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash));
+
+                        if (cur_clip < this->m_revolver_cock_clip || (this->m_revolver_cock_clip > 0 && next_primary > tick_base + 5))
+                        {
+                            // Shot successfully fired
+                            g_shared.last_shoot_tick() = tick_base;
+                            this->reset_trigger();
+                            cmd->buttons.value &= ~cstypes::command_buttons::in_attack;
+                            cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
+                            cmd->buttons.value_scroll &= ~cstypes::command_buttons::in_attack;
+                            cmd->csgo_user_cmd.set_attack1_start_history_index(-1);
+                        }
+                        else if (this->m_revolver_cock_ticks >= 25)
+                        {
+                            // Cocking timeout safety
+                            this->reset_trigger();
+                        }
+                        else
+                        {
+                            // Continue cocking the hammer
+                            ++this->m_revolver_cock_ticks;
+                            cmd->buttons.value |= cstypes::command_buttons::in_attack;
+                            cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
+                            cmd->buttons.value_scroll |= cstypes::command_buttons::in_attack;
+
+                            const auto history_index = cmd->csgo_user_cmd.input_history_size() - 1;
+                            if (history_index >= 0)
+                                cmd->csgo_user_cmd.set_attack1_start_history_index(history_index);
+                        }
+                    }
+                    else if (settings::g_combat.m_autos.revolver.value || (cmd->buttons.value & cstypes::command_buttons::in_attack))
+                    {
+                        // Start cocking if player pressed attack or if auto-revolver has a target
+                        if ((cmd->buttons.value & cstypes::command_buttons::in_attack) || this->m_target.has_target())
+                        {
+                            if (g_shared.can_shoot(cmd, local.controller))
+                            {
+                                this->m_revolver_cock_ticks = 1;
+                                this->m_revolver_cock_clip = memory::read<int>(ctx.weapon + SCHEMA("C_BasePlayerWeapon", "m_iClip1"_hash));
+                                this->m_trigger_release_time = ctx.current_time + 0.40f;
+
+                                cmd->buttons.value |= cstypes::command_buttons::in_attack;
+                                cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
+                                cmd->buttons.value_scroll |= cstypes::command_buttons::in_attack;
+
+                                const auto history_index = cmd->csgo_user_cmd.input_history_size() - 1;
+                                if (history_index >= 0)
+                                    cmd->csgo_user_cmd.set_attack1_start_history_index(history_index);
+                            }
+                        }
+                    }
+                }
+            }
+
+            const bool is_currently_cocking = is_revolver && (this->m_revolver_cock_ticks > 0);
+            if (!is_currently_cocking && !g_shared.can_shoot(cmd, local.controller))
             {
                 this->reset_trigger();
                 return;
@@ -843,7 +942,10 @@ namespace features::combat {
         }
 
         const auto continuing_hold = this->m_trigger_release_time > 0.0f;
-        if (continuing_hold && (ctx.current_time >= this->m_trigger_release_time ||
+        const auto is_revolver = (ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver);
+        const auto is_cocking = is_revolver && (this->m_revolver_cock_ticks > 0);
+
+        if (continuing_hold && !is_cocking && (ctx.current_time >= this->m_trigger_release_time ||
             ctx.current_time < this->m_trigger_delay_start))
         {
             this->reset_trigger();
@@ -935,7 +1037,7 @@ namespace features::combat {
                 continue;
             }
 
-            if (continuing_hold && pawn != this->m_trigger_pending_pawn)
+            if (continuing_hold && !is_cocking && pawn != this->m_trigger_pending_pawn)
             {
                 continue;
             }
@@ -1125,7 +1227,21 @@ namespace features::combat {
 
         if (!found)
         {
-            this->reset_trigger();
+            if (is_cocking)
+            {
+                if (this->m_revolver_cock_ticks < 10)
+                {
+                    this->reset_trigger();
+                    cmd->buttons.value &= ~cstypes::command_buttons::in_attack;
+                    cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
+                    cmd->buttons.value_scroll &= ~cstypes::command_buttons::in_attack;
+                    cmd->csgo_user_cmd.set_attack1_start_history_index(-1);
+                }
+            }
+            else
+            {
+                this->reset_trigger();
+            }
             return;
         }
 
@@ -1193,7 +1309,11 @@ namespace features::combat {
             }
         }
 
-        g_shared.last_shoot_tick() = memory::read<std::int32_t>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash));
+        const auto quick_revolver = is_revolver && settings::g_combat.m_autos.revolver_quick.value;
+        if (!is_revolver || quick_revolver)
+        {
+            g_shared.last_shoot_tick() = memory::read<std::int32_t>(local.controller + SCHEMA("CBasePlayerController", "m_nTickBase"_hash));
+        }
         const auto record_time = cstypes::tick_fraction::from_value(hit_record->simulation_time / cstypes::tick_interval);
         const auto input_history_size = cmd->csgo_user_cmd.input_history_size();
         const auto history_angles = seed_mode ? corrected_angles : math::vector3{ view_angles.x - aim_punch.x, view_angles.y - aim_punch.y, 0.0f };
@@ -1238,15 +1358,44 @@ namespace features::combat {
             }
         }
 
-        cmd->buttons.value |= cstypes::command_buttons::in_attack;
-        cmd->buttons.value_changed |= cstypes::command_buttons::in_attack;
+        const auto attack_button = quick_revolver ? cstypes::command_buttons::in_second_attack : cstypes::command_buttons::in_attack;
+
+        cmd->buttons.value |= attack_button;
+        cmd->buttons.value_changed |= attack_button;
+
+        if (const auto base = cmd->csgo_user_cmd.mutable_base())
+        {
+            if (const auto angles = base->mutable_viewangles())
+            {
+                angles->set_x(history_angles.x);
+                angles->set_y(history_angles.y);
+            }
+        }
 
         if (input_history_size > 0)
         {
-            cmd->csgo_user_cmd.set_attack1_start_history_index(input_history_size - 1);
+            if (quick_revolver)
+            {
+                cmd->csgo_user_cmd.set_attack2_start_history_index(input_history_size - 1);
+                cmd->csgo_user_cmd.set_attack1_start_history_index(-1);
+            }
+            else
+            {
+                cmd->csgo_user_cmd.set_attack1_start_history_index(input_history_size - 1);
+            }
         }
 
-        if (!continuing_hold)
+        if (is_revolver && !quick_revolver)
+        {
+            if (this->m_revolver_cock_ticks == 0)
+            {
+                this->m_revolver_cock_ticks = 1;
+                this->m_revolver_cock_clip = memory::read<int>(ctx.weapon + SCHEMA("C_BasePlayerWeapon", "m_iClip1"_hash));
+                this->m_trigger_pending_pawn = hit_pawn;
+                this->m_trigger_release_time = ctx.current_time + 0.40f;
+            }
+        }
+        else if (!continuing_hold)
         {
             this->m_trigger_pending_pawn = hit_pawn;
             this->m_trigger_release_time = ctx.current_time + random::hold_duration();

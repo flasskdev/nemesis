@@ -152,6 +152,10 @@ namespace features::misc {
 					memory::call<void>( fn_chat, chat, formatted_msg );
 				}
 			}
+
+			features::misc::g_scoreboard_weapons.run_script(
+				xs( "if(typeof(SChatManager)!=='undefined'&&SChatManager.process){SChatManager.process();}" )
+			);
 		}
 
 		inline void print_mintaly_chat( const char* text_color_hex, const std::string& log_text )
@@ -161,7 +165,7 @@ namespace features::misc {
 			const auto b = tokens::col_accent.b;
 
 			const auto formatted = std::format(
-				"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> <font color='{}'>{}</font>",
+				"<font color='#{:02X}{:02X}{:02X}'>[<b> mintaly </b>]</font> <font color='#888888'>:</font> <font color='{}'>{}</font>",
 				r, g, b, text_color_hex, log_text
 			);
 
@@ -216,6 +220,12 @@ namespace features::misc {
 		this->m_buffered_impacts.clear( );
 		this->m_buffered_impact_time = -1.0f;
 		this->m_hit_effect_time = 0.0f;
+
+		rendering::widgets::reset_team_damage( );
+
+		std::thread( [ this ]( ) {
+			this->precache_death_effect( );
+		} ).detach( );
 	}
 
 	void impacts::on_render( xdraw::draw_list& draw_list )
@@ -837,6 +847,9 @@ namespace features::misc {
 			}
 			if ( victim_team != 0 && !local.is_this_other_team( victim_team ) )
 			{
+				const auto damage = memory::call<int>( PATTERN (patterns::game_event_get_int), event, "dmg_health", false );
+				const auto health = memory::call<int>( PATTERN (patterns::game_event_get_int), event, "health", false );
+				rendering::widgets::record_team_damage( damage, health <= 0 );
 				return {};
 			}
 		}
@@ -1416,12 +1429,19 @@ namespace features::misc {
 	void impacts::render_hit_markers( xdraw::draw_list& draw_list, float time )
 	{
 		const auto& cfg = settings::g_misc.m_impacts;
+		const auto has_hitmarker = cfg.hit_marker.value;
+		const auto has_damage_effect = cfg.damage_effect.value;
+
+		if ( !has_hitmarker && !has_damage_effect )
+		{
+			return;
+		}
 
 		std::unique_lock lock( this->m_mtx );
 
 		for ( auto it = this->m_hitmarkers.begin( ); it != this->m_hitmarkers.end( ); )
 		{
-			const auto duration = cfg.hit_marker_duration;
+			const auto duration = has_damage_effect ? std::max( cfg.hit_marker_duration.value, cfg.damage_effect_duration.value ) : cfg.hit_marker_duration.value;
 			const auto elapsed = time - it->time;
 
 			if ( elapsed > duration )
@@ -1439,8 +1459,8 @@ namespace features::misc {
 
 			const auto x = screen.x, y = screen.y;
 
-			const auto show_classic = cfg.hit_marker_type == settings::misc::impacts::marker_type::classic || cfg.hit_marker_type == settings::misc::impacts::marker_type::both;
-			const auto show_damage = cfg.hit_marker_type == settings::misc::impacts::marker_type::damage || cfg.hit_marker_type == settings::misc::impacts::marker_type::both;
+			const auto show_classic = has_hitmarker && ( cfg.hit_marker_type == settings::misc::impacts::marker_type::classic || cfg.hit_marker_type == settings::misc::impacts::marker_type::both );
+			const auto show_damage = ( has_hitmarker && ( cfg.hit_marker_type == settings::misc::impacts::marker_type::damage || cfg.hit_marker_type == settings::misc::impacts::marker_type::both ) ) || has_damage_effect;
 
 			auto size{ 0.0f };
 			auto gap{ 0.0f };
@@ -1484,13 +1504,34 @@ namespace features::misc {
 			auto damage_text = std::string{};
 			auto draw_x{ 0.0f };
 			auto draw_y{ 0.0f };
+			xdraw::color final_dmg_col = color;
+			xdraw::font* dmg_font = nullptr;
 
 			if ( show_damage )
 			{
 				const auto base_offset = show_classic ? 20.0f : 0.0f;
 
 				damage_text = std::to_string( it->damage );
-				const auto [text_w, text_h] = xdraw::measure_text( damage_text );
+
+				auto dmg_duration = has_damage_effect ? cfg.damage_effect_duration.value : cfg.hit_marker_duration.value;
+				if ( dmg_duration <= 0.05f ) dmg_duration = 0.05f;
+				const auto dmg_progress = std::clamp( elapsed / dmg_duration, 0.0f, 1.0f );
+				const auto dmg_ease = 1.0f - ( dmg_progress * dmg_progress );
+				const auto dmg_alpha = static_cast< std::uint8_t >( dmg_ease * 255.0f );
+
+				const auto dmg_base = has_damage_effect ? cfg.damage_effect_color.value : cfg.hit_marker_color.value;
+				final_dmg_col = xdraw::color( dmg_base.r, dmg_base.g, dmg_base.b, dmg_alpha );
+
+				const auto dmg_size = has_damage_effect ? cfg.damage_effect_size.value : 1.0f;
+				if ( dmg_size > 1.8f ) {
+					dmg_font = rendering::g_fonts.inter_bold[ rendering::fonts::size::big ];
+				} else if ( dmg_size > 1.2f ) {
+					dmg_font = rendering::g_fonts.inter_bold[ rendering::fonts::size::normal ];
+				} else {
+					dmg_font = rendering::g_fonts.inter_bold[ rendering::fonts::size::petite ];
+				}
+
+				const auto [text_w, text_h] = xdraw::measure_text( damage_text, dmg_font );
 
 				const auto text_x = x - text_w * 0.5f;
 				const auto text_y = y - base_offset - text_h * 0.5f;
@@ -1522,9 +1563,9 @@ namespace features::misc {
 					}
 				}
 
-				if ( show_damage )
+				if ( show_damage && !has_damage_effect )
 				{
-					glow.text( draw_x, draw_y, damage_text, glow_col );
+					glow.text( draw_x, draw_y, damage_text, glow_col, dmg_font );
 				}
 			}
 
@@ -1536,9 +1577,9 @@ namespace features::misc {
 				draw_arm( draw_list, x + size, y + size, x + gap, y + gap, color, thickness );
 			}
 
-			if ( show_damage )
+			if ( show_damage && final_dmg_col.a > 0 )
 			{
-				draw_list.text( draw_x, draw_y, damage_text, color );
+				draw_list.text( draw_x, draw_y, damage_text, final_dmg_col, xdraw::text_style::shadowed, xdraw::color{ 0, 0, 0, final_dmg_col.a }, dmg_font );
 			}
 
 			++it;
@@ -1550,7 +1591,7 @@ namespace features::misc {
 		std::unique_lock lock( this->m_mtx );
 		const auto& cfg = settings::g_misc.m_impacts;
 		const auto [screen_w, screen_h] = xdraw::viewport_size( );
-		const auto width = std::min( 340.0f, std::max( 0.0f, screen_w - 32.0f ) );
+		const auto width = std::min( 400.0f, std::max( 0.0f, screen_w - 32.0f ) );
 		auto y = 16.0f;
 
 		xdraw::push_font( rendering::g_fonts.inter_medium[ rendering::fonts::size::petite ] );
@@ -1594,12 +1635,21 @@ namespace features::misc {
 				? xdraw::color{ 255, 92, 128 }
 				: ( is_kill ? xdraw::color{ 52, 211, 153 } : xdraw::color{ 74, 222, 128 } );
 
-			// Left badge: [MISS], [KILL], [HIT]
+			// 1. "mintaly" brand pill in menu accent color
+			const auto brand = "mintaly";
+			const auto [brand_tw, brand_th] = xdraw::measure_text( brand );
+			const auto brand_w = brand_tw + 12.0f;
+			const auto brand_h = 17.0f;
+			const auto brand_y = y + ( height - brand_h ) * 0.5f;
+			const auto brand_x = x + 10.0f;
+
+			// 2. Status badge: [MISS], [KILL], [HIT]
 			const auto badge = is_miss ? "MISS" : ( is_kill ? "KILL" : "HIT" );
 			const auto [badge_tw, badge_th] = xdraw::measure_text( badge );
-			const auto badge_w = badge_tw + 12.0f;
+			const auto badge_w = badge_tw + 10.0f;
 			const auto badge_h = 17.0f;
 			const auto badge_y = y + ( height - badge_h ) * 0.5f;
+			const auto badge_x = brand_x + brand_w + 5.0f;
 
 			// Right pill:
 			// For miss: "{hc}% HC" (or "{reason}" if hc <= 0)
@@ -1652,7 +1702,7 @@ namespace features::misc {
 				text = std::format( "{} in {} [-{}]", target_name, group, it->damage );
 			}
 
-			const auto title_x = x + 10.0f + badge_w + 8.0f;
+			const auto title_x = badge_x + badge_w + 7.0f;
 			const auto max_title_w = std::max( 0.0f, right_pill_x - 8.0f - title_x );
 			const auto title = rendering::theme::fit_text( text, max_title_w );
 			const auto title_h = xdraw::measure_text( title ).second;
@@ -1675,10 +1725,15 @@ namespace features::misc {
 			draw_list.rect_filled( x + 3.0f, y + 5.0f, 3.0f, height - 10.0f, tint( tokens::col_accent.alpha( 40 ) ), xdraw::corner_radius{ 1.5f } );
 			draw_list.rect_filled( x + 3.5f, y + 6.0f, 2.0f, height - 12.0f, tint( tokens::col_accent ), xdraw::corner_radius{ 1.0f } );
 
-			// Left badge [HIT] / [KILL] / [MISS]
-			draw_list.rect_filled( x + 10.0f, badge_y, badge_w, badge_h, tint( tokens::col_elevated ), xdraw::corner_radius{ 4.0f } );
-			draw_list.rect( x + 10.0f, badge_y, badge_w, badge_h, tint( tokens::col_border.alpha( 160 ) ), xdraw::corner_radius{ 4.0f } );
-			draw_list.text( x + 10.0f + ( badge_w - badge_tw ) * 0.5f, badge_y + ( badge_h - badge_th ) * 0.5f, badge, tint( log_color ) );
+			// 1. Left rectangular badge [mintaly] in menu accent color
+			draw_list.rect_filled( brand_x, brand_y, brand_w, brand_h, tint( tokens::col_accent.alpha( 45 ) ), xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( brand_x, brand_y, brand_w, brand_h, tint( tokens::col_accent.alpha( 190 ) ), xdraw::corner_radius{ 4.0f }, 1.0f );
+			draw_list.text( brand_x + ( brand_w - brand_tw ) * 0.5f, brand_y + ( brand_h - brand_th ) * 0.5f, brand, tint( tokens::col_accent ) );
+
+			// 2. Status badge [HIT] / [KILL] / [MISS]
+			draw_list.rect_filled( badge_x, badge_y, badge_w, badge_h, tint( tokens::col_elevated ), xdraw::corner_radius{ 4.0f } );
+			draw_list.rect( badge_x, badge_y, badge_w, badge_h, tint( tokens::col_border.alpha( 160 ) ), xdraw::corner_radius{ 4.0f } );
+			draw_list.text( badge_x + ( badge_w - badge_tw ) * 0.5f, badge_y + ( badge_h - badge_th ) * 0.5f, badge, tint( log_color ) );
 
 			// Right pill (MISSED / FATAL / victim name / -XX HP)
 			if ( !right_label.empty( ) )
@@ -2179,6 +2234,49 @@ void play_engine_path( const char* sound_path, float volume )
 		this->m_hit_effect_time = current_time;
 	}
 
+	void impacts::precache_death_effect( )
+	{
+		if ( this->m_death_effect_loaded )
+		{
+			return;
+		}
+
+		if ( !addresses::globals::resource_system )
+		{
+			return;
+		}
+
+		constexpr auto particle_path{ "particles/embedded/fade.vpcf" };
+
+		struct buffer_string
+		{
+			std::uint32_t m_unknown1{};
+			std::uint32_t m_unknown2{ 0xc00000c8 };
+
+			union
+			{
+				std::uintptr_t m_str_ptr;
+				std::uint8_t data[ 0xc8 ];
+			};
+
+			std::uintptr_t m_unknown3{};
+			std::uintptr_t m_unknown4{};
+		} buffer;
+
+		const auto fn_init = PATTERN (patterns::init_particle_path_buffer);
+		const auto fn_precache = PATTERN (patterns::resource_system_precache);
+		if ( !fn_init || !fn_precache )
+		{
+			return;
+		}
+
+		memory::call<void>( fn_init, &buffer, particle_path );
+		buffer.m_unknown4 = 'fcpv';
+		memory::call<void>( fn_precache, addresses::globals::resource_system, &buffer, "" );
+
+		this->m_death_effect_loaded = true;
+	}
+
 	void impacts::play_death_effect( std::uintptr_t victim_pawn )
 	{
 		const auto particle_manager = memory::read<std::uintptr_t>( addresses::globals::particle_manager );
@@ -2187,33 +2285,16 @@ void play_engine_path( const char* sound_path, float volume )
 			return;
 		}
 
-		constexpr auto particle_path{ "particles/embedded/fade.vpcf" };
-
 		if ( !this->m_death_effect_loaded )
 		{
-			struct buffer_string
+			this->precache_death_effect( );
+			if ( !this->m_death_effect_loaded )
 			{
-				std::uint32_t m_unknown1{};
-				std::uint32_t m_unknown2{ 0xc00000c8 };
-
-				union
-				{
-					std::uintptr_t m_str_ptr;
-					std::uint8_t data[ 0xc8 ];
-				};
-
-				std::uintptr_t m_unknown3{};
-				std::uintptr_t m_unknown4{};
-			} buffer;
-
-			memory::call<void>(PATTERN (patterns::init_particle_path_buffer), &buffer, particle_path );
-
-			buffer.m_unknown4 = 'fcpv';
-
-			memory::call<void>(PATTERN (patterns::resource_system_precache), addresses::globals::resource_system, &buffer, "" );
-
-			this->m_death_effect_loaded = true;
+				return;
+			}
 		}
+
+		constexpr auto particle_path{ "particles/embedded/fade.vpcf" };
 
 		auto effect_index{ detail::invalid_particle_effect };
 		memory::call<int*>(PATTERN (patterns::particle_create_effect), particle_manager, &effect_index, particle_path, 8, 0ll, 0ll, 0ll, 0 );

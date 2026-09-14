@@ -8,37 +8,58 @@ namespace systems {
 
 	bool tracing::is_visible( const math::vector3& start, const math::vector3& end, std::uintptr_t target_entity, std::uintptr_t skip_entity, std::uintptr_t mask ) const
 	{
-		auto current_start = start;
-		auto entity_to_skip = skip_entity;
-
-		constexpr auto max_penetrations{ 3 };
-
-		for ( auto i = 0; i < max_penetrations; ++i )
+		if ( !addresses::globals::game_trace_manager )
 		{
-			const auto result = this->trace( current_start, end, entity_to_skip, mask );
+			return false;
+		}
 
-			if ( result.hit_entity == target_entity || result.fraction > 0.97f )
+		if ( !std::isfinite( start.x ) || !std::isfinite( start.y ) || !std::isfinite( start.z ) ||
+		     !std::isfinite( end.x ) || !std::isfinite( end.y ) || !std::isfinite( end.z ) )
+		{
+			return false;
+		}
+
+		const auto delta = end - start;
+		const auto dist = delta.length( );
+		if ( dist <= 0.001f )
+		{
+			return true;
+		}
+
+		const auto dir = delta / dist;
+		const auto ray_start = ( skip_entity != 0 && dist > 15.0f ) ? ( start + dir * 12.0f ) : start;
+
+		// Layer 4 is world brushes, static props, and entities; type 15 tests all brushes and static props
+		const auto filter = this->make_filter( skip_entity, mask, 4, 15 );
+		const auto result = this->trace( ray_start, end, filter );
+
+		if ( result.all_solid )
+		{
+			return false;
+		}
+
+		if ( skip_entity && result.hit_entity == skip_entity )
+		{
+			return false;
+		}
+
+		if ( target_entity && result.hit_entity )
+		{
+			if ( result.hit_entity == target_entity )
 			{
 				return true;
 			}
 
-			if ( !result.hit_entity )
+			const auto owner_handle = memory::read<std::uint32_t>( result.hit_entity + SCHEMA( "C_BaseEntity", "m_hOwnerEntity"_hash ) );
+			if ( owner_handle && systems::g_entities.lookup( owner_handle ) == target_entity )
 			{
-				break;
+				return true;
 			}
 
-			const auto hit_health = memory::read<int>( result.hit_entity + SCHEMA( "C_BaseEntity", "m_iHealth"_hash ) );
-			if ( hit_health > 0 && hit_health <= 100 )
-			{
-				entity_to_skip = result.hit_entity;
-				current_start = result.end_pos + ( end - current_start ).normalized( );
-				continue;
-			}
-
-			break;
+			return false;
 		}
 
-		return false;
+		return result.fraction >= 0.98f && result.hit_entity == 0;
 	}
 
 	tracing::result tracing::trace( const math::vector3& start, const math::vector3& end, std::uintptr_t skip_entity, std::uintptr_t mask, std::uint8_t layer ) const
@@ -49,10 +70,22 @@ namespace systems {
 
 	tracing::result tracing::trace( const math::vector3& start, const math::vector3& end, const filter& filter ) const
 	{
-		ray ray{};
 		result result{};
+		if ( !addresses::globals::game_trace_manager || !PATTERN( patterns::trace_ray ) )
+		{
+			return result;
+		}
 
-		memory::call<bool>(PATTERN (patterns::trace_ray), addresses::globals::game_trace_manager, &ray, &start, &end, &filter, &result );
+		ray ray{};
+
+		__try
+		{
+			memory::call<bool>(PATTERN (patterns::trace_ray), addresses::globals::game_trace_manager, &ray, &start, &end, &filter, &result );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+			return {};
+		}
 
 		return result;
 	}
@@ -65,28 +98,50 @@ namespace systems {
 
 	tracing::result tracing::trace_hull( const math::vector3& start, const math::vector3& end, const math::vector3& mins, const math::vector3& maxs, const filter& filter ) const
 	{
+		result result{};
+		if ( !addresses::globals::game_trace_manager || !PATTERN( patterns::trace_ray ) )
+		{
+			return result;
+		}
+
 		ray ray{};
 		ray.mins = mins;
 		ray.maxs = maxs;
 		ray.type = 2;
 
-		result result{};
-
-		memory::call<bool>(PATTERN (patterns::trace_ray), addresses::globals::game_trace_manager, &ray, &start, &end, &filter, &result );
+		__try
+		{
+			memory::call<bool>(PATTERN (patterns::trace_ray), addresses::globals::game_trace_manager, &ray, &start, &end, &filter, &result );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+			return {};
+		}
 
 		return result;
 	}
 
 	tracing::result tracing::trace_sphere( const math::vector3& start, const math::vector3& end, float radius, const filter& filter ) const
 	{
+		result result{};
+		if ( !addresses::globals::game_trace_manager || !PATTERN( patterns::trace_ray ) )
+		{
+			return result;
+		}
+
 		ray ray{};
 		ray.mins = {};
 		*reinterpret_cast< float* >( reinterpret_cast< std::uintptr_t >( &ray ) + 12 ) = radius;
 		ray.type = 1;
 
-		result result{};
-
-		memory::call<bool>(PATTERN (patterns::trace_ray), addresses::globals::game_trace_manager, &ray, &start, &end, &filter, &result );
+		__try
+		{
+			memory::call<bool>(PATTERN (patterns::trace_ray), addresses::globals::game_trace_manager, &ray, &start, &end, &filter, &result );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+			return {};
+		}
 
 		return result;
 	}
@@ -99,10 +154,22 @@ namespace systems {
 
 	tracing::result tracing::trace_to_entity( const math::vector3& start, const math::vector3& end, std::uintptr_t target_entity, const filter& filter ) const
 	{
-		ray ray{};
 		result result{};
+		if ( !addresses::globals::game_trace_manager || !PATTERN( patterns::trace_ray_entity ) )
+		{
+			return result;
+		}
 
-		memory::call<bool>(PATTERN (patterns::trace_ray_entity), addresses::globals::game_trace_manager, &ray, &start, &end, target_entity, &filter, &result );
+		ray ray{};
+
+		__try
+		{
+			memory::call<bool>(PATTERN (patterns::trace_ray_entity), addresses::globals::game_trace_manager, &ray, &start, &end, target_entity, &filter, &result );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+			return {};
+		}
 
 		return result;
 	}
@@ -110,8 +177,18 @@ namespace systems {
 	tracing::filter tracing::make_filter( std::uintptr_t skip_entity, std::uintptr_t mask, std::uint8_t layer, int type ) const
 	{
 		filter filter{};
+		if ( !PATTERN( patterns::trace_filter_init ) )
+		{
+			return filter;
+		}
 
-		memory::call<void>(PATTERN (patterns::trace_filter_init), &filter, skip_entity, mask, layer, type );
+		__try
+		{
+			memory::call<void>(PATTERN (patterns::trace_filter_init), &filter, skip_entity, mask, layer, type );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+		}
 
 		return filter;
 	}
@@ -119,8 +196,18 @@ namespace systems {
 	tracing::filter tracing::make_filter( std::uintptr_t skip_entity, std::uintptr_t mask, std::uint8_t layer ) const
 	{
 		filter filter{};
+		if ( !PATTERN( patterns::trace_filter_init ) )
+		{
+			return filter;
+		}
 
-		memory::call<void>(PATTERN (patterns::trace_filter_init), &filter, skip_entity, mask, layer, 7 );
+		__try
+		{
+			memory::call<void>(PATTERN (patterns::trace_filter_init), &filter, skip_entity, mask, layer, 7 );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+		}
 
 		return filter;
 	}

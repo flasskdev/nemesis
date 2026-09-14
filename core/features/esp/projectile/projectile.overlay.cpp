@@ -54,9 +54,79 @@ namespace features::esp::projectile {
 
 		for ( const auto& projectile : systems::g_entities.get_by_type( systems::entities::type::projectile ) )
 		{
+			if ( projectile.schema_hash == "C_SmokeGrenadeProjectile"_hash && settings::g_misc.m_smoke_and_fire_color.custom_smoke.value )
+			{
+				static auto smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+				if ( !smoke_col_offset )
+				{
+					smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+					if ( !smoke_col_offset )
+					{
+						const auto det_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash );
+						if ( det_offset >= 12 )
+						{
+							smoke_col_offset = det_offset - 12;
+						}
+					}
+				}
+
+				if ( smoke_col_offset )
+				{
+					const auto& col = settings::g_misc.m_smoke_and_fire_color.smoke_color.value;
+					const auto cur = memory::read<math::vector3>( projectile.ptr + smoke_col_offset );
+					math::vector3 smoke_col;
+					if ( cur.x > 1.5f || cur.y > 1.5f || cur.z > 1.5f )
+					{
+						smoke_col = math::vector3{ static_cast<float>( col.r ), static_cast<float>( col.g ), static_cast<float>( col.b ) };
+					}
+					else
+					{
+						smoke_col = math::vector3{ static_cast<float>( col.r ) / 255.0f, static_cast<float>( col.g ) / 255.0f, static_cast<float>( col.b ) / 255.0f };
+					}
+					memory::write<math::vector3>( projectile.ptr + smoke_col_offset, smoke_col );
+				}
+
+				const auto effect_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_bDidSmokeEffect"_hash );
+				const auto is_active = effect_offset ? memory::read<bool>( projectile.ptr + effect_offset ) : false;
+				if ( is_active )
+				{
+					const auto scene = memory::read<std::uintptr_t>( projectile.ptr + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
+					math::vector3 origin{};
+					if ( scene )
+					{
+						origin = memory::read<math::vector3>( scene + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) );
+					}
+					if ( origin.length_sqr( ) <= 1.0f )
+					{
+						const auto det_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash );
+						if ( det_offset )
+						{
+							origin = memory::read<math::vector3>( projectile.ptr + det_offset );
+						}
+					}
+
+					if ( origin.length_sqr( ) > 1.0f )
+					{
+						const auto dist = systems::g_view.origin( ).distance( origin );
+						if ( dist > 10.0f && dist < 4500.0f )
+						{
+							const auto center_proj = systems::g_view.project( origin + math::vector3{ 0.0f, 0.0f, 32.0f } );
+							if ( systems::g_view.projection_valid( center_proj ) )
+							{
+								const auto& col = settings::g_misc.m_smoke_and_fire_color.smoke_color.value;
+								const auto r_proj = std::clamp( ( 144.0f / dist ) * 600.0f, 20.0f, 350.0f );
+								auto& glow = xdraw::get_glow( );
+								glow.circle_filled( center_proj.x, center_proj.y, r_proj, xdraw::color{ col.r, col.g, col.b, 28 } );
+								glow.circle_filled( center_proj.x, center_proj.y, r_proj * 0.65f, xdraw::color{ col.r, col.g, col.b, 45 } );
+							}
+						}
+					}
+				}
+			}
+
 			if ( projectile.schema_hash == "C_Inferno"_hash )
 			{
-				if ( overlay_cfg.is_active( 5 ) )
+				if ( overlay_cfg.is_active( 5 ) || overlay_cfg.m_infernos.enabled.value || settings::g_misc.m_smoke_and_fire_color.custom_molotov.value )
 				{
 					this->add_inferno( draw_list, middle_draw_list, projectile, overlay_cfg.m_infernos );
 				}
@@ -351,6 +421,12 @@ namespace features::esp::projectile {
 
 	void overlay::add_inferno( xdraw::draw_list& draw_list, xdraw::draw_list& middle_draw_list, const systems::entities::cached& entity, const settings::esp::projectile::overlay::infernos& cfg )
 	{
+		const bool is_custom_molotov = settings::g_misc.m_smoke_and_fire_color.custom_molotov.value;
+		if ( !cfg.enabled.value && !is_custom_molotov )
+		{
+			return;
+		}
+
 		constexpr auto num_directions{ 15 };
 		constexpr auto two_pi{ std::numbers::pi_v<float> *2.0f };
 		constexpr auto lerp_speed{ 6.0f };
@@ -388,6 +464,47 @@ namespace features::esp::projectile {
 			avg_pos = avg_pos + position;
 			++active_count;
 
+			if ( is_custom_molotov )
+			{
+				const auto dist = systems::g_view.origin( ).distance( position );
+				if ( dist > 15.0f && dist < 3500.0f )
+				{
+					const auto p_base = systems::g_view.project( position + math::vector3{ 0.0f, 0.0f, 6.0f } );
+					const auto p_mid = systems::g_view.project( position + math::vector3{ 0.0f, 0.0f, 22.0f } );
+					const auto p_top = systems::g_view.project( position + math::vector3{ 0.0f, 0.0f, 42.0f } );
+
+					const auto base_rad = std::clamp( 700.0f / dist, 6.0f, 32.0f );
+					const auto mid_rad = base_rad * 0.75f;
+					const auto top_rad = base_rad * 0.5f;
+
+					const auto& custom_molo = settings::g_misc.m_smoke_and_fire_color.molotov_color.value;
+					const auto flame_a = static_cast< std::uint8_t >( 160.0f * state.fade_alpha );
+					const auto flame_col_base = xdraw::color{ custom_molo.r, custom_molo.g, custom_molo.b, static_cast< std::uint8_t >( flame_a * 0.5f ) };
+					const auto flame_col_mid = xdraw::color{ custom_molo.r, custom_molo.g, custom_molo.b, static_cast< std::uint8_t >( flame_a * 0.85f ) };
+					const auto flame_col_top = xdraw::color{ 255, 255, 255, flame_a };
+
+					if ( systems::g_view.projection_valid( p_base ) )
+					{
+						draw_list.circle_filled( p_base.x, p_base.y, base_rad, flame_col_base );
+					}
+					if ( systems::g_view.projection_valid( p_mid ) )
+					{
+						draw_list.circle_filled( p_mid.x, p_mid.y, mid_rad, flame_col_mid );
+					}
+					if ( systems::g_view.projection_valid( p_top ) )
+					{
+						draw_list.circle_filled( p_top.x, p_top.y, top_rad, flame_col_top );
+					}
+
+					auto& glow = xdraw::get_glow( );
+					const auto ga = static_cast< std::uint8_t >( 95.0f * state.fade_alpha );
+					if ( systems::g_view.projection_valid( p_mid ) )
+					{
+						glow.circle_filled( p_mid.x, p_mid.y, base_rad * 1.6f, xdraw::color{ custom_molo.r, custom_molo.g, custom_molo.b, ga } );
+					}
+				}
+			}
+
 			const auto extent = std::fmaxf( 60.0f, current_radius );
 
 			for ( auto d = 0; d < num_directions; ++d )
@@ -402,7 +519,17 @@ namespace features::esp::projectile {
 
 				state.current_radii[ idx ] += ( target - state.current_radii[ idx ] ) * lerp_t;
 
-				world_points.push_back( position + math::vector3{ dx * state.current_radii[ idx ], dy * state.current_radii[ idx ], 0.0f } );
+				auto pt = position + math::vector3{ dx * state.current_radii[ idx ], dy * state.current_radii[ idx ], 0.0f };
+				if ( cfg.step_detection.value )
+				{
+					const auto ground_trace = systems::g_tracing.trace( pt + math::vector3{ 0.0f, 0.0f, 32.0f }, pt - math::vector3{ 0.0f, 0.0f, 64.0f }, entity.ptr );
+					if ( ground_trace.fraction < 1.0f )
+					{
+						pt.z = ground_trace.end_pos.z + 1.5f;
+					}
+				}
+
+				world_points.push_back( pt );
 			}
 		}
 
@@ -509,20 +636,30 @@ namespace features::esp::projectile {
 				hy /= static_cast< float >( lower.size( ) );
 
 				const auto alpha_scale = state.fade_alpha;
-				const auto& outline_col = cfg.outline_color.value;
-				const auto outline_a = static_cast< std::uint8_t >( static_cast< float >( outline_col.a ) * alpha_scale );
+				const auto& fill_col = is_custom_molotov ? settings::g_misc.m_smoke_and_fire_color.molotov_color.value : cfg.fill_color.value;
+				const auto fill_a = static_cast< std::uint8_t >( static_cast< float >( fill_col.a ) * alpha_scale );
 				const auto hull_span = std::span<const float>( reinterpret_cast< const float* >( lower.data( ) ), lower.size( ) * 2 );
+
+				if ( fill_a > 0 )
+				{
+					draw_list.convex_filled( hull_span, xdraw::color{ fill_col.r, fill_col.g, fill_col.b, fill_a } );
+				}
+
+				const auto& outline_col = is_custom_molotov ? settings::g_misc.m_smoke_and_fire_color.molotov_color.value : cfg.outline_color.value;
+				const auto outline_a = static_cast< std::uint8_t >( static_cast< float >( outline_col.a ) * alpha_scale );
 
 				draw_list.polyline( hull_span, xdraw::color{ outline_col.r, outline_col.g, outline_col.b, outline_a }, true, cfg.outline_thickness );
 
-				if ( cfg.glow.value )
+				const bool enable_glow = cfg.glow.value || is_custom_molotov;
+				const float glow_str = is_custom_molotov ? 0.75f : cfg.glow_strength.value;
+
+				if ( enable_glow )
 				{
 					auto& glow = xdraw::get_glow( );
-					const auto ga = static_cast< std::uint8_t >( static_cast< float >( outline_col.a ) * cfg.glow_strength * alpha_scale );
+					const auto ga = static_cast< std::uint8_t >( static_cast< float >( outline_col.a ) * glow_str * alpha_scale );
 					const auto glow_col = xdraw::color{ outline_col.r, outline_col.g, outline_col.b, ga };
 
-					const auto& fill_col = cfg.fill_color.value;
-					const auto fa = static_cast< std::uint8_t >( static_cast< float >( fill_col.a ) * cfg.glow_strength * alpha_scale );
+					const auto fa = static_cast< std::uint8_t >( static_cast< float >( fill_col.a ) * glow_str * alpha_scale );
 
 					constexpr auto ring_count{ 8 };
 
@@ -737,6 +874,39 @@ namespace features::esp::projectile {
 		{
 			info.effect_tick_begin = memory::read<int>( info.entity + SCHEMA( "C_SmokeGrenadeProjectile", "m_nSmokeEffectTickBegin"_hash ) );
 			info.smoke_active = memory::read<bool>( info.entity + SCHEMA( "C_SmokeGrenadeProjectile", "m_bDidSmokeEffect"_hash ) );
+
+			if ( settings::g_misc.m_smoke_and_fire_color.custom_smoke.value )
+			{
+				static auto smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+				if ( !smoke_col_offset )
+				{
+					smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+					if ( !smoke_col_offset )
+					{
+						const auto det_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash );
+						if ( det_offset >= 12 )
+						{
+							smoke_col_offset = det_offset - 12;
+						}
+					}
+				}
+
+				if ( smoke_col_offset )
+				{
+					const auto& col = settings::g_misc.m_smoke_and_fire_color.smoke_color.value;
+					const auto cur = memory::read<math::vector3>( info.entity + smoke_col_offset );
+					math::vector3 smoke_col;
+					if ( cur.x > 1.5f || cur.y > 1.5f || cur.z > 1.5f )
+					{
+						smoke_col = math::vector3{ static_cast<float>( col.r ), static_cast<float>( col.g ), static_cast<float>( col.b ) };
+					}
+					else
+					{
+						smoke_col = math::vector3{ static_cast<float>( col.r ) / 255.0f, static_cast<float>( col.g ) / 255.0f, static_cast<float>( col.b ) / 255.0f };
+					}
+					memory::write<math::vector3>( info.entity + smoke_col_offset, smoke_col );
+				}
+			}
 		}
 		else if ( info.group_id == 4 )
 		{

@@ -3,8 +3,67 @@
 #include <core/rendering/rendering.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
+#include <core/features/combat/legit_checks.hpp>
 
 namespace features::esp::player {
+
+	static bool is_point_or_line_blocked_by_smoke(
+		const math::vector3& start,
+		const math::vector3& head,
+		const math::vector3& chest,
+		const math::vector3& pelvis,
+		const math::vector3& origin,
+		const std::vector<math::vector3>& smoke_centers )
+	{
+		if ( smoke_centers.empty( ) )
+			return false;
+
+		constexpr float k_smoke_radius = 180.0f;
+		constexpr float k_smoke_radius_sqr = k_smoke_radius * k_smoke_radius;
+
+		for ( const auto& base_center : smoke_centers )
+		{
+			const math::vector3 cloud_centers[]{
+				base_center,
+				{ base_center.x, base_center.y, base_center.z + 45.0f }
+			};
+
+			for ( const auto& center : cloud_centers )
+			{
+				// Local player is inside smoke
+				if ( ( start - center ).length_sqr( ) <= k_smoke_radius_sqr )
+					return true;
+
+				// Target is inside smoke (feet, pelvis, chest, or head)
+				if ( ( origin - center ).length_sqr( ) <= k_smoke_radius_sqr ||
+				     ( pelvis - center ).length_sqr( ) <= k_smoke_radius_sqr ||
+				     ( chest - center ).length_sqr( ) <= k_smoke_radius_sqr ||
+				     ( head - center ).length_sqr( ) <= k_smoke_radius_sqr )
+					return true;
+
+				// Line of sight to head, chest, or pelvis passes through smoke
+				if ( features::combat::legit_checks::segment_intersects_sphere(
+					{ start.x, start.y, start.z },
+					{ head.x, head.y, head.z },
+					{ center.x, center.y, center.z },
+					k_smoke_radius ) ||
+				     features::combat::legit_checks::segment_intersects_sphere(
+					{ start.x, start.y, start.z },
+					{ chest.x, chest.y, chest.z },
+					{ center.x, center.y, center.z },
+					k_smoke_radius ) ||
+				     features::combat::legit_checks::segment_intersects_sphere(
+					{ start.x, start.y, start.z },
+					{ pelvis.x, pelvis.y, pelvis.z },
+					{ center.x, center.y, center.z },
+					k_smoke_radius ) )
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 
 	void overlay::on_render( xdraw::draw_list& draw_list )
 	{
@@ -17,6 +76,56 @@ namespace features::esp::player {
 		if ( !local.is_valid( ) || !systems::g_entities.exists( local.view_controller( ) ) )
 		{
 			return;
+		}
+
+		std::vector<math::vector3> smoke_centers;
+		{
+			const auto effect_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_bDidSmokeEffect"_hash );
+			const auto tick_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_nSmokeEffectTickBegin"_hash );
+			const auto scene_offset = SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash );
+			const auto origin_offset = SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash );
+			const auto detonation_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash );
+
+			const auto global_vars = memory::safe_read<std::uintptr_t>( addresses::globals::global_vars ).value_or( 0 );
+			const auto current_tick = global_vars ? memory::safe_read<int>( global_vars + 0x44 ).value_or( 0 ) : 0;
+
+			constexpr double k_smoke_lifetime = 20.5;
+
+			if ( effect_offset && scene_offset && origin_offset )
+			{
+				for ( const auto& projectile : systems::g_entities.get_by_type( systems::entities::type::projectile ) )
+				{
+					if ( projectile.schema_hash != "C_SmokeGrenadeProjectile"_hash || !projectile.ptr )
+						continue;
+
+					const auto active = memory::safe_read<bool>( projectile.ptr + effect_offset );
+					const auto start_tick = tick_offset ? memory::safe_read<int>( projectile.ptr + tick_offset ).value_or( 0 ) : 0;
+
+					const bool is_active = active && *active;
+					if ( !is_active && start_tick <= 0 )
+						continue;
+
+					if ( current_tick > 0 && start_tick > 0 )
+					{
+						const auto age = ( static_cast<double>( current_tick ) - static_cast<double>( start_tick ) ) * cstypes::tick_interval;
+						if ( std::isfinite( age ) && age >= k_smoke_lifetime )
+							continue;
+					}
+
+					math::vector3 center{};
+					const auto scene = memory::safe_read<std::uintptr_t>( projectile.ptr + scene_offset ).value_or( 0 );
+					if ( scene )
+						center = memory::safe_read<math::vector3>( scene + origin_offset ).value_or( math::vector3{} );
+
+					if ( center.length_sqr( ) <= 1.0f && detonation_offset )
+						center = memory::safe_read<math::vector3>( projectile.ptr + detonation_offset ).value_or( math::vector3{} );
+
+					if ( center.length_sqr( ) <= 1.0f || !std::isfinite( center.x ) || !std::isfinite( center.y ) || !std::isfinite( center.z ) )
+						continue;
+
+					smoke_centers.push_back( center );
+				}
+			}
 		}
 
 		auto players = systems::g_entities.get_by_type( systems::entities::type::player );
@@ -40,9 +149,33 @@ namespace features::esp::player {
 				} );
 		}
 
+		int local_slot = -1;
+		const auto local_ctrl = local.view_controller( );
+		for ( const auto& p : players )
+		{
+			if ( p.ptr == local_ctrl )
+			{
+				local_slot = static_cast<int>( p.index ) - 1;
+				break;
+			}
+		}
+
+		if ( ( local_slot < 0 || local_slot >= 64 ) && local_ctrl )
+		{
+			const auto identity = memory::read<std::uintptr_t>( local_ctrl + 0x10 );
+			if ( identity )
+			{
+				const auto idx = memory::read<int>( identity + 0x10 ) & 0x7fff;
+				if ( idx > 0 && idx <= 64 )
+				{
+					local_slot = idx - 1;
+				}
+			}
+		}
+
 		for ( const auto& player : players )
 		{
-			const auto info = this->get_info( player, local );
+			auto info = this->get_info( player, local, local_slot );
 			if ( !info.valid( ) )
 			{
 				continue;
@@ -50,6 +183,21 @@ namespace features::esp::player {
 
 			const auto& cfg = settings::g_esp.m_player.m_overlay[ info.is_other_team ? 0 : 1 ];
 			if ( !cfg.enabled.value )
+			{
+				continue;
+			}
+
+			const auto head_bone_pos = info.bones[ cstypes::bone_ids::head ].position;
+			const auto head_pos = ( head_bone_pos.length_sqr( ) > 1.0f ) ? head_bone_pos : ( info.origin + math::vector3{ 0.0f, 0.0f, 64.0f } );
+			const auto chest_pos = info.origin + math::vector3{ 0.0f, 0.0f, 50.0f };
+			const auto pelvis_pos = info.origin + math::vector3{ 0.0f, 0.0f, 38.0f };
+
+			if ( is_point_or_line_blocked_by_smoke( systems::g_view.origin( ), head_pos, chest_pos, pelvis_pos, info.origin, smoke_centers ) )
+			{
+				info.is_visible = false;
+			}
+
+			if ( cfg.only_visible.value && !info.is_visible )
 			{
 				continue;
 			}
@@ -864,7 +1012,7 @@ namespace features::esp::player {
 		}
 	}
 
-	overlay::info overlay::get_info( const systems::entities::cached& player, const systems::local::snapshot& local )
+	overlay::info overlay::get_info( const systems::entities::cached& player, const systems::local::snapshot& local, int local_slot )
 	{
 		info info{};
 		info.controller = player.ptr;
@@ -937,7 +1085,35 @@ namespace features::esp::player {
 		info.is_defusing = memory::read<bool>( info.pawn + SCHEMA( "C_CSPlayerPawn", "m_bIsDefusing"_hash ) );
 		info.is_flashed = memory::read<float>( info.pawn + SCHEMA( "C_CSPlayerPawnBase", "m_flFlashBangTime"_hash ) ) > 0.0f;
 		info.bones = systems::g_bones.get_skeleton( info.pawn );
-		info.is_visible = systems::g_tracing.is_visible( systems::g_view.origin( ), info.bones[ cstypes::bone_ids::head ].position, info.pawn, local.view_pawn( ) );
+
+		bool is_spotted = false;
+		const auto spotted_state_offset = SCHEMA( "C_CSPlayerPawn", "m_entitySpottedState"_hash );
+		const auto spotted_mask_offset = SCHEMA( "EntitySpottedState_t", "m_bSpottedByMask"_hash );
+
+		if ( local_slot >= 0 && local_slot < 64 )
+		{
+			const auto state_off = spotted_state_offset ? spotted_state_offset : 0x1C60;
+			const auto mask_off = spotted_mask_offset ? spotted_mask_offset : 0xC;
+			const auto mask = memory::read<std::uint32_t>( info.pawn + state_off + mask_off + ( local_slot / 32 ) * sizeof( std::uint32_t ) );
+			is_spotted = ( mask & ( 1u << ( local_slot % 32 ) ) ) != 0;
+		}
+
+		if ( local_slot >= 0 && local_slot < 64 )
+		{
+			info.is_visible = is_spotted;
+		}
+		else
+		{
+			const auto camera = systems::g_view.origin( );
+			const auto head_bone_pos = info.bones[ cstypes::bone_ids::head ].position;
+			const auto head_pos = ( head_bone_pos.length_sqr( ) > 1.0f ) ? head_bone_pos : ( info.origin + math::vector3{ 0.0f, 0.0f, 64.0f } );
+			const auto chest_pos = info.origin + math::vector3{ 0.0f, 0.0f, 50.0f };
+			const auto pelvis_pos = info.origin + math::vector3{ 0.0f, 0.0f, 38.0f };
+
+			info.is_visible = systems::g_tracing.is_visible( camera, head_pos, info.pawn, local.view_pawn( ) ) ||
+			                  systems::g_tracing.is_visible( camera, chest_pos, info.pawn, local.view_pawn( ) ) ||
+			                  systems::g_tracing.is_visible( camera, pelvis_pos, info.pawn, local.view_pawn( ) );
+		}
 
 		const auto weapon_services = memory::read<std::uintptr_t>( info.pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
 		if ( weapon_services )

@@ -109,20 +109,6 @@ namespace rendering {
             }
             return { 5, 0 }; // misc
         }
-
-        constexpr const char* k_cham_material_names[]{
-            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "outline glow", "electric", "distortion", "hologram", "pearl",
-            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)", "outline glow (iz)"
-        };
-        constexpr auto k_cham_material_count = static_cast<int>(settings::esp::cham_ids::count);
-        constexpr const char* k_cham_visible_material_names[]{
-            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl"
-        };
-        constexpr int k_cham_visible_material_count = 11;
-        constexpr const char* k_cham_wall_material_names[]{
-            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)"
-        };
-        constexpr int k_cham_wall_material_count = 8;
     } // namespace detail
 
     namespace svgs {
@@ -1215,6 +1201,12 @@ namespace rendering {
             }
             else
             {
+                // NOTE: m_ambience_open is NOT reset here so the ambient window
+                // persists across menu open/close cycles (user's request).
+                this->m_search_open = false;
+                this->m_user_popup_open = false;
+                xui::overlays::close_all();
+
                 POINT pt{};
                 if (GetCursorPos(&pt))
                 {
@@ -1372,14 +1364,16 @@ namespace rendering {
 
             // Update Ambience modal animation and background blocking
             {
-                const auto amb_anim_speed = this->m_ambience_open ? 16.0f : 18.0f;
-                const auto amb_target = this->m_ambience_open ? 1.0f : 0.0f;
+                // m_ambience_open is intentionally NOT reset when menu closes.
+                // Animation fades to 0 when menu is closed, but state is preserved.
+                const auto amb_anim_speed = this->m_ambience_open ? 16.0f : 24.0f;
+                const auto amb_target = (this->m_ambience_open && this->m_open) ? 1.0f : 0.0f;
                 this->m_ambience_anim += (amb_target - this->m_ambience_anim) * std::min(amb_anim_speed * dt, 1.0f);
-                if (this->m_ambience_anim < 0.02f && !this->m_ambience_open)
+                if (this->m_ambience_anim < 0.02f && amb_target < 0.01f)
                 {
                     this->m_ambience_anim = 0.0f;
                 }
-                if (this->m_ambience_open || this->m_ambience_anim > 0.001f)
+                if (this->m_open && (this->m_ambience_open || this->m_ambience_anim > 0.001f))
                 {
                     xui::ctx().modal_blocking = true;
                 }
@@ -1685,13 +1679,11 @@ namespace rendering {
         xdraw::pop_font();
         dl.text(text_x, profile_rect.y + 25.0f,
             theme::fit_text(loader_session::subscription_text(), text_w), tokens::col_text_dim);
-        // Options indicator icon (three dots)
+        // Options indicator icon (gear)
         const auto opt_cx = profile_rect.x + profile_rect.w - 12.0f;
         const auto opt_cy = profile_rect.y + profile_rect.h * 0.5f;
         const auto opt_col = (this->m_user_popup_open || profile_hovered) ? tokens::col_accent : tokens::col_text_dim;
-        dl.circle_filled(opt_cx, opt_cy - 4.0f, 1.5f, opt_col);
-        dl.circle_filled(opt_cx, opt_cy, 1.5f, opt_col);
-        dl.circle_filled(opt_cx, opt_cy + 4.0f, 1.5f, opt_col);
+        xui::draw_gear( dl, opt_cx, opt_cy, opt_col, 11.0f );
     }
 
     void menu::reset_user_avatar()
@@ -1999,7 +1991,11 @@ namespace rendering {
         {
             xui::toggle("Bunny Hop", mov.bhop);
             xui::layout::spacing(3.0f);
-            xui::toggle("Air Strafe", mov.m_test_strafer.enabled);
+            if (xui::toggle("Air Strafe", mov.airstrafe))
+            {
+                mov.m_test_strafer.enabled.value = mov.airstrafe.value;
+                mov.m_test_strafer.enabled.bind = mov.airstrafe.bind;
+            }
             xui::layout::spacing(3.0f);
             xui::toggle("Fast Ladder", mov.fastladder);
             xui::layout::spacing(3.0f);
@@ -2013,18 +2009,14 @@ namespace rendering {
         xui::layout::set_cursor(right_x - wx, body_y + k_header_h - wy);
         if (xui::begin_child("##movement_assist", col_w, body_h - k_header_h, true))
         {
-            xui::toggle("Edge Bug", mov.jumpbug);
-            if (xui::begin_popup("##edgebug_popup", 240.0f))
-            {
-                static const char* edgebug_modes[] = { "0: auto / adaptive", "1: edge trace", "2: no jump held", "3: min speed", "4: strict vz" };
-                xui::combo("mode##eb", mov.jumpbug_mode.value, edgebug_modes, 5);
-                xui::slider_int("passes##eb", mov.jumpbug_passes.value, 0, 64, mov.jumpbug_passes.value == 0 ? "auto (dynamic)" : "%d ticks");
-                xui::checkbox("jump steps##eb", mov.jumpbug_include_jump_steps);
-                xui::end_popup();
-            }
+            xui::toggle("Jump Bug", mov.jumpbug);
             xui::layout::spacing(3.0f);
             xui::toggle("Slow Walk", mov.slowwalk);
-            xui::slider_float("Slow Walk Speed", mov.slowwalk_speed, 10.0f, 150.0f, "%.0f u/s");
+            if (xui::begin_popup("##slowwalk_popup", 220.0f))
+            {
+                xui::slider_float("Speed", mov.slowwalk_speed, 10.0f, 150.0f, "%.0f u/s");
+                xui::end_popup();
+            }
             xui::end_child();
         }
     }

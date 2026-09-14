@@ -1004,8 +1004,14 @@ namespace xui {
 
 	rect popup_overlay::get_popup( ) const
 	{
-		const auto clamped = std::min( this->m_content_h, 400.0f );
 		const auto [vw, vh] = xdraw::viewport_size( );
+		float max_h = 520.0f;
+		if ( vh > 0 )
+		{
+			max_h = std::max( 300.0f, std::min( 600.0f, static_cast< float >( vh ) - 60.0f ) );
+		}
+		const auto clamped = std::min( this->m_content_h, max_h );
+
 		auto px = this->m_anchor.x;
 		if ( this->m_parent_bounds.w > 0.0f )
 		{
@@ -1036,6 +1042,14 @@ namespace xui {
 		if ( vh > 0 && py + clamped > static_cast< float >( vh ) - 10.0f )
 		{
 			py = this->m_anchor.y - clamped - 4.0f;
+		}
+		if ( vh > 0 && py + clamped > static_cast< float >( vh ) - 10.0f )
+		{
+			py = static_cast< float >( vh ) - 10.0f - clamped;
+		}
+		if ( py < 10.0f )
+		{
+			py = 10.0f;
 		}
 
 		return { px, py, this->m_width, clamped };
@@ -2057,7 +2071,10 @@ namespace xui {
 			{ "ambience", "Opens the map ambience and atmospheric environment visualizer modal" },
 			{ "nightmode", "Darkens map ambient lighting for high-contrast night atmosphere" },
 			{ "override sunlight", "Overrides map sunlight and ambient illumination with custom color and brightness" },
+			{ "fullbright", "Illuminates all map geometry, shadows, and player models with uniform shadowless bright lighting" },
 			{ "override sky", "Overrides skybox texture dome and atmospheric lighting colors" },
+			{ "overlight", "Dramatically boosts skybox luminosity and bloom exposure for glowing bright skies" },
+			{ "damage effect", "Displays floating damage numbers at the hit position with custom color, scale, and hide delay" },
 			{ "skybox", "Selects custom high-definition skybox texture" },
 			{ "skybox material", "Selects custom high-definition skybox texture" },
 			{ "custom skybox", "Selects custom high-definition skybox texture" },
@@ -3323,6 +3340,35 @@ namespace xui {
 		pop_id( );
 	}
 
+	void draw_gear( xdraw::draw_list& dl, float cx, float cy, xdraw::color col, float size )
+	{
+		const float r_outer = size * 0.5f;
+		const float r_hub = size * 0.32f;
+		const float r_inner = size * 0.25f;
+		const float r_pin = size * 0.12f;
+		const float tooth_thick = size * 0.18f;
+		const float hub_thick = size * 0.14f;
+
+		constexpr int k_teeth = 6;
+		constexpr float k_step = 3.14159265f / 3.0f;
+		for ( int i = 0; i < k_teeth; ++i )
+		{
+			const float a = static_cast< float >( i ) * k_step;
+			const float cos_a = std::cos( a );
+			const float sin_a = std::sin( a );
+			dl.line( cx + cos_a * r_inner, cy + sin_a * r_inner,
+					 cx + cos_a * r_outer, cy + sin_a * r_outer,
+					 col, tooth_thick );
+		}
+
+		dl.circle( cx, cy, r_hub, col, hub_thick, 16 );
+
+		if ( r_pin >= 0.8f )
+		{
+			dl.circle_filled( cx, cy, r_pin, col, 8 );
+		}
+	}
+
 	bool begin_popup( std::string_view label, float width, const xdraw::color* swatch_color, bool is_arrow )
 	{
 		auto win = layout::current_window( );
@@ -3382,17 +3428,9 @@ namespace xui {
 		}
 		else
 		{
-			constexpr auto dot_r{ 1.5f };
-			constexpr auto dot_spacing{ 4.0f };
-			const auto total_dots_w = dot_r * 2.0f * 3.0f + dot_spacing * 2.0f;
-			const auto start_x = dot_abs.x + ( dot_area_w - total_dots_w ) * 0.5f;
+			const auto cx = dot_abs.x + dot_area_w * 0.5f;
 			const auto cy = dot_abs.y + dot_area_h * 0.5f;
-
-			for ( int i = 0; i < 3; ++i )
-			{
-				const auto cx = start_x + dot_r + static_cast< float >( i ) * ( dot_r * 2.0f + dot_spacing );
-				dl.circle_filled( cx, cy, dot_r, dot_col, 8 );
-			}
+			draw_gear( dl, cx, cy, dot_col, 11.0f );
 		}
 
 		if ( hovered && input.mouse_clicked )
@@ -3403,7 +3441,14 @@ namespace xui {
 			}
 			else
 			{
-				overlays::add( std::make_unique<popup_overlay>( id, dot_abs, width, win->bounds ) );
+				float initial_h = 100.0f;
+				if ( c.child_height_cache.contains( id ) && c.child_height_cache[ id ] > 0.0f )
+				{
+					initial_h = c.child_height_cache[ id ];
+				}
+				auto ov_ptr = std::make_unique<popup_overlay>( id, dot_abs, width, win->bounds );
+				ov_ptr->set_content_h( initial_h );
+				overlays::add( std::move( ov_ptr ) );
 			}
 		}
 
@@ -3436,12 +3481,19 @@ namespace xui {
 
 			draw::push_layer( xdraw::layer::top );
 
+			auto scroll_y{ 0.0f };
+			auto& cs = c.child_scroll_cache[ id ];
+			scroll_y = cs.scroll;
+
 			window_state state{};
 			state.title = std::string( label );
 			state.bounds = popup_rect;
 			state.cursor_x = s.window_pad_x;
-			state.cursor_y = s.window_pad_y;
+			state.cursor_y = s.window_pad_y - scroll_y;
 			state.is_child = true;
+			state.group_id = id;
+			state.scrollable = true;
+			state.scroll_y = scroll_y;
 
 			c.windows.push_back( std::move( state ) );
 			push_id( id );
@@ -3464,24 +3516,77 @@ namespace xui {
 			return;
 		}
 
-		const auto& s = get_ctx( ).style;
-		const auto content_h = win->content_h + s.window_pad_y;
+		auto& c = get_ctx( );
+		const auto& s = c.style;
+		const auto& input = c.input;
+		const auto true_content_h = win->content_h + win->scroll_y + s.window_pad_y;
+		const auto visible_h = win->bounds.h;
 
 		for ( auto& o : get_overlays( ).list )
 		{
 			auto ov = dynamic_cast< popup_overlay* >( o.get( ) );
 			if ( ov && !ov->closing( ) )
 			{
-				ov->set_content_h( content_h );
+				ov->set_content_h( true_content_h );
 				break;
 			}
 		}
 
-		get_ctx( ).inside_overlay = null_id;
+		if ( win->group_id != null_id && win->scrollable )
+		{
+			c.child_height_cache[ win->group_id ] = true_content_h;
+
+			const auto max_scroll = std::max( 0.0f, true_content_h - visible_h );
+			auto& cs = c.child_scroll_cache[ win->group_id ];
+			const auto dt = xdraw::delta_time( );
+
+			const auto popup_hovered = input.in_rect( win->bounds );
+
+			if ( max_scroll > 0.0f )
+			{
+				if ( popup_hovered && input.scroll_delta != 0.0f )
+				{
+					cs.scroll_target -= input.scroll_delta * 40.0f;
+				}
+			}
+
+			cs.scroll_target = std::clamp( cs.scroll_target, 0.0f, max_scroll );
+			cs.scroll += ( cs.scroll_target - cs.scroll ) * std::min( 18.0f * dt, 1.0f );
+			cs.scroll = std::clamp( cs.scroll, 0.0f, max_scroll );
+
+			// Draw sleek scrollbar if content exceeds visible area
+			if ( max_scroll > 0.0f )
+			{
+				constexpr auto sb_w{ 3.5f };
+				constexpr auto sb_pad{ 3.0f };
+				const auto track_h = visible_h - sb_pad * 2.0f;
+				const auto thumb_h = std::max( 16.0f, track_h * ( visible_h / true_content_h ) );
+				const auto thumb_travel = track_h - thumb_h;
+				const auto thumb_y = win->bounds.y + sb_pad + ( cs.scroll / max_scroll ) * thumb_travel;
+				const auto thumb_x = win->bounds.right( ) - sb_w - sb_pad;
+
+				const auto hit_rect = rect{ thumb_x - 4.0f, win->bounds.y + sb_pad, sb_w + 8.0f, track_h };
+				const auto is_hovered = input.in_rect( hit_rect );
+
+				if ( is_hovered && input.mouse_down && thumb_travel > 0.0f )
+				{
+					const auto rel_y = std::clamp( ( input.mouse_y - ( win->bounds.y + sb_pad + thumb_h * 0.5f ) ) / thumb_travel, 0.0f, 1.0f );
+					cs.scroll_target = rel_y * max_scroll;
+					cs.scroll = cs.scroll_target;
+				}
+
+				const auto sb_col = is_hovered ? s.accent : s.accent.alpha( 130 );
+
+				auto& top_dl = xdraw::get( xdraw::layer::top );
+				top_dl.rect_filled( thumb_x, thumb_y, sb_w, thumb_h, sb_col, xdraw::corner_radius{ sb_w * 0.5f } );
+			}
+		}
+
+		c.inside_overlay = null_id;
 
 		xdraw::get( xdraw::layer::top ).pop_clip( );
 		pop_id( );
-		get_ctx( ).windows.pop_back( );
+		c.windows.pop_back( );
 		draw::pop_layer( );
 	}
 

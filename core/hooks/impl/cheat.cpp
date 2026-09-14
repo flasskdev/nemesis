@@ -189,6 +189,21 @@ namespace hooks {
 		rendering::g_context.on_present( thisptr );
 		features::misc::g_auto_accept.run( );
 
+		static std::uint16_t s_last_active_lobby_kit{ 0 };
+		if ( rendering::g_widgets.s_map_name.empty( ) )
+		{
+			const auto current_kit = static_cast< std::uint16_t >( settings::g_changer.music.id );
+			if ( current_kit != s_last_active_lobby_kit )
+			{
+				s_last_active_lobby_kit = current_kit;
+				trigger_lobby_music( current_kit );
+			}
+		}
+		else
+		{
+			s_last_active_lobby_kit = 0;
+		}
+
 		if ( !m_wnd_proc.is_enabled( ) && rendering::g_context.get_window( ) )
 		{
 			if ( m_wnd_proc.create( reinterpret_cast< void* >( GetWindowLongPtrW( rendering::g_context.get_window( ), GWLP_WNDPROC ) ), &wnd_proc ) )
@@ -271,6 +286,57 @@ namespace hooks {
 				break;
 			}
 		}
+		else if ( features::misc::g_camera.is_freecam_active( ) || features::misc::g_camera.is_spec_thirdperson_active( ) )
+		{
+			if ( msg == WM_INPUT )
+			{
+				RAWINPUT raw{};
+				UINT size = sizeof( raw );
+				if ( GetRawInputData( reinterpret_cast< HRAWINPUT >( lparam ), RID_INPUT, &raw, &size, sizeof( RAWINPUTHEADER ) ) != static_cast< UINT >( -1 ) )
+				{
+					if ( raw.header.dwType == RIM_TYPEMOUSE && ( raw.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE ) == 0 )
+					{
+						const long dx = raw.data.mouse.lLastX;
+						const long dy = raw.data.mouse.lLastY;
+						if ( dx != 0 || dy != 0 )
+						{
+							float sens = 1.0f;
+							if ( const auto cvar = CONVAR( "sensitivity" ) ) sens = cvar->get< float >( );
+							sens = std::clamp( sens, 0.001f, 100.0f );
+
+							float m_pitch = 0.022f;
+							if ( const auto cvar = CONVAR( "m_pitch" ) ) m_pitch = cvar->get< float >( );
+							float m_yaw = 0.022f;
+							if ( const auto cvar = CONVAR( "m_yaw" ) ) m_yaw = cvar->get< float >( );
+
+							const float d_pitch = static_cast< float >( dy ) * m_pitch * sens;
+							const float d_yaw = -static_cast< float >( dx ) * m_yaw * sens;
+
+							if ( features::misc::g_camera.is_freecam_active( ) )
+							{
+								features::misc::g_camera.on_mouse_delta( d_pitch, d_yaw );
+							}
+							else if ( features::misc::g_camera.is_spec_thirdperson_active( ) )
+							{
+								features::misc::g_camera.on_spec_thirdperson_mouse_delta( d_pitch, d_yaw );
+							}
+						}
+					}
+				}
+
+				if ( features::misc::g_camera.is_freecam_active( ) )
+				{
+					if ( settings::g_misc.m_camera.freecam_block_input.value )
+					{
+						return DefWindowProcW( hwnd, msg, wparam, lparam );
+					}
+				}
+				else if ( features::misc::g_camera.is_spec_thirdperson_active( ) )
+				{
+					return DefWindowProcW( hwnd, msg, wparam, lparam );
+				}
+			}
+		}
 
 		return m_wnd_proc.call<LRESULT>( hwnd, msg, wparam, lparam );
 	}
@@ -327,7 +393,7 @@ namespace hooks {
 
 		if ( systems::g_local.get( ).is_valid( ) && systems::g_view.has_camera( ) )
 		{
-			if ( stage == 6 )
+			if ( stage == 6 || stage == 7 )
 			{
 				features::changer::g_guns.on_frame_stage_notify( );
 			}
@@ -345,10 +411,9 @@ namespace hooks {
 
 				features::world::g_scene.on_frame_stage_notify( );
 				features::world::g_weather.on_frame_stage_notify( );
+				features::world::g_smoke.on_frame_stage_notify( );
 				features::misc::g_other.on_frame_stage_notify( );
 				features::misc::g_impacts.on_frame_stage_notify( );
-
-				
 			}
 		}
 
@@ -368,6 +433,7 @@ namespace hooks {
 		if ( stage == 6 )
 		{
 			features::misc::g_dlight.on_frame_stage_notify( );
+			features::world::g_smoke.on_frame_stage_notify( );
 		}
 
 		m_frame_stage_notify.call<void>( thisptr, stage );
@@ -384,6 +450,7 @@ namespace hooks {
 		{
 			systems::g_view.update_matrix( );
 			systems::g_frame_data.update( );
+			features::world::g_smoke.on_frame_stage_notify( );
 		}
 
 		if (systems::g_local.get ().is_valid () && systems::g_view.has_camera ()) {
@@ -466,7 +533,7 @@ namespace hooks {
 			systems::g_input.desubtick( current_cmd );
 			systems::g_prediction.capture_prestate( local.pawn, movement_services );
 
-			if ( features::misc::g_camera.is_freecam_active( ) && settings::g_misc.m_camera.freecam_block_input.value )
+			if ( features::misc::g_camera.is_freecam_active( ) )
 			{
 				features::misc::g_camera.on_create_move( current_cmd );
 				systems::g_input.apply( );
@@ -507,6 +574,19 @@ namespace hooks {
 				if ( trace )
 				{
 					diag::step( "create_move: legit end" );
+				}
+			}
+
+			if ( ( current_cmd->buttons.value & cstypes::command_buttons::in_attack ) != 0 && features::combat::g_misc.antiaim( ).has_modified_angles( ) )
+			{
+				if ( const auto base = current_cmd->csgo_user_cmd.mutable_base( ) )
+				{
+					if ( const auto angles = base->mutable_viewangles( ) )
+					{
+						const auto va = systems::g_input.get_view_angles( );
+						angles->set_x( va.x );
+						angles->set_y( va.y );
+					}
 				}
 			}
 
@@ -915,9 +995,15 @@ namespace hooks {
 			return;
 		}
 
-		features::misc::g_camera.on_override_view( view_setup );
-		features::misc::g_removals.on_override_view( view_setup );
-		features::combat::g_misc.duckpeek( ).on_override_view( view_setup );
+		__try
+		{
+			features::misc::g_camera.on_override_view( view_setup );
+			features::misc::g_removals.on_override_view( view_setup );
+			features::combat::g_misc.duckpeek( ).on_override_view( view_setup );
+		}
+		__except ( EXCEPTION_EXECUTE_HANDLER )
+		{
+		}
 	}
 
 	void __fastcall cheat::update_fov_sensitivity( std::uintptr_t thisptr )
@@ -1241,6 +1327,36 @@ namespace hooks {
 		if ( lifecycle::is_unloading( ) )
 		{
 			m_process_input_event.call<void>( csgo_input, slot, frametime );
+			return;
+		}
+
+		if ( slot == 0 && csgo_input && features::misc::g_camera.is_freecam_active( ) )
+		{
+			if ( settings::g_misc.m_camera.freecam_block_input.value )
+			{
+				const auto saved = features::misc::g_camera.get_saved_viewangles( );
+				const auto p_pitch = reinterpret_cast< float* >( csgo_input + 1672 );
+				const auto p_yaw = reinterpret_cast< float* >( csgo_input + 1676 );
+				if ( std::isfinite( saved.x ) && std::isfinite( saved.y ) )
+				{
+					*p_pitch = saved.x;
+					*p_yaw = saved.y;
+				}
+			}
+
+			m_process_input_event.call<void>( csgo_input, slot, frametime );
+
+			if ( settings::g_misc.m_camera.freecam_block_input.value )
+			{
+				const auto saved = features::misc::g_camera.get_saved_viewangles( );
+				const auto p_pitch = reinterpret_cast< float* >( csgo_input + 1672 );
+				const auto p_yaw = reinterpret_cast< float* >( csgo_input + 1676 );
+				if ( std::isfinite( saved.x ) && std::isfinite( saved.y ) )
+				{
+					*p_pitch = saved.x;
+					*p_yaw = saved.y;
+				}
+			}
 			return;
 		}
 
@@ -1713,6 +1829,74 @@ namespace hooks {
 		return m_collect_attached_entities.call<int>( entity, out_vec );
 	}
 
+	static void* s_last_music_thisptr{ nullptr };
+
+	void cheat::trigger_lobby_music( std::uint16_t kit_id )
+	{
+		if ( lifecycle::is_unloading( ) )
+			return;
+
+		if ( !rendering::g_widgets.s_map_name.empty( ) )
+			return;
+
+		const auto fn_stop = PATTERN( patterns::stop_item_preview_music );
+		if ( fn_stop )
+		{
+			using stop_fn_t = void( __fastcall* )( );
+			using get_mgr_fn_t = void*( __fastcall* )( );
+			using set_bg_fn_t = void( __fastcall* )( void*, const char*, const char*, float );
+			using update_bg_fn_t = void( __fastcall* )( void* );
+
+			const auto p = reinterpret_cast< const std::uint8_t* >( fn_stop );
+			const auto disp_mgr = *reinterpret_cast< const std::int32_t* >( p + 5 );
+			const auto fn_get_mgr = reinterpret_cast< get_mgr_fn_t >( const_cast< std::uint8_t* >( p + 9 + disp_mgr ) );
+
+			const auto disp_set = *reinterpret_cast< const std::int32_t* >( p + 25 );
+			const auto fn_set_bg = reinterpret_cast< set_bg_fn_t >( const_cast< std::uint8_t* >( p + 29 + disp_set ) );
+			const auto fn_update_bg = reinterpret_cast< update_bg_fn_t >( PATTERN( patterns::update_bg_music ) );
+
+			// Stop any currently playing preview/background music
+			reinterpret_cast< stop_fn_t >( const_cast< std::uint8_t* >( p ) )( );
+
+			if ( kit_id == 0 )
+			{
+				if ( addresses::globals::source2engine_to_client && PATTERN( patterns::engine_client_cmd ) )
+				{
+					memory::call<void>( PATTERN( patterns::engine_client_cmd ), addresses::globals::source2engine_to_client, 0, "stopsound", 0x7ffef001 );
+				}
+			}
+			else
+			{
+				const auto kit = features::changer::g_econ_item_system.find_music_kit( kit_id );
+				if ( kit && !kit->name.empty( ) )
+				{
+					void* mgr = fn_get_mgr( );
+					if ( mgr )
+					{
+						fn_set_bg( mgr, kit->name.c_str( ), nullptr, 0.0f );
+						if ( fn_update_bg )
+						{
+							fn_update_bg( mgr );
+						}
+					}
+
+					// Trigger lobby music (track 1) immediately via game's play_music
+					if ( m_play_music.is_valid( ) )
+					{
+						m_play_music.call<void>( s_last_music_thisptr, 1, kit_id, 0.7f );
+					}
+
+					// Also play directly via engine client sound command for instant start
+					if ( addresses::globals::source2engine_to_client && PATTERN( patterns::engine_client_cmd ) )
+					{
+						const std::string cmd = "playvol Music.Background." + kit->name + " 0.7";
+						memory::call<void>( PATTERN( patterns::engine_client_cmd ), addresses::globals::source2engine_to_client, 0, cmd.c_str( ), 0x7ffef001 );
+					}
+				}
+			}
+		}
+	}
+
 	void __fastcall cheat::play_music( void* thisptr, int track_type, std::uint16_t music_kit_id, float volume )
 	{
 		if ( lifecycle::is_unloading( ) )
@@ -1721,22 +1905,37 @@ namespace hooks {
 			return;
 		}
 
+		if ( thisptr )
+		{
+			s_last_music_thisptr = thisptr;
+		}
+
 		const auto custom_kit = static_cast< std::uint16_t >( settings::g_changer.music.id );
 		if ( custom_kit > 0 )
 		{
 			if ( track_type == 11 ) // Music.MVPAnthem
 			{
-				if ( features::changer::g_music.is_local_mvp( ) || music_kit_id == 0 || music_kit_id == 0xffff )
+				const auto mvp_kit = features::changer::get_current_mvp_kit_id( );
+				if ( mvp_kit > 0 )
+				{
+					music_kit_id = static_cast< std::uint16_t >( mvp_kit );
+				}
+				else if ( features::changer::g_music.is_local_mvp( ) || music_kit_id == 0 || music_kit_id == 0xffff )
 				{
 					music_kit_id = custom_kit;
 				}
 			}
+			else if ( track_type == 1 ) // Main Menu / Lobby music
+			{
+				music_kit_id = custom_kit;
+				if ( volume <= 0.01f )
+				{
+					volume = 0.7f;
+				}
+			}
 			else
 			{
-				if ( music_kit_id == 0xffff || music_kit_id == 0 )
-				{
-					music_kit_id = custom_kit;
-				}
+				music_kit_id = custom_kit;
 			}
 		}
 

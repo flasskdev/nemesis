@@ -392,13 +392,33 @@ namespace settings {
                 {
                         enum class pitch_mode : std::uint8_t
                         {
-                                none,
+                                zero,
                                 down,
-                                up
+                                up,
+                                custom
+                        };
+
+                        enum class yaw_mode : std::uint8_t
+                        {
+                                at_target,
+                                custom
+                        };
+
+                        enum class spin_direction_mode : std::uint8_t
+                        {
+                                clockwise,
+                                counter_clockwise
                         };
 
                         xui::setting enabled{ true,{}, "anti aim", "anti aim" };
                         config::enm<pitch_mode> pitch{ pitch_mode::down, "anti aim", "pitch" };
+                        config::val<float> custom_pitch{ 0.0f, "anti aim", "custom pitch" };
+
+                        config::enm<yaw_mode> yaw_type{ yaw_mode::at_target, "anti aim", "yaw mode" };
+                        config::val<float> custom_yaw{ 0.0f, "anti aim", "custom yaw" };
+                        xui::setting jitters{ false,{}, "jitters", "anti aim" };
+                        config::val<float> jitters_delta{ 0.0f, "anti aim", "jitters delta" };
+                        config::val<int> jitters_speed{ 1, "anti aim", "jitters speed" };
                         xui::setting auto_yaw_adjust{ true,{}, "correct yaw to compensate for the models inherit sideways roll", "anti aim" };
                         xui::setting manual_left{ false,{ 'Z', xui::bind_mode::toggle }, "force left", "anti aim" };
                         xui::setting manual_right{ false,{ 'C', xui::bind_mode::toggle }, "force right", "anti aim" };
@@ -408,6 +428,10 @@ namespace settings {
                         config::col direction_indicator_color{ { 173, 192, 255, 220 }, "anti aim", "direction indicator color" };
                         xui::setting direction_indicator_glow{ true,{}, "direction indicator glow", "anti aim" };
                         config::val<float> direction_indicator_glow_strength{ 0.55f, "anti aim", "direction indicator glow strength" };
+
+                        xui::setting spinbot{ false,{}, "spinbot", "anti aim" };
+                        config::enm<spin_direction_mode> spin_direction{ spin_direction_mode::clockwise, "anti aim", "spin direction" };
+                        config::val<float> spin_speed{ 10.0f, "anti aim", "spin speed" };
 
                         antiaim()
                         {
@@ -485,6 +509,89 @@ namespace settings {
                                 id == cham_ids::outline_glow_ignorez ||
                                 id == cham_ids::glow ||
                                 id == cham_ids::glow_ignorez;
+                }
+
+                // Non-IZ materials (for visible / primary and overlay layers)
+                static constexpr const char* k_non_iz_material_names[]{
+                        "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl", "outline glow"
+                };
+                static constexpr int k_non_iz_material_count = 12;
+
+                static constexpr cham_ids k_non_iz_materials[ k_non_iz_material_count ]{
+                        cham_ids::liquid,
+                        cham_ids::metallic,
+                        cham_ids::matte,
+                        cham_ids::flat,
+                        cham_ids::bloom,
+                        cham_ids::outlines,
+                        cham_ids::glow,
+                        cham_ids::electric,
+                        cham_ids::distortion,
+                        cham_ids::hologram,
+                        cham_ids::pearl,
+                        cham_ids::outline_glow
+                };
+
+                [[nodiscard]] inline static int get_non_iz_index( cham_ids id ) noexcept
+                {
+                        for ( int i = 0; i < k_non_iz_material_count; ++i )
+                        {
+                                if ( k_non_iz_materials[ i ] == id )
+                                        return i;
+                        }
+                        switch ( id )
+                        {
+                        case cham_ids::liquid_ignorez: return 0;
+                        case cham_ids::matte_ignorez: return 2;
+                        case cham_ids::flat_ignorez: return 3;
+                        case cham_ids::bloom_ignorez: return 4;
+                        case cham_ids::outlines_ignorez: return 5;
+                        case cham_ids::glow_ignorez: return 6;
+                        case cham_ids::distortion_ignorez: return 8;
+                        case cham_ids::hologram_ignorez: return 9;
+                        case cham_ids::outline_glow_ignorez: return 11;
+                        default: return 2; // matte
+                        }
+                }
+
+                // IZ materials (for through wall / occluded secondary layer) without "(iz)" suffix
+                static constexpr const char* k_iz_material_names[]{
+                        "liquid", "matte", "flat", "bloom", "outlines", "glow", "distortion", "hologram", "outline glow"
+                };
+                static constexpr int k_iz_material_count = 9;
+
+                static constexpr cham_ids k_iz_materials[ k_iz_material_count ]{
+                        cham_ids::liquid_ignorez,
+                        cham_ids::matte_ignorez,
+                        cham_ids::flat_ignorez,
+                        cham_ids::bloom_ignorez,
+                        cham_ids::outlines_ignorez,
+                        cham_ids::glow_ignorez,
+                        cham_ids::distortion_ignorez,
+                        cham_ids::hologram_ignorez,
+                        cham_ids::outline_glow_ignorez
+                };
+
+                [[nodiscard]] inline static int get_iz_index( cham_ids id ) noexcept
+                {
+                        for ( int i = 0; i < k_iz_material_count; ++i )
+                        {
+                                if ( k_iz_materials[ i ] == id )
+                                        return i;
+                        }
+                        switch ( id )
+                        {
+                        case cham_ids::liquid: return 0;
+                        case cham_ids::matte: return 1;
+                        case cham_ids::flat: return 2;
+                        case cham_ids::bloom: return 3;
+                        case cham_ids::outlines: return 4;
+                        case cham_ids::glow: return 5;
+                        case cham_ids::distortion: return 6;
+                        case cham_ids::hologram: return 7;
+                        case cham_ids::outline_glow: return 8;
+                        default: return 2; // flat_ignorez
+                        }
                 }
 
                 struct outline_glow_config
@@ -570,6 +677,7 @@ namespace settings {
                         struct overlay
                         {
                                 xui::setting enabled{ true,{}, "esp overlay", "esp" };
+                                xui::setting only_visible{ false,{}, "only visible", "esp" };
 
                                 struct box
                                 {
@@ -819,6 +927,7 @@ namespace settings {
 
                                 explicit overlay(const std::string& prefix, bool enabled_default = true)
                                         : enabled{ enabled_default,{}, "esp overlay", prefix }
+                                        , only_visible{ false,{}, "only visible", prefix }
                                         , m_box{ prefix }
                                         , m_skeleton{ prefix }
                                         , m_health_bar{ prefix }
@@ -1175,11 +1284,13 @@ namespace settings {
                         {
                                 struct infernos
                                 {
+                                        xui::setting enabled{ true,{}, "inferno radius", "esp inferno" };
                                         config::col fill_color{ { 173, 192, 255, 50 }, "esp inferno", "fill color" };
                                         config::col outline_color{ { 255, 171, 234, 150 }, "esp inferno", "outline color" };
                                         config::val<float> outline_thickness{ 1.5f, "esp inferno", "outline thickness" };
                                         xui::setting glow{ true,{}, "glow", "esp inferno" };
                                         config::val<float> glow_strength{ 0.55f, "esp inferno", "glow strength" };
+                                        xui::setting step_detection{ true,{}, "step detection", "esp inferno" };
                                 } m_infernos{};
 
                                 struct indicator
@@ -1499,7 +1610,10 @@ namespace settings {
                         {
                                 if (!j.is_object())
                                 {
-                                        id = 0;
+                                        if (j.is_number_integer())
+                                                id = j.get<int>();
+                                        else
+                                                id = 0;
                                         return;
                                 }
 
@@ -1533,12 +1647,16 @@ namespace settings {
                         xui::setting clantag{ false,{}, "clantag", "name changer" };
                         xui::setting override_name{ false,{}, "override name", "name changer" };
                         config::str name{ "Player", "name changer", "name" };
+                        xui::setting anim_nickname{ false,{}, "anim nickname", "name changer" };
+                        config::val<float> anim_speed{ 0.25f, "name changer", "anim speed" };
+                        config::val<int> anim_type{ 0, "name changer", "anim type" };
                 } m_name_changer{};
 
                 struct projectile_trajectory
                 {
                         xui::setting enabled{ true,{}, "projectile trajectory", "trajectory" };
                         xui::setting straight_throw{ true,{}, "straight throw", "trajectory" };
+                        xui::setting super_toss{ true,{}, "super toss", "trajectory" };
 
                         config::col held_color{ { 173, 192, 255, 255 }, "trajectory", "held color" };
                         config::col thrown_color{ { 220, 225, 240, 255 }, "trajectory", "thrown color" };
@@ -1548,6 +1666,14 @@ namespace settings {
                         xui::setting glow{ true,{}, "glow", "trajectory" };
                         config::val<float> glow_strength{ 1.0f, "trajectory", "glow strength" };
                 } m_projectile_trajectory{};
+
+                struct smoke_and_fire_color
+                {
+                        xui::setting custom_smoke{ false,{}, "custom smoke color", "world" };
+                        config::col smoke_color{ { 180, 100, 255, 255 }, "world", "smoke color" };
+                        xui::setting custom_molotov{ false,{}, "custom molotov color", "world" };
+                        config::col molotov_color{ { 255, 90, 40, 255 }, "world", "molotov color" };
+                } m_smoke_and_fire_color{};
 
                 struct impacts
                 {
@@ -1601,6 +1727,11 @@ namespace settings {
                         config::col hit_marker_color{ { 255, 255, 255, 255 }, "impacts", "hit marker color" };
                         xui::setting hit_marker_glow{ true,{}, "glow", "hit marker" };
                         config::val<float> hit_marker_glow_strength{ 1.0f, "hit marker", "glow strength" };
+
+                        xui::setting damage_effect{ false,{}, "damage effect", "impacts" };
+                        config::col damage_effect_color{ { 255, 90, 90, 255 }, "impacts", "damage effect color" };
+                        config::val<float> damage_effect_duration{ 2.5f, "impacts", "damage effect duration" };
+                        config::val<float> damage_effect_size{ 1.0f, "impacts", "damage effect size" };
                 } m_impacts{};
 
                 struct removals
@@ -1775,10 +1906,12 @@ namespace settings {
                         xui::setting keybinds_list{ true,{}, "keybinds list", "widgets" };
                         config::val<float> keybinds_x{ -1.0f, "widgets", "keybinds x" };
                         config::val<float> keybinds_y{ -1.0f, "widgets", "keybinds y" };
+                        xui::setting keybinds_teammates_damage{ false,{}, "keybinds teammates damage", "widgets" };
 
                         xui::setting spectator_list{ true,{}, "spectator list", "widgets" };
                         config::val<float> spectator_x{ -1.0f, "widgets", "spectator x" };
                         config::val<float> spectator_y{ -1.0f, "widgets", "spectator y" };
+                        xui::setting spectator_teammates_damage{ false,{}, "spectator teammates damage", "widgets" };
 
                         enum class style : std::uint8_t { modern, classic, neo, glass };
 
@@ -1937,6 +2070,15 @@ namespace settings {
                         config::col ambient_color;
                         config::val<float> ambient_intensity;
 
+                        xui::setting overlight;
+                        config::val<float> overlight_intensity;
+                        config::val<float> overlight_bloom;
+                        config::col overlight_tint;
+
+                        xui::setting fullbright;
+                        config::val<float> fullbright_intensity;
+                        config::col fullbright_color;
+
                         scene(std::string_view cat = "scene")
                                 : skybox{ cat },
                                 lighting{ true,{}, "lighting", std::string(cat) },
@@ -1956,7 +2098,14 @@ namespace settings {
                                 dof_far_blurry{ 1400.0f, cat, "dof far blurry" },
                                 ambient{ true,{}, "ambient", std::string(cat) },
                                 ambient_color{ { 233, 145, 255, 255 }, cat, "ambient color" },
-                                ambient_intensity{ 1.1f, cat, "ambient intensity" }
+                                ambient_intensity{ 1.1f, cat, "ambient intensity" },
+                                overlight{ false,{}, "overlight", std::string(cat) },
+                                overlight_intensity{ 2.5f, cat, "overlight intensity" },
+                                overlight_bloom{ 1.5f, cat, "overlight bloom" },
+                                overlight_tint{ { 255, 255, 255, 255 }, cat, "overlight tint" },
+                                fullbright{ false,{}, "fullbright", std::string(cat) },
+                                fullbright_intensity{ 1.25f, cat, "fullbright intensity" },
+                                fullbright_color{ { 255, 255, 255, 255 }, cat, "fullbright color" }
                         {
                         }
                 };
@@ -2046,6 +2195,15 @@ namespace settings {
                         dst.ambient.value = src.ambient.value;
                         dst.ambient_color.value = src.ambient_color.value;
                         dst.ambient_intensity.value = src.ambient_intensity.value;
+
+                        dst.overlight.value = src.overlight.value;
+                        dst.overlight_intensity.value = src.overlight_intensity.value;
+                        dst.overlight_bloom.value = src.overlight_bloom.value;
+                        dst.overlight_tint.value = src.overlight_tint.value;
+
+                        dst.fullbright.value = src.fullbright.value;
+                        dst.fullbright_intensity.value = src.fullbright_intensity.value;
+                        dst.fullbright_color.value = src.fullbright_color.value;
                 }
 
                 static void copy_weather(weather& dst, const weather& src)
@@ -2146,6 +2304,9 @@ namespace settings {
                         aa.manual_right.value = false;
                         aa.manual_right.bind.active = false;
                 }
+
+                g_movement.m_test_strafer.enabled.value = g_movement.airstrafe.value;
+                g_movement.m_test_strafer.enabled.bind = g_movement.airstrafe.bind;
         }
 
 } // namespace settings

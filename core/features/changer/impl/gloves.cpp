@@ -42,78 +42,143 @@ namespace features::changer {
 	void gloves::on_frame_stage_notify( )
 	{
 		const auto local = systems::g_local.get( );
-		if ( !local.is_alive || !local.pawn || !local.controller )
-		{
-			this->reset( );
-			return;
-		}
-
-		if ( systems::g_local.is_in_cinematic( ) )
+		if ( !local.is_alive || systems::g_local.is_in_cinematic( ) || !local.pawn || !local.controller )
 		{
 			return;
 		}
 
-		if ( local.team != 2 && local.team != 3 )
+		const auto local_ctrl = local.controller;
+		const auto local_pawn = local.pawn;
+
+		if ( true )
 		{
-			return;
+			const auto local_team = memory::read<int>( local_pawn + SCHEMA( "C_BaseEntity", "m_iTeamNum"_hash ) );
+			if ( local_team == 2 || local_team == 3 )
+			{
+				if ( this->m_tracked_pawn != local_pawn )
+				{
+					this->reset( );
+					this->m_tracked_pawn = local_pawn;
+				}
+
+				const settings::changer::applied_skin* selected_skin{ nullptr };
+				const econ_item_system::item_def* selected_glove_def{ nullptr };
+
+				for ( const auto& [def_index, skin] : settings::g_changer.skins.data )
+				{
+					const auto def = g_econ_item_system.find_def( def_index );
+					if ( !def || def->category != econ_item_system::item_category::glove )
+					{
+						continue;
+					}
+
+					selected_skin = &skin;
+					selected_glove_def = def;
+					break;
+				}
+
+				const auto item_view = local_pawn + SCHEMA( "C_CSPlayerPawn", "m_EconGloves"_hash );
+				if ( !selected_glove_def )
+				{
+					if ( this->m_overridden )
+					{
+						this->restore( local_pawn, item_view, local_team );
+					}
+				}
+				else if ( this->m_original.captured || this->capture_original( item_view ) )
+				{
+					const auto current_def = memory::read<std::uint16_t>( item_view + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+					const auto current_id = memory::read<std::uint64_t>( item_view + SCHEMA( "C_EconItemView", "m_iItemID"_hash ) );
+					const auto needs_reapply = memory::read<bool>( local_pawn + SCHEMA( "C_CSPlayerPawn", "m_bNeedToReApplyGloves"_hash ) );
+
+					if ( !( current_def == static_cast< std::uint16_t >( selected_glove_def->def_index ) &&
+						current_id == detail::faux_item_id &&
+						this->paint_attributes_match( item_view, *selected_skin ) &&
+						!needs_reapply ) )
+					{
+						auto steam_id = steam::user::get_steam_id( );
+						if ( !steam_id && local_ctrl )
+						{
+							steam_id = memory::read<std::uint64_t>( local_ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+						}
+						this->apply( local_pawn, item_view, local_team, *selected_glove_def, *selected_skin, static_cast< std::uint32_t >( steam_id ) );
+					}
+				}
+			}
 		}
 
-		if ( this->m_tracked_pawn != local.pawn )
+		// Apply synced gloves for remote players
+		const auto all_players = systems::g_entities.get_by_type( systems::entities::type::player );
+		for ( const auto& p : all_players )
 		{
-			this->reset( );
-			this->m_tracked_pawn = local.pawn;
-		}
-
-		const settings::changer::applied_skin* selected_skin{ nullptr };
-		const econ_item_system::item_def* selected_glove_def{ nullptr };
-
-		for ( const auto& [def_index, skin] : settings::g_changer.skins.data )
-		{
-			const auto def = g_econ_item_system.find_def( def_index );
-			if ( !def || def->category != econ_item_system::item_category::glove )
+			const auto ctrl = p.ptr;
+			if ( !ctrl || ctrl == local_ctrl )
 			{
 				continue;
 			}
 
-			selected_skin = &skin;
-			selected_glove_def = def;
-			break;
-		}
-
-		const auto item_view = local.pawn + SCHEMA( "C_CSPlayerPawn", "m_EconGloves"_hash );
-		if ( !selected_glove_def )
-		{
-			if ( this->m_overridden )
+			const auto sid = memory::read<std::uint64_t>( ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+			constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+			if ( sid < steam_id_base && !g_skin_sync.m_bot_sync_test.load( ) )
 			{
-				this->restore( local.pawn, item_view, local.team );
+				continue;
 			}
 
-			return;
-		}
+			const auto remote_skin_data = g_skin_sync.get_remote_skin( sid );
+			if ( !remote_skin_data || remote_skin_data->skins.empty( ) )
+			{
+				continue;
+			}
 
-		if ( !this->m_original.captured && !this->capture_original( item_view ) )
-		{
-			return;
-		}
+			const settings::changer::applied_skin* remote_glove_skin{ nullptr };
+			const econ_item_system::item_def* remote_glove_def{ nullptr };
+			for ( const auto& [def_index, skin] : remote_skin_data->skins )
+			{
+				const auto def = g_econ_item_system.find_def( def_index );
+				if ( def && def->category == econ_item_system::item_category::glove )
+				{
+					remote_glove_skin = &skin;
+					remote_glove_def = def;
+					break;
+				}
+			}
 
-		const auto current_def = memory::read<std::uint16_t>( item_view + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
-		const auto current_id = memory::read<std::uint64_t>( item_view + SCHEMA( "C_EconItemView", "m_iItemID"_hash ) );
-		const auto needs_reapply = memory::read<bool>( local.pawn + SCHEMA( "C_CSPlayerPawn", "m_bNeedToReApplyGloves"_hash ) );
+			if ( !remote_glove_def || !remote_glove_skin )
+			{
+				continue;
+			}
 
-		if ( current_def == static_cast< std::uint16_t >( selected_glove_def->def_index ) &&
-			current_id == detail::faux_item_id &&
-			this->paint_attributes_match( item_view, *selected_skin ) &&
-			!needs_reapply )
-		{
-			return;
-		}
+			const auto pawn_handle = memory::read<std::uint32_t>( ctrl + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( !pawn_handle )
+			{
+				continue;
+			}
 
-		auto steam_id = steam::user::get_steam_id( );
-		if ( !steam_id && local.controller )
-		{
-			steam_id = memory::read<std::uint64_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+			const auto pawn = systems::g_entities.lookup( pawn_handle );
+			if ( !pawn || pawn < 0x10000 )
+			{
+				continue;
+			}
+
+			const auto remote_team = memory::read<int>( pawn + SCHEMA( "C_BaseEntity", "m_iTeamNum"_hash ) );
+			if ( remote_team != 2 && remote_team != 3 )
+			{
+				continue;
+			}
+
+			const auto remote_item_view = pawn + SCHEMA( "C_CSPlayerPawn", "m_EconGloves"_hash );
+			const auto current_def = memory::read<std::uint16_t>( remote_item_view + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) );
+			const auto current_id = memory::read<std::uint64_t>( remote_item_view + SCHEMA( "C_EconItemView", "m_iItemID"_hash ) );
+
+			if ( current_def == static_cast< std::uint16_t >( remote_glove_def->def_index ) &&
+				 current_id == detail::faux_item_id &&
+				 this->paint_attributes_match( remote_item_view, *remote_glove_skin ) )
+			{
+				continue;
+			}
+
+			this->apply( pawn, remote_item_view, remote_team, *remote_glove_def, *remote_glove_skin, static_cast< std::uint32_t >( sid ) );
 		}
-		this->apply( local.pawn, item_view, local.team, *selected_glove_def, *selected_skin, static_cast< std::uint32_t >( steam_id ) );
 	}
 
 	bool gloves::capture_original( std::uintptr_t item_view )

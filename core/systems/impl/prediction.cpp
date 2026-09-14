@@ -58,6 +58,19 @@ namespace systems {
 
 	void prediction::capture_prestate( std::uintptr_t local_pawn, std::uintptr_t movement_services )
 	{
+		// A missing scene node must not leave the previous command's position alive.
+		this->m_prestate = {};
+		if ( !local_pawn || !movement_services )
+		{
+			return;
+		}
+
+		const auto game_scene_node = memory::read<std::uintptr_t>( local_pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
+		if ( !game_scene_node )
+		{
+			return;
+		}
+
 		this->m_prestate.flags = memory::read<std::uint32_t>( local_pawn + SCHEMA( "C_BaseEntity", "m_fFlags"_hash ) );
 		this->m_prestate.networked_velocity = memory::read<math::vector3>( local_pawn + SCHEMA( "C_BaseEntity", "m_vecVelocity"_hash ) );
 		this->m_prestate.velocity = memory::read<math::vector3>( local_pawn + SCHEMA( "C_BaseEntity", "m_vecAbsVelocity"_hash ) );
@@ -68,14 +81,18 @@ namespace systems {
 		this->m_prestate.last_movement_impulses.y = memory::read<float>( movement_services + SCHEMA( "CPlayer_MovementServices", "m_flCmdLeftMove"_hash ) );
 		this->m_prestate.last_movement_impulses.z = memory::read<float>( movement_services + SCHEMA( "CPlayer_MovementServices", "m_flCmdUpMove"_hash ) );
 
-		const auto game_scene_node = memory::read<std::uintptr_t>( local_pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
-		if ( game_scene_node )
-		{
-			this->m_prestate.origin = memory::read<math::vector3>( game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) );
-			// m_vecOrigin is an encoded network-origin object, not a vector3.
-			// Use the evaluated position anywhere a plain world-space vector is needed.
-			this->m_prestate.networked_origin = this->m_prestate.origin;
-		}
+		this->m_prestate.origin = memory::read<math::vector3>( game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) );
+		// m_vecOrigin is encoded; use evaluated world-space coordinates.
+		this->m_prestate.networked_origin = this->m_prestate.origin;
+
+		const auto collision = local_pawn + SCHEMA( "C_BaseModelEntity", "m_Collision"_hash );
+		this->m_prestate.collision_mins = memory::read<math::vector3>( collision + SCHEMA( "CCollisionProperty", "m_vecMins"_hash ) );
+		this->m_prestate.collision_maxs = memory::read<math::vector3>( collision + SCHEMA( "CCollisionProperty", "m_vecMaxs"_hash ) );
+		this->m_prestate.duck_amount = memory::read<float>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_flDuckAmount"_hash ) );
+		this->m_prestate.ducked = memory::read<bool>( movement_services + SCHEMA( "CCSPlayer_MovementServices", "m_bDucked"_hash ) );
+		this->m_prestate.gravity_scale = memory::read<float>( local_pawn + SCHEMA( "C_BaseEntity", "m_flGravityScale"_hash ) );
+		this->m_prestate.pawn = local_pawn;
+		this->m_prestate.movement_valid = true;
 	}
 
 	bool prediction::simulate( input::usercmd* cmd, const systems::local::snapshot& local, const std::function<void( )>& fn )
@@ -203,6 +220,12 @@ namespace systems {
 		guard.save_raw( local.pawn + SCHEMA( "C_CSPlayerPawn", "m_vecVelocityHistory"_hash ), sizeof( math::vector3 ) * 2 );
 
 		guard.save<math::vector3>( local.pawn + SCHEMA( "C_BaseModelEntity", "m_vecViewOffset"_hash ) );
+
+		// Duck/unduck can change the collision hull during speculative movement.
+		// Restoring flags and duck_amount alone does not restore these bounds.
+		const auto collision = local.pawn + SCHEMA( "C_BaseModelEntity", "m_Collision"_hash );
+		guard.save<math::vector3>( collision + SCHEMA( "CCollisionProperty", "m_vecMins"_hash ) );
+		guard.save<math::vector3>( collision + SCHEMA( "CCollisionProperty", "m_vecMaxs"_hash ) );
 
 		guard.save<int>( aim_punch_services + SCHEMA( "CCSPlayer_AimPunchServices", "m_predictableBaseTick"_hash ) );
 		guard.save<float>( aim_punch_services + SCHEMA( "CCSPlayer_AimPunchServices", "m_predictableBaseTickInterpAmount"_hash ) );

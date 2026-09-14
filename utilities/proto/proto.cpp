@@ -73,12 +73,12 @@ namespace proto {
 
 	// base_usercmd_pb
 
-	bool base_usercmd_pb::has_buttons_pb( ) const { return this->m_has_bits.test( 0x2u ); }
+	bool base_usercmd_pb::has_buttons_pb( ) const { return this->m_has_bits.test( 0x2u ) && this->m_buttons_pb != nullptr; }
 	const in_button_state_pb* base_usercmd_pb::buttons_pb( ) const { return impl_ptr<const in_button_state_pb>( this->m_buttons_pb ); }
-	in_button_state_pb* base_usercmd_pb::mutable_buttons_pb( ) { this->m_has_bits.set( 0x2u ); return impl_ptr<in_button_state_pb>( this->m_buttons_pb ); }
-	bool base_usercmd_pb::has_viewangles( ) const { return this->m_has_bits.test( 0x4u ); }
+	in_button_state_pb* base_usercmd_pb::mutable_buttons_pb( ) { if ( !this->m_buttons_pb ) return nullptr; this->m_has_bits.set( 0x2u ); return impl_ptr<in_button_state_pb>( this->m_buttons_pb ); }
+	bool base_usercmd_pb::has_viewangles( ) const { return this->m_has_bits.test( 0x4u ) && this->m_viewangles != nullptr; }
 	const msg_qangle* base_usercmd_pb::viewangles( ) const { return impl_ptr<const msg_qangle>( this->m_viewangles ); }
-	msg_qangle* base_usercmd_pb::mutable_viewangles( ) { this->m_has_bits.set( 0x4u ); return impl_ptr<msg_qangle>( this->m_viewangles ); }
+	msg_qangle* base_usercmd_pb::mutable_viewangles( ) { if ( !this->m_viewangles ) return nullptr; this->m_has_bits.set( 0x4u ); return impl_ptr<msg_qangle>( this->m_viewangles ); }
 	const repeated_ptr_field<subtick_move_step>& base_usercmd_pb::subtick_moves( ) const { return this->m_subtick_moves; }
 	repeated_ptr_field<subtick_move_step>* base_usercmd_pb::mutable_subtick_moves( ) { return &this->m_subtick_moves; }
 	int base_usercmd_pb::subtick_moves_size( ) const { return this->m_subtick_moves.size( ); }
@@ -121,9 +121,9 @@ namespace proto {
 
 	// input_history_entry
 
-	bool input_history_entry::has_view_angles( ) const { return this->m_has_bits.test( 0x1u ); }
+	bool input_history_entry::has_view_angles( ) const { return this->m_has_bits.test( 0x1u ) && this->m_view_angles != nullptr; }
 	const msg_qangle* input_history_entry::view_angles( ) const { return impl_ptr<const msg_qangle>( this->m_view_angles ); }
-	msg_qangle* input_history_entry::mutable_view_angles( ) { this->m_has_bits.set( 0x1u ); return impl_ptr<msg_qangle>( this->m_view_angles ); }
+	msg_qangle* input_history_entry::mutable_view_angles( ) { if ( !this->m_view_angles ) return nullptr; this->m_has_bits.set( 0x1u ); return impl_ptr<msg_qangle>( this->m_view_angles ); }
 	bool input_history_entry::has_cl_interp( ) const { return this->m_has_bits.test( 0x2u ); }
 	const interpolation_info_cl* input_history_entry::cl_interp( ) const { return impl_ptr<const interpolation_info_cl>( this->m_cl_interp ); }
 	interpolation_info_cl* input_history_entry::mutable_cl_interp( ) { this->m_has_bits.set( 0x2u ); return impl_ptr<interpolation_info_cl>( this->m_cl_interp ); }
@@ -175,8 +175,8 @@ namespace proto {
 
 	// csgo_usercmd_pb
 
-	bool csgo_usercmd_pb::has_base( ) const { return this->m_has_bits.test( 0x1u ); }
-	base_usercmd_pb* csgo_usercmd_pb::mutable_base( ) { this->m_has_bits.set( 0x1u ); return impl_ptr<base_usercmd_pb>( this->m_base ); }
+	bool csgo_usercmd_pb::has_base( ) const { return this->m_has_bits.test( 0x1u ) && this->m_base != nullptr; }
+	base_usercmd_pb* csgo_usercmd_pb::mutable_base( ) { if ( !this->m_base ) return nullptr; this->m_has_bits.set( 0x1u ); return impl_ptr<base_usercmd_pb>( this->m_base ); }
 	const base_usercmd_pb* csgo_usercmd_pb::base( ) const { return impl_ptr<const base_usercmd_pb>( this->m_base ); }
 
 	int csgo_usercmd_pb::input_history_size( ) const { return this->m_input_history.size( ); }

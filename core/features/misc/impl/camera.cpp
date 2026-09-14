@@ -22,6 +22,7 @@ namespace features::misc {
 
 		math::vector3 s_spec_thirdperson_angles{};
 		bool s_was_spec_thirdperson{ false };
+		bool s_had_spec_mouse_event{ false };
 		std::uintptr_t s_last_spec_pawn{ 0 };
 
 		using SDL_GetRelativeMouseState_t = std::uint32_t( * )( float* x, float* y );
@@ -35,19 +36,6 @@ namespace features::misc {
 		inline bool s_global_mouse_valid = false;
 		inline POINT s_last_win_cursor{};
 		inline bool s_win_cursor_valid = false;
-
-		bool is_game_window_focused( )
-		{
-			const auto fg = GetForegroundWindow( );
-			if ( !fg )
-			{
-				return false;
-			}
-
-			DWORD pid = 0;
-			GetWindowThreadProcessId( fg, &pid );
-			return pid == GetCurrentProcessId( );
-		}
 
 		void query_mouse_delta( float& out_dx, float& out_dy )
 		{
@@ -73,12 +61,23 @@ namespace features::misc {
 			if ( s_get_relative_mouse_state )
 			{
 				float r_dx = 0.0f, r_dy = 0.0f;
-				s_get_relative_mouse_state( &r_dx, &r_dy );
-				if ( std::fabsf( r_dx ) > 0.0001f || std::fabsf( r_dy ) > 0.0001f )
+				__try
 				{
-					out_dx = r_dx;
-					out_dy = r_dy;
-					return;
+					s_get_relative_mouse_state( &r_dx, &r_dy );
+				}
+				__except ( EXCEPTION_EXECUTE_HANDLER )
+				{
+					s_get_relative_mouse_state = nullptr;
+				}
+
+				if ( std::isfinite( r_dx ) && std::isfinite( r_dy ) )
+				{
+					if ( std::fabsf( r_dx ) > 0.0001f || std::fabsf( r_dy ) > 0.0001f )
+					{
+						out_dx = std::clamp( r_dx, -200.0f, 200.0f );
+						out_dy = std::clamp( r_dy, -200.0f, 200.0f );
+						return;
+					}
 				}
 			}
 
@@ -86,24 +85,35 @@ namespace features::misc {
 			if ( s_get_global_mouse_state )
 			{
 				float gx = 0.0f, gy = 0.0f;
-				s_get_global_mouse_state( &gx, &gy );
-				if ( !s_global_mouse_valid )
+				__try
 				{
-					s_last_global_x = gx;
-					s_last_global_y = gy;
-					s_global_mouse_valid = true;
+					s_get_global_mouse_state( &gx, &gy );
 				}
-				else
+				__except ( EXCEPTION_EXECUTE_HANDLER )
 				{
-					const float g_dx = gx - s_last_global_x;
-					const float g_dy = gy - s_last_global_y;
-					s_last_global_x = gx;
-					s_last_global_y = gy;
-					if ( std::fabsf( g_dx ) > 0.0001f || std::fabsf( g_dy ) > 0.0001f )
+					s_get_global_mouse_state = nullptr;
+				}
+
+				if ( std::isfinite( gx ) && std::isfinite( gy ) )
+				{
+					if ( !s_global_mouse_valid )
 					{
-						out_dx = g_dx;
-						out_dy = g_dy;
-						return;
+						s_last_global_x = gx;
+						s_last_global_y = gy;
+						s_global_mouse_valid = true;
+					}
+					else
+					{
+						const float g_dx = gx - s_last_global_x;
+						const float g_dy = gy - s_last_global_y;
+						s_last_global_x = gx;
+						s_last_global_y = gy;
+						if ( std::fabsf( g_dx ) > 0.0001f || std::fabsf( g_dy ) > 0.0001f )
+						{
+							out_dx = std::clamp( g_dx, -200.0f, 200.0f );
+							out_dy = std::clamp( g_dy, -200.0f, 200.0f );
+							return;
+						}
 					}
 				}
 			}
@@ -124,8 +134,8 @@ namespace features::misc {
 					s_last_win_cursor = cur;
 					if ( std::fabsf( w_dx ) > 0.0001f || std::fabsf( w_dy ) > 0.0001f )
 					{
-						out_dx = w_dx;
-						out_dy = w_dy;
+						out_dx = std::clamp( w_dx, -200.0f, 200.0f );
+						out_dy = std::clamp( w_dy, -200.0f, 200.0f );
 						return;
 					}
 				}
@@ -153,7 +163,8 @@ namespace features::misc {
 		if ( !systems::g_local.is_in_cinematic( ) )
 		{
 			const auto target_pawn = local.view_pawn( );
-			const bool allow_thirdperson = local.is_alive || ( settings::g_misc.m_camera.spectator_thirdperson.value && local.observer_pawn != 0 );
+			const bool is_spec = !local.is_alive && local.observer_pawn != 0;
+			const bool allow_thirdperson = local.is_alive ? settings::g_misc.m_camera.thirdperson.value : ( settings::g_misc.m_camera.spectator_thirdperson.value && is_spec );
 
 			if ( this->do_freecam( view_setup ) )
 			{
@@ -203,14 +214,15 @@ namespace features::misc {
 		this->m_cached_scoped = is_scoped;
 		this->m_cached_target_fov = target_fov;
 
-		const auto ratio = CONVAR ("zoom_sensitivity_ratio")->get<float>( );
+		const auto cvar = CONVAR( "zoom_sensitivity_ratio" );
+		const auto ratio = cvar ? cvar->get<float>( ) : 1.0f;
 		const auto desired = ratio * ( target_fov / 90.0f );
 
 		this->m_cached_fov_sensitivity = desired;
-		memory::write<float>( player_pawn + SCHEMA( "C_BasePlayerPawn", "m_flFOVSensitivityAdjust"_hash ), desired );
+		memory::safe_write<float>( player_pawn + SCHEMA( "C_BasePlayerPawn", "m_flFOVSensitivityAdjust"_hash ), desired );
 	}
 
-	void camera::do_thirdperson( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const
+	void camera::do_thirdperson( std::uintptr_t view_setup, std::uintptr_t target_pawn )
 	{
 		if ( !view_setup || !target_pawn )
 		{
@@ -219,53 +231,29 @@ namespace features::misc {
 
 		const auto& cfg = settings::g_misc.m_camera;
 		const auto local = systems::g_local.get( );
-
-		// If spectating another player, manage observer mode for thirdperson model rendering
-		if ( !local.is_alive && local.observer_pawn )
+		const bool tp_enabled = local.is_alive ? cfg.thirdperson.value : ( cfg.spectator_thirdperson.value && local.observer_pawn != 0 );
+		if ( !tp_enabled )
 		{
-			const auto local_player_controller = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-			if ( local_player_controller )
-			{
-				const auto obs_pawn_handle = memory::read<std::uint32_t>( local_player_controller + SCHEMA( "CCSPlayerController", "m_hObserverPawn"_hash ) );
-				const auto obs_pawn = systems::g_entities.lookup( obs_pawn_handle );
-				if ( obs_pawn )
-				{
-					const auto obs_services = memory::read<std::uintptr_t>( obs_pawn + SCHEMA( "C_BasePlayerPawn", "m_pObserverServices"_hash ) );
-					if ( obs_services )
-					{
-						const auto current_mode = memory::read<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ) );
-						if ( !cfg.thirdperson.value )
-						{
-							if ( current_mode == 5 )
-							{
-								memory::write<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ), 4 );
-							}
-							return;
-						}
-						else if ( current_mode == 4 )
-						{
-							memory::write<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ), 5 );
-						}
-					}
-				}
-			}
-		}
-
-		if ( !cfg.thirdperson.value )
-		{
+			s_was_spec_thirdperson = false;
 			return;
 		}
 
-		const auto game_scene_node = memory::read<std::uintptr_t>( target_pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) );
-		math::vector3 eye_position = memory::read<math::vector3>( view_setup + 0x4a0 );
+		const auto game_scene_node = memory::safe_read<std::uintptr_t>( target_pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
+		math::vector3 eye_position = memory::safe_read<math::vector3>( view_setup + 0x4a0 ).value_or( math::vector3{} );
 		if ( game_scene_node )
 		{
-			const auto origin = memory::read<math::vector3>( game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) );
-			const auto view_offset = memory::read<math::vector3>( target_pawn + SCHEMA( "C_BaseModelEntity", "m_vecViewOffset"_hash ) );
-			if ( origin.length_sqr( ) > 0.0f )
+			const auto origin = memory::safe_read<math::vector3>( game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) ).value_or( math::vector3{} );
+			const auto view_offset = memory::safe_read<math::vector3>( target_pawn + SCHEMA( "C_BaseModelEntity", "m_vecViewOffset"_hash ) ).value_or( math::vector3{} );
+			if ( origin.length_sqr( ) > 0.0f && std::isfinite( origin.x ) && std::isfinite( origin.y ) && std::isfinite( origin.z ) &&
+			     std::isfinite( view_offset.x ) && std::isfinite( view_offset.y ) && std::isfinite( view_offset.z ) )
 			{
 				eye_position = origin + view_offset;
 			}
+		}
+
+		if ( !std::isfinite( eye_position.x ) || !std::isfinite( eye_position.y ) || !std::isfinite( eye_position.z ) )
+		{
+			return;
 		}
 
 		math::vector3 view_angles{};
@@ -276,81 +264,112 @@ namespace features::misc {
 		}
 		else
 		{
-			// Spectator thirdperson mouse look
+			// Free camera orbital rotation around the spectated player
 			if ( !s_was_spec_thirdperson || s_last_spec_pawn != target_pawn )
 			{
-				s_spec_thirdperson_angles = memory::read<math::vector3>( view_setup + 0x4b8 );
+				s_spec_thirdperson_angles = memory::safe_read<math::vector3>( target_pawn + SCHEMA( "C_CSPlayerPawn", "m_angEyeAngles"_hash ) ).value_or( math::vector3{} );
+				if ( !std::isfinite( s_spec_thirdperson_angles.x ) || !std::isfinite( s_spec_thirdperson_angles.y ) || !std::isfinite( s_spec_thirdperson_angles.z ) || s_spec_thirdperson_angles.length_sqr( ) < 0.001f )
+				{
+					s_spec_thirdperson_angles = memory::safe_read<math::vector3>( view_setup + 0x4b8 ).value_or( math::vector3{} );
+				}
+				s_spec_thirdperson_angles.x = std::clamp( s_spec_thirdperson_angles.x, -89.0f, 89.0f );
+				s_spec_thirdperson_angles.y = math::helpers::normalize_yaw( s_spec_thirdperson_angles.y );
+				s_spec_thirdperson_angles.z = 0.0f;
+
 				s_was_spec_thirdperson = true;
 				s_last_spec_pawn = target_pawn;
-				s_global_mouse_valid = false;
-				s_win_cursor_valid = false;
 			}
 
-			float dx = 0.0f, dy = 0.0f;
-			query_mouse_delta( dx, dy );
-
-			const bool can_rotate = !rendering::g_menu.is_open( ) && is_game_window_focused( );
-			if ( can_rotate )
+			// Fallback mouse look if WM_INPUT was not handled
+			if ( !s_had_spec_mouse_event && !rendering::g_menu.is_open( ) )
 			{
+				float dx = 0.0f, dy = 0.0f;
+				query_mouse_delta( dx, dy );
 				if ( std::fabsf( dx ) > 0.0001f || std::fabsf( dy ) > 0.0001f )
 				{
 					float sens = 1.0f;
-					if ( const auto cvar = CONVAR( "sensitivity" ) )
-					{
-						sens = cvar->get< float >( );
-					}
-					sens = std::max( sens, 0.001f );
+					if ( const auto cvar = CONVAR( "sensitivity" ) ) sens = cvar->get< float >( );
+					sens = std::clamp( sens, 0.001f, 100.0f );
 
 					float m_pitch = 0.022f;
-					if ( const auto cvar = CONVAR( "m_pitch" ) )
-					{
-						m_pitch = cvar->get< float >( );
-					}
+					if ( const auto cvar = CONVAR( "m_pitch" ) ) m_pitch = cvar->get< float >( );
 					float m_yaw = 0.022f;
-					if ( const auto cvar = CONVAR( "m_yaw" ) )
-					{
-						m_yaw = cvar->get< float >( );
-					}
+					if ( const auto cvar = CONVAR( "m_yaw" ) ) m_yaw = cvar->get< float >( );
 
 					s_spec_thirdperson_angles.x = std::clamp( s_spec_thirdperson_angles.x + dy * m_pitch * sens, -89.0f, 89.0f );
 					s_spec_thirdperson_angles.y = math::helpers::normalize_yaw( s_spec_thirdperson_angles.y - dx * m_yaw * sens );
 					s_spec_thirdperson_angles.z = 0.0f;
 				}
 			}
-			else
-			{
-				s_global_mouse_valid = false;
-				s_win_cursor_valid = false;
-			}
+			s_had_spec_mouse_event = false;
 
 			view_angles = s_spec_thirdperson_angles;
 		}
 
-		math::vector3 forward{};
+		if ( !std::isfinite( view_angles.x ) || !std::isfinite( view_angles.y ) || !std::isfinite( view_angles.z ) )
 		{
-			math::helpers::angle_vectors_left( view_angles, &forward );
+			view_angles = {};
 		}
 
-		const float distance = cfg.thirdperson_distance.value;
-		const float hull_size = cfg.thirdperson_hull_size.value;
+		view_angles.x = std::clamp( view_angles.x, -89.0f, 89.0f );
+		view_angles.y = math::helpers::normalize_yaw( view_angles.y );
+		view_angles.z = 0.0f;
+
+		math::vector3 forward{};
+		math::helpers::angle_vectors_left( view_angles, &forward );
+
+		if ( !std::isfinite( forward.x ) || !std::isfinite( forward.y ) || !std::isfinite( forward.z ) )
+		{
+			forward = { 1.0f, 0.0f, 0.0f };
+		}
+
+		const float distance = std::clamp( cfg.thirdperson_distance.value, 10.0f, 500.0f );
+		const float hull_size = std::clamp( cfg.thirdperson_hull_size.value, 0.0f, 50.0f );
 
 		auto camera_position = eye_position - forward * distance;
-		const auto hull = math::vector3{ -hull_size, -hull_size, -hull_size };
-		const auto result = systems::g_tracing.trace_hull( eye_position, camera_position, hull, hull, target_pawn );
 
-		if ( result.fraction < 1.0f )
+		if ( std::isfinite( camera_position.x ) && std::isfinite( camera_position.y ) && std::isfinite( camera_position.z ) )
 		{
-			const auto world = systems::g_entities.get_by_index( 0 );
-			if ( result.hit_entity == world )
+			if ( hull_size > 0.001f )
 			{
-				camera_position = eye_position + ( camera_position - eye_position ) * result.fraction;
+				if ( hull_size > 0.1f )
+				{
+					const auto hull_mins = math::vector3{ -hull_size, -hull_size, -hull_size };
+					const auto hull_maxs = math::vector3{ hull_size, hull_size, hull_size };
+					const auto result = systems::g_tracing.trace_hull( eye_position, camera_position, hull_mins, hull_maxs, target_pawn );
+
+					if ( result.fraction < 1.0f )
+					{
+						const auto world = systems::g_entities.get_by_index( 0 );
+						if ( result.hit_entity == world || result.hit_entity == 0 )
+						{
+							camera_position = eye_position + ( camera_position - eye_position ) * result.fraction;
+						}
+					}
+				}
+				else
+				{
+					const auto result = systems::g_tracing.trace( eye_position, camera_position, target_pawn );
+					if ( result.fraction < 1.0f )
+					{
+						const auto world = systems::g_entities.get_by_index( 0 );
+						if ( result.hit_entity == world || result.hit_entity == 0 )
+						{
+							camera_position = eye_position + ( camera_position - eye_position ) * result.fraction;
+						}
+					}
+				}
 			}
+			// If hull_size <= 0.001f, wall tracing is disabled: camera passes through walls freely
 		}
 
-		memory::write<math::vector3>( view_setup + 0x4a0, camera_position );
+		if ( std::isfinite( camera_position.x ) && std::isfinite( camera_position.y ) && std::isfinite( camera_position.z ) )
+		{
+			memory::safe_write<math::vector3>( view_setup + 0x4a0, camera_position );
+		}
 		if ( !local.is_alive )
 		{
-			memory::write<math::vector3>( view_setup + 0x4b8, s_spec_thirdperson_angles );
+			memory::safe_write<math::vector3>( view_setup + 0x4b8, view_angles );
 		}
 	}
 
@@ -367,10 +386,10 @@ namespace features::misc {
 			return;
 		}
 
-		const auto is_scoped = memory::read<bool>( target_pawn + SCHEMA( "C_CSPlayerPawn", "m_bIsScoped"_hash ) );
+		const auto is_scoped = memory::safe_read<bool>( target_pawn + SCHEMA( "C_CSPlayerPawn", "m_bIsScoped"_hash ) ).value_or( false );
 		const auto target_fov = ( is_scoped && cfg.scoped_fov_override.value ) ? cfg.scoped_fov.value : cfg.fov.value;
 
-		memory::write<float>( view_setup + k_fov_offset, target_fov );
+		memory::safe_write<float>( view_setup + k_fov_offset, target_fov );
 
 		this->update_fov_sensitivity( target_pawn );
 	}
@@ -386,19 +405,57 @@ namespace features::misc {
 
 		if ( cfg.change_aspect_ratio.value )
 		{
-			const auto base_fov = memory::read<float>( view_setup + k_fov_offset );
-			const auto flags = memory::read<std::uint8_t>( view_setup + k_view_flags_offset );
+			const auto base_fov = memory::safe_read<float>( view_setup + k_fov_offset ).value_or( 90.0f );
+			const auto flags = memory::safe_read<std::uint8_t>( view_setup + k_view_flags_offset ).value_or( 0 );
 
 			// Explicit aspect bypasses the game's native 4:3-based FOV conversion.
-			memory::write<float>( view_setup + k_fov_offset, scale_horizontal_fov( base_fov, cfg.aspect_ratio ) );
-			memory::write<float>( view_setup + k_aspect_ratio_offset, cfg.aspect_ratio );
-			memory::write<std::uint8_t>( view_setup + k_view_flags_offset, flags | k_explicit_aspect_ratio_flag );
+			memory::safe_write<float>( view_setup + k_fov_offset, scale_horizontal_fov( base_fov, cfg.aspect_ratio ) );
+			memory::safe_write<float>( view_setup + k_aspect_ratio_offset, cfg.aspect_ratio );
+			memory::safe_write<std::uint8_t>( view_setup + k_view_flags_offset, flags | k_explicit_aspect_ratio_flag );
 		}
 		else
 		{
-			const auto flags = memory::read<std::uint8_t>( view_setup + k_view_flags_offset );
-			memory::write<std::uint8_t>( view_setup + k_view_flags_offset,
+			const auto flags = memory::safe_read<std::uint8_t>( view_setup + k_view_flags_offset ).value_or( 0 );
+			memory::safe_write<std::uint8_t>( view_setup + k_view_flags_offset,
 				flags & static_cast<std::uint8_t>( ~k_explicit_aspect_ratio_flag ) );
+		}
+	}
+
+	bool camera::is_spec_thirdperson_active( ) const noexcept
+	{
+		const auto local = systems::g_local.get( );
+		return !local.is_alive && local.observer_pawn != 0 && settings::g_misc.m_camera.spectator_thirdperson.value && !this->m_was_freecam_active;
+	}
+
+	void camera::on_spec_thirdperson_mouse_delta( float d_pitch, float d_yaw )
+	{
+		if ( !this->is_spec_thirdperson_active( ) || rendering::g_menu.is_open( ) )
+		{
+			return;
+		}
+
+		if ( ( std::fabsf( d_pitch ) > 0.0001f || std::fabsf( d_yaw ) > 0.0001f ) && std::isfinite( d_pitch ) && std::isfinite( d_yaw ) )
+		{
+			s_spec_thirdperson_angles.x = std::clamp( s_spec_thirdperson_angles.x + d_pitch, -89.0f, 89.0f );
+			s_spec_thirdperson_angles.y = math::helpers::normalize_yaw( s_spec_thirdperson_angles.y + d_yaw );
+			s_spec_thirdperson_angles.z = 0.0f;
+			s_had_spec_mouse_event = true;
+		}
+	}
+
+	void camera::on_mouse_delta( float d_pitch, float d_yaw )
+	{
+		if ( !this->m_was_freecam_active || rendering::g_menu.is_open( ) )
+		{
+			return;
+		}
+
+		if ( ( std::fabsf( d_pitch ) > 0.0001f || std::fabsf( d_yaw ) > 0.0001f ) && std::isfinite( d_pitch ) && std::isfinite( d_yaw ) )
+		{
+			this->m_freecam_angles.x = std::clamp( this->m_freecam_angles.x + d_pitch, -89.0f, 89.0f );
+			this->m_freecam_angles.y = math::helpers::normalize_yaw( this->m_freecam_angles.y + d_yaw );
+			this->m_freecam_angles.z = 0.0f;
+			this->m_had_mouse_event = true;
 		}
 	}
 
@@ -414,35 +471,14 @@ namespace features::misc {
 		{
 			if ( this->m_was_freecam_active )
 			{
-				if ( cfg.freecam_block_input.value )
+				if ( std::isfinite( this->m_saved_viewangles.x ) && std::isfinite( this->m_saved_viewangles.y ) && std::isfinite( this->m_saved_viewangles.z ) )
 				{
 					systems::g_input.set_view_angles( this->m_saved_viewangles );
 				}
 
-				const auto local = systems::g_local.get( );
-				if ( !local.is_alive && local.observer_pawn && !settings::g_misc.m_camera.spectator_thirdperson.value )
-				{
-					const auto local_player_controller = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-					if ( local_player_controller )
-					{
-						const auto obs_pawn_handle = memory::read<std::uint32_t>( local_player_controller + SCHEMA( "CCSPlayerController", "m_hObserverPawn"_hash ) );
-						const auto obs_pawn = systems::g_entities.lookup( obs_pawn_handle );
-						if ( obs_pawn )
-						{
-							const auto obs_services = memory::read<std::uintptr_t>( obs_pawn + SCHEMA( "C_BasePlayerPawn", "m_pObserverServices"_hash ) );
-							if ( obs_services )
-							{
-								const auto current_mode = memory::read<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ) );
-								if ( current_mode == 5 )
-								{
-									memory::write<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ), 4 );
-								}
-							}
-						}
-					}
-				}
-
 				this->m_was_freecam_active = false;
+				this->m_had_mouse_event = false;
+				this->m_cmd_buttons = 0;
 				s_was_spec_freecam = false;
 				s_global_mouse_valid = false;
 				s_win_cursor_valid = false;
@@ -453,131 +489,121 @@ namespace features::misc {
 		const auto now = std::chrono::steady_clock::now( );
 		if ( !this->m_was_freecam_active )
 		{
-			this->m_freecam_pos = memory::read<math::vector3>( view_setup + 0x4a0 );
-			if ( !std::isfinite( this->m_freecam_pos.x ) || !std::isfinite( this->m_freecam_pos.y ) || !std::isfinite( this->m_freecam_pos.z ) )
+			this->m_freecam_pos = memory::safe_read<math::vector3>( view_setup + 0x4a0 ).value_or( math::vector3{} );
+			if ( !std::isfinite( this->m_freecam_pos.x ) || !std::isfinite( this->m_freecam_pos.y ) || !std::isfinite( this->m_freecam_pos.z ) || this->m_freecam_pos.length_sqr( ) < 1.0f )
 			{
-				this->m_freecam_pos = {};
-			}
-
-			this->m_saved_viewangles = systems::g_input.get_view_angles( );
-			this->m_last_override_time = now;
-			this->m_was_freecam_active = true;
-			s_was_spec_freecam = false;
-			s_global_mouse_valid = false;
-			s_win_cursor_valid = false;
-			s_spec_freecam_angles = memory::read<math::vector3>( view_setup + 0x4b8 );
-			if ( !std::isfinite( s_spec_freecam_angles.x ) || !std::isfinite( s_spec_freecam_angles.y ) || !std::isfinite( s_spec_freecam_angles.z ) )
-			{
-				s_spec_freecam_angles = {};
-			}
-		}
-
-		const float dt = std::clamp( std::chrono::duration<float>( now - this->m_last_override_time ).count( ), 0.0f, 0.1f );
-		this->m_last_override_time = now;
-
-		const auto local = systems::g_local.get( );
-
-		// In spectator mode, switch to observer mode 5 so the full player model is rendered
-		if ( !local.is_alive && local.observer_pawn )
-		{
-			const auto local_player_controller = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-			if ( local_player_controller )
-			{
-				const auto obs_pawn_handle = memory::read<std::uint32_t>( local_player_controller + SCHEMA( "CCSPlayerController", "m_hObserverPawn"_hash ) );
-				const auto obs_pawn = systems::g_entities.lookup( obs_pawn_handle );
-				if ( obs_pawn )
+				const auto local = systems::g_local.get( );
+				const auto view_pawn = local.view_pawn( );
+				if ( view_pawn )
 				{
-					const auto obs_services = memory::read<std::uintptr_t>( obs_pawn + SCHEMA( "C_BasePlayerPawn", "m_pObserverServices"_hash ) );
-					if ( obs_services )
+					const auto game_scene_node = memory::safe_read<std::uintptr_t>( view_pawn + SCHEMA( "C_BaseEntity", "m_pGameSceneNode"_hash ) ).value_or( 0 );
+					if ( game_scene_node )
 					{
-						const auto current_mode = memory::read<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ) );
-						if ( current_mode == 4 )
+						const auto origin = memory::safe_read<math::vector3>( game_scene_node + SCHEMA( "CGameSceneNode", "m_vecAbsOrigin"_hash ) ).value_or( math::vector3{} );
+						const auto view_offset = memory::safe_read<math::vector3>( view_pawn + SCHEMA( "C_BaseModelEntity", "m_vecViewOffset"_hash ) ).value_or( math::vector3{} );
+						if ( origin.length_sqr( ) > 0.0f && std::isfinite( origin.x ) && std::isfinite( origin.y ) && std::isfinite( origin.z ) &&
+						     std::isfinite( view_offset.x ) && std::isfinite( view_offset.y ) && std::isfinite( view_offset.z ) )
 						{
-							memory::write<std::uint8_t>( obs_services + SCHEMA( "CPlayer_ObserverServices", "m_iObserverMode"_hash ), 5 );
+							this->m_freecam_pos = origin + view_offset;
 						}
 					}
 				}
+				if ( this->m_freecam_pos.length_sqr( ) < 1.0f )
+				{
+					this->m_freecam_pos = systems::g_view.origin( );
+				}
 			}
-		}
 
-		math::vector3 view_angles{};
-		if ( local.is_alive )
-		{
+			this->m_saved_viewangles = systems::g_input.get_view_angles( );
+			this->m_freecam_angles = memory::safe_read<math::vector3>( view_setup + 0x4b8 ).value_or( math::vector3{} );
+			if ( !std::isfinite( this->m_freecam_angles.x ) || !std::isfinite( this->m_freecam_angles.y ) || !std::isfinite( this->m_freecam_angles.z ) || this->m_freecam_angles.length_sqr( ) < 0.001f )
+			{
+				this->m_freecam_angles = this->m_saved_viewangles;
+			}
+			this->m_freecam_angles.x = std::clamp( this->m_freecam_angles.x, -89.0f, 89.0f );
+			this->m_freecam_angles.y = math::helpers::normalize_yaw( this->m_freecam_angles.y );
+			this->m_freecam_angles.z = 0.0f;
+
+			this->m_last_override_time = now;
+			this->m_was_freecam_active = true;
+			this->m_had_mouse_event = false;
 			s_was_spec_freecam = false;
 			s_global_mouse_valid = false;
 			s_win_cursor_valid = false;
-			view_angles = systems::g_input.get_view_angles( );
 		}
-		else
+
+		float dt = 0.016f;
+		if ( this->m_last_override_time.time_since_epoch( ).count( ) > 0 )
 		{
-			if ( !s_was_spec_freecam )
+			const float raw_dt = std::chrono::duration<float>( now - this->m_last_override_time ).count( );
+			if ( raw_dt >= 0.001f )
 			{
-				s_spec_freecam_angles = memory::read<math::vector3>( view_setup + 0x4b8 );
-				s_was_spec_freecam = true;
-				s_global_mouse_valid = false;
-				s_win_cursor_valid = false;
-			}
-
-			float dx = 0.0f, dy = 0.0f;
-			query_mouse_delta( dx, dy );
-
-			const bool can_rotate = !rendering::g_menu.is_open( ) && is_game_window_focused( );
-			if ( can_rotate )
-			{
-				if ( std::fabsf( dx ) > 0.0001f || std::fabsf( dy ) > 0.0001f )
-				{
-					float sens = 1.0f;
-					if ( const auto cvar = CONVAR( "sensitivity" ) )
-					{
-						sens = cvar->get< float >( );
-					}
-					sens = std::max( sens, 0.001f );
-
-					float m_pitch = 0.022f;
-					if ( const auto cvar = CONVAR( "m_pitch" ) )
-					{
-						m_pitch = cvar->get< float >( );
-					}
-					float m_yaw = 0.022f;
-					if ( const auto cvar = CONVAR( "m_yaw" ) )
-					{
-						m_yaw = cvar->get< float >( );
-					}
-
-					s_spec_freecam_angles.x = std::clamp( s_spec_freecam_angles.x + dy * m_pitch * sens, -89.0f, 89.0f );
-					s_spec_freecam_angles.y = math::helpers::normalize_yaw( s_spec_freecam_angles.y - dx * m_yaw * sens );
-					s_spec_freecam_angles.z = 0.0f;
-				}
+				dt = std::clamp( raw_dt, 0.001f, 0.1f );
+				this->m_last_override_time = now;
 			}
 			else
 			{
-				s_global_mouse_valid = false;
-				s_win_cursor_valid = false;
+				dt = 0.0f;
 			}
-
-			view_angles = s_spec_freecam_angles;
+		}
+		else
+		{
+			this->m_last_override_time = now;
+			dt = 0.016f;
 		}
 
-		const bool can_move = !rendering::g_menu.is_open( ) && is_game_window_focused( );
+		// Fallback mouse look (when WM_INPUT wasn't handled or during spectator)
+		if ( !this->m_had_mouse_event && !rendering::g_menu.is_open( ) )
+		{
+			float dx = 0.0f, dy = 0.0f;
+			query_mouse_delta( dx, dy );
+			if ( std::fabsf( dx ) > 0.0001f || std::fabsf( dy ) > 0.0001f )
+			{
+				float sens = 1.0f;
+				if ( const auto cvar = CONVAR( "sensitivity" ) ) sens = cvar->get< float >( );
+				sens = std::clamp( sens, 0.001f, 100.0f );
+
+				float m_pitch = 0.022f;
+				if ( const auto cvar = CONVAR( "m_pitch" ) ) m_pitch = cvar->get< float >( );
+				float m_yaw = 0.022f;
+				if ( const auto cvar = CONVAR( "m_yaw" ) ) m_yaw = cvar->get< float >( );
+
+				this->m_freecam_angles.x = std::clamp( this->m_freecam_angles.x + dy * m_pitch * sens, -89.0f, 89.0f );
+				this->m_freecam_angles.y = math::helpers::normalize_yaw( this->m_freecam_angles.y - dx * m_yaw * sens );
+				this->m_freecam_angles.z = 0.0f;
+			}
+		}
+		this->m_had_mouse_event = false;
+
+		const bool can_move = !rendering::g_menu.is_open( );
 		if ( can_move && dt > 0.0f )
 		{
-			math::vector3 forward{}, left{}, up{};
-			math::helpers::angle_vectors_left( view_angles, &forward, &left, &up );
+			math::vector3 forward{};
+			math::vector3 right{};
+			math::helpers::angle_vectors_left( this->m_freecam_angles, &forward, &right );
 
 			math::vector3 move_dir{};
-			if ( ( GetAsyncKeyState( 'W' ) & 0x8000 ) != 0 ) move_dir += forward;
-			if ( ( GetAsyncKeyState( 'S' ) & 0x8000 ) != 0 ) move_dir -= forward;
-			if ( ( GetAsyncKeyState( 'A' ) & 0x8000 ) != 0 ) move_dir -= left;
-			if ( ( GetAsyncKeyState( 'D' ) & 0x8000 ) != 0 ) move_dir += left;
-			if ( ( GetAsyncKeyState( VK_SPACE ) & 0x8000 ) != 0 ) move_dir.z += 1.0f;
-			if ( ( ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) != 0 ) || ( ( GetAsyncKeyState( 'C' ) & 0x8000 ) != 0 ) ) move_dir.z -= 1.0f;
 
-			float speed = cfg.freecam_speed.value;
-			if ( ( GetAsyncKeyState( VK_SHIFT ) & 0x8000 ) != 0 )
+			const bool move_fwd = ( GetAsyncKeyState( 'W' ) & 0x8000 ) || ( GetAsyncKeyState( VK_UP ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_forward );
+			const bool move_back = ( GetAsyncKeyState( 'S' ) & 0x8000 ) || ( GetAsyncKeyState( VK_DOWN ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_back );
+			const bool move_left = ( GetAsyncKeyState( 'A' ) & 0x8000 ) || ( GetAsyncKeyState( VK_LEFT ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_moveleft );
+			const bool move_right = ( GetAsyncKeyState( 'D' ) & 0x8000 ) || ( GetAsyncKeyState( VK_RIGHT ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_moveright );
+			const bool move_up = ( GetAsyncKeyState( VK_SPACE ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_jump );
+			const bool move_down = ( GetAsyncKeyState( VK_CONTROL ) & 0x8000 ) || ( GetAsyncKeyState( 'C' ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_duck );
+
+			if ( move_fwd ) move_dir += forward;
+			if ( move_back ) move_dir -= forward;
+			if ( move_left ) move_dir -= right;
+			if ( move_right ) move_dir += right;
+			if ( move_up ) move_dir.z += 1.0f;
+			if ( move_down ) move_dir.z -= 1.0f;
+
+			float speed = std::clamp( cfg.freecam_speed.value, 100.0f, 10000.0f );
+			if ( ( GetAsyncKeyState( VK_SHIFT ) & 0x8000 ) || ( this->m_cmd_buttons & cstypes::command_buttons::in_sprint ) )
 			{
 				speed *= 2.5f;
 			}
-			else if ( ( GetAsyncKeyState( VK_MENU ) & 0x8000 ) != 0 )
+			else if ( ( GetAsyncKeyState( VK_MENU ) & 0x8000 ) )
 			{
 				speed *= 0.3f;
 			}
@@ -591,11 +617,11 @@ namespace features::misc {
 
 		if ( std::isfinite( this->m_freecam_pos.x ) && std::isfinite( this->m_freecam_pos.y ) && std::isfinite( this->m_freecam_pos.z ) )
 		{
-			memory::write<math::vector3>( view_setup + 0x4a0, this->m_freecam_pos );
+			memory::safe_write<math::vector3>( view_setup + 0x4a0, this->m_freecam_pos );
 		}
-		if ( std::isfinite( view_angles.x ) && std::isfinite( view_angles.y ) && std::isfinite( view_angles.z ) )
+		if ( std::isfinite( this->m_freecam_angles.x ) && std::isfinite( this->m_freecam_angles.y ) && std::isfinite( this->m_freecam_angles.z ) )
 		{
-			memory::write<math::vector3>( view_setup + 0x4b8, view_angles );
+			memory::safe_write<math::vector3>( view_setup + 0x4b8, this->m_freecam_angles );
 		}
 		return true;
 	}
@@ -607,8 +633,10 @@ namespace features::misc {
 			return;
 		}
 
+		this->m_cmd_buttons = cmd->buttons.value;
+
 		const auto& cfg = settings::g_misc.m_camera;
-		if ( !cfg.freecam.value || !cfg.freecam_block_input.value )
+		if ( !cfg.freecam.value )
 		{
 			return;
 		}
@@ -618,59 +646,83 @@ namespace features::misc {
 			this->m_saved_viewangles = systems::g_input.get_view_angles( );
 		}
 
-		const auto base = cmd->csgo_user_cmd.mutable_base( );
-		if ( base )
+		if ( cfg.freecam_block_input.value )
 		{
-			base->set_forwardmove( 0.0f );
-			base->set_leftmove( 0.0f );
-			base->set_upmove( 0.0f );
-
-			if ( const auto va = base->mutable_viewangles( ) )
+			const auto base = cmd->csgo_user_cmd.mutable_base( );
+			if ( base )
 			{
-				va->set_x( this->m_saved_viewangles.x );
-				va->set_y( this->m_saved_viewangles.y );
-				va->set_z( this->m_saved_viewangles.z );
+				base->set_forwardmove( 0.0f );
+				base->set_leftmove( 0.0f );
+				base->set_upmove( 0.0f );
+
+				if ( const auto subticks = base->mutable_subtick_moves( ) )
+				{
+					subticks->clear( );
+				}
+
+				if ( base->has_viewangles( ) )
+				{
+					if ( const auto va = base->mutable_viewangles( ) )
+					{
+						va->set_x( this->m_saved_viewangles.x );
+						va->set_y( this->m_saved_viewangles.y );
+						va->set_z( this->m_saved_viewangles.z );
+					}
+				}
 			}
+
+			const auto input_history_size = cmd->csgo_user_cmd.input_history_size( );
+			for ( auto i = 0; i < input_history_size; ++i )
+			{
+				const auto entry = cmd->csgo_user_cmd.mutable_input_history( i );
+				if ( !entry )
+				{
+					continue;
+				}
+
+				if ( entry->has_view_angles( ) )
+				{
+					if ( const auto angles = entry->mutable_view_angles( ) )
+					{
+						angles->set_x( this->m_saved_viewangles.x );
+						angles->set_y( this->m_saved_viewangles.y );
+						angles->set_z( this->m_saved_viewangles.z );
+					}
+				}
+			}
+
+			cmd->buttons.value = 0;
+			cmd->buttons.value_changed = 0;
+			cmd->buttons.value_scroll = 0;
 		}
-
-		const auto input_history_size = cmd->csgo_user_cmd.input_history_size( );
-		for ( auto i = 0; i < input_history_size; ++i )
-		{
-			const auto entry = cmd->csgo_user_cmd.mutable_input_history( i );
-			if ( !entry )
-			{
-				continue;
-			}
-
-			if ( const auto angles = entry->mutable_view_angles( ) )
-			{
-				angles->set_x( this->m_saved_viewangles.x );
-				angles->set_y( this->m_saved_viewangles.y );
-				angles->set_z( this->m_saved_viewangles.z );
-			}
-		}
-
-		cmd->buttons.value = 0;
-		cmd->buttons.value_changed = 0;
-		cmd->buttons.value_scroll = 0;
 	}
 
 	void camera::reset( bool restore_view_angles )
 	{
-		if ( restore_view_angles && this->m_was_freecam_active && settings::g_misc.m_camera.freecam_block_input.value )
+		if ( restore_view_angles && this->m_was_freecam_active )
 		{
-			systems::g_input.set_view_angles( this->m_saved_viewangles );
+			if ( std::isfinite( this->m_saved_viewangles.x ) && std::isfinite( this->m_saved_viewangles.y ) && std::isfinite( this->m_saved_viewangles.z ) )
+			{
+				systems::g_input.set_view_angles( this->m_saved_viewangles );
+			}
 		}
 		this->m_was_freecam_active = false;
+		this->m_had_mouse_event = false;
+		this->m_cmd_buttons = 0;
 		s_was_spec_freecam = false;
 		s_global_mouse_valid = false;
 		s_win_cursor_valid = false;
 		this->m_freecam_pos = {};
+		this->m_freecam_angles = {};
 		s_spec_freecam_angles = {};
 		this->m_saved_viewangles = {};
 		this->m_cached_fov_sensitivity = -1.0f;
 		this->m_cached_scoped = false;
 		this->m_cached_target_fov = 0.0f;
+		s_was_spec_thirdperson = false;
+		s_had_spec_mouse_event = false;
+		s_spec_thirdperson_angles = {};
+		s_last_spec_pawn = 0;
 	}
 
 } // namespace features::misc

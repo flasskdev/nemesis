@@ -71,7 +71,7 @@ namespace memory {
 	}
 
 	template <typename T>
-	[[nodiscard]] inline bool safe_write( std::uintptr_t address, const T& value )
+	inline bool safe_write( std::uintptr_t address, const T& value )
 	{
 		diag::probe_scope probe;
 		return detail::safe_write_impl( address, value );

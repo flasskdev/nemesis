@@ -10,6 +10,7 @@
 #include <optional>
 #include <core/features/features.hpp>
 #include <core/settings.hpp>
+#include <core/hooks/hooks.hpp>
 #include <utilities/diag.hpp>
 
 #pragma comment(lib, "comdlg32.lib")
@@ -1545,10 +1546,12 @@ namespace rendering {
 				if ( !kit || is_equipped )
 				{
 					settings::g_changer.music.id = 0;
+					hooks::cheat::trigger_lobby_music( 0 );
 				}
 				else
 				{
 					settings::g_changer.music.id = kit->id;
+					hooks::cheat::trigger_lobby_music( static_cast< std::uint16_t >( kit->id ) );
 				}
 			}
 		}

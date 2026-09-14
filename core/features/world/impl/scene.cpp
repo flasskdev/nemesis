@@ -228,7 +228,8 @@ namespace features::world {
 
 		const auto& config = settings::g_world.m_scene.skybox;
 		const auto replace_material = config.custom_skybox.value && this->m_custom_sky_material;
-		if (!replace_material && !config.custom_color.value) {
+		const auto overlight_on = settings::g_world.m_scene.overlight.value;
+		if (!replace_material && !config.custom_color.value && !overlight_on) {
 			return;
 		}
 
@@ -253,11 +254,25 @@ namespace features::world {
 			}
 		}
 
-		if (config.custom_color.value) {
+		if (config.custom_color.value || overlight_on) {
 			const auto original_color = memory::safe_read<std::array<float, 3>> (*skybox_object + 0xE8);
-			const auto color = config.skybox_color.value.to_float ();
-			const std::array<float, 3> replacement {color [0], color [1], color [2]};
-			if (original_color && memory::safe_write (*skybox_object + 0xE8, replacement)) {
+			std::array<float, 3> base_color{ 1.0f, 1.0f, 1.0f };
+			if (config.custom_color.value) {
+				const auto c = config.skybox_color.value.to_float ();
+				base_color = { c[0], c[1], c[2] };
+			} else if (original_color) {
+				base_color = *original_color;
+			}
+
+			if (overlight_on) {
+				const auto tint = settings::g_world.m_scene.overlight_tint.value.to_float ();
+				const auto intensity = settings::g_world.m_scene.overlight_intensity.value;
+				base_color[0] = base_color[0] * tint[0] * intensity;
+				base_color[1] = base_color[1] * tint[1] * intensity;
+				base_color[2] = base_color[2] * tint[2] * intensity;
+			}
+
+			if (original_color && memory::safe_write (*skybox_object + 0xE8, base_color)) {
 				this->m_active_original_sky_color = *original_color;
 				this->m_active_sky_tinted = true;
 			}
@@ -282,7 +297,20 @@ namespace features::world {
 	}
 
 	void scene::on_light_scene_object_pre (std::uintptr_t object) const {
-		if (!object || !settings::g_world.m_scene.lighting.value) {
+		if (!object) {
+			return;
+		}
+
+		if (settings::g_world.m_scene.fullbright.value) {
+			const auto fb_color = settings::g_world.m_scene.fullbright_color.value.to_float ();
+			const auto fb_intensity = settings::g_world.m_scene.fullbright_intensity.value * 2.0f;
+			memory::write<float> (object + 0xe4, fb_color [0] * fb_intensity);
+			memory::write<float> (object + 0xe8, fb_color [1] * fb_intensity);
+			memory::write<float> (object + 0xec, fb_color [2] * fb_intensity);
+			return;
+		}
+
+		if (!settings::g_world.m_scene.lighting.value) {
 			return;
 		}
 
@@ -305,7 +333,8 @@ namespace features::world {
 	}
 
 	void scene::on_draw_scene_object_array (std::uintptr_t object_array) const {
-		if (!object_array || !settings::g_world.m_scene.world_setting.value) {
+		const auto fullbright_on = settings::g_world.m_scene.fullbright.value;
+		if (!object_array || (!settings::g_world.m_scene.world_setting.value && !fullbright_on)) {
 			return;
 		}
 
@@ -331,7 +360,10 @@ namespace features::world {
 			return;
 		}
 
+		const auto fb_col = settings::g_world.m_scene.fullbright_color.value;
+		const auto fb_mult = settings::g_world.m_scene.fullbright_intensity.value;
 		const auto& configured = settings::g_world.m_scene.world_color.value;
+
 		for (auto i = 0; i < *count; ++i) {
 			const auto color_addr = *light_data_base +
 				((static_cast<std::size_t> (*index) + i) << 5);
@@ -340,8 +372,15 @@ namespace features::world {
 				continue;
 			}
 
-			(void) memory::safe_write<xdraw::color> (
-				color_addr, {configured.r, configured.g, configured.b, current->a});
+			if (fullbright_on) {
+				const auto r = static_cast<std::uint8_t>(std::clamp(static_cast<float>(fb_col.r) * fb_mult, 0.0f, 255.0f));
+				const auto g = static_cast<std::uint8_t>(std::clamp(static_cast<float>(fb_col.g) * fb_mult, 0.0f, 255.0f));
+				const auto b = static_cast<std::uint8_t>(std::clamp(static_cast<float>(fb_col.b) * fb_mult, 0.0f, 255.0f));
+				(void) memory::safe_write<xdraw::color> (color_addr, { r, g, b, 255 });
+			} else {
+				(void) memory::safe_write<xdraw::color> (
+					color_addr, {configured.r, configured.g, configured.b, current->a});
+			}
 		}
 	}
 
@@ -350,8 +389,9 @@ namespace features::world {
 			return;
 		}
 
+		const auto fullbright_on = settings::g_world.m_scene.fullbright.value;
 		const auto& config = settings::g_world.m_scene.skybox;
-		if (!config.custom_color.value && !settings::g_world.m_scene.world_setting.value) {
+		if (!config.custom_color.value && !settings::g_world.m_scene.world_setting.value && !fullbright_on) {
 			return;
 		}
 
@@ -394,6 +434,8 @@ namespace features::world {
 			if ((is_cloud || is_sun) && config.custom_color.value) {
 				const auto& color = is_cloud ? config.cloud_color.value : config.sun_color.value;
 				(void) memory::safe_write<std::uint32_t> (mesh + 0x50, color);
+			} else if (fullbright_on) {
+				(void) memory::safe_write<std::uint32_t> (mesh + 0x50, settings::g_world.m_scene.fullbright_color.value);
 			} else if (!is_cloud && !is_sun && settings::g_world.m_scene.world_setting.value) {
 				(void) memory::safe_write<std::uint32_t> (
 					mesh + 0x50, settings::g_world.m_scene.world_color.value);
@@ -471,22 +513,28 @@ namespace features::world {
 			value = reinterpret_cast<__m128i*> (&wind_strength_frequency_val);
 		}
 
-		if (settings::g_world.m_scene.bloom.value) {
-			const auto t = settings::g_world.m_scene.bloom_value;
+		if (settings::g_world.m_scene.bloom.value || settings::g_world.m_scene.overlight.value) {
+			auto t = settings::g_world.m_scene.bloom.value ? settings::g_world.m_scene.bloom_value.value : 0.0f;
+			auto sky_boost = 0.0f;
+			if (settings::g_world.m_scene.overlight.value) {
+				const auto ol_bloom = settings::g_world.m_scene.overlight_bloom.value;
+				sky_boost += ol_bloom * 1.5f;
+				t += ol_bloom * 0.5f;
+			}
 			if (hash == 0x565EAF76) {
-				bloom_scale_val = _mm_set_ps1 (0.3f + t * 1.2f);
+				bloom_scale_val = _mm_set_ps1 (0.3f + t * 1.2f + sky_boost * 0.5f);
 				value = (__m128i*) & bloom_scale_val;
 			} else if (hash == 0xBA98A9B0) {
-				bloom_threshold_val = _mm_set_ps1 (1.5f - t * 1.2f);
+				bloom_threshold_val = _mm_set_ps1 (std::max(0.05f, 1.5f - t * 1.2f - sky_boost * 0.4f));
 				value = (__m128i*) & bloom_threshold_val;
 			} else if (hash == 0x2AE72B37) {
-				bloom_width_val = _mm_set_ps1 (0.5f + t * 1.5f);
+				bloom_width_val = _mm_set_ps1 (0.5f + t * 1.5f + sky_boost * 0.3f);
 				value = (__m128i*) & bloom_width_val;
 			} else if (hash == 0xB692902E) {
-				bloom_strength_val = _mm_set_ps1 (0.2f + t * 0.6f);
+				bloom_strength_val = _mm_set_ps1 (0.2f + t * 0.6f + sky_boost * 0.5f);
 				value = (__m128i*) & bloom_strength_val;
 			} else if (hash == 0x1313A424) {
-				bloom_skybox_val = _mm_set_ps1 (0.1f + t * 0.4f);
+				bloom_skybox_val = _mm_set_ps1 (0.1f + t * 0.4f + sky_boost * 1.2f);
 				value = (__m128i*) & bloom_skybox_val;
 			}
 		}

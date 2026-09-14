@@ -246,6 +246,7 @@ namespace features::misc {
                 void play_sound( settings::misc::impacts::sound_type type, float volume, std::string_view custom_file = {} );
                 void play_hit_effect( std::uintptr_t victim_pawn );
                 void play_death_effect( std::uintptr_t victim_pawn );
+                void precache_death_effect( );
                 void play_bullet_impact_effect( const math::vector3& position );
                 void play_bullet_tracer( const math::vector3& position );
                 void flush_buffered_impacts( );
@@ -280,21 +281,28 @@ namespace features::misc {
         public:
                 void on_override_view( std::uintptr_t view_setup );
                 void on_create_move( systems::input::usercmd* cmd );
+                void on_mouse_delta( float d_pitch, float d_yaw );
+                void on_spec_thirdperson_mouse_delta( float d_pitch, float d_yaw );
                 void update_fov_sensitivity( std::uintptr_t player_pawn ) const;
                 void reset( bool restore_view_angles = true );
 
                 [[nodiscard]] bool is_freecam_active( ) const noexcept { return this->m_was_freecam_active; }
+                [[nodiscard]] bool is_spec_thirdperson_active( ) const noexcept;
+                [[nodiscard]] math::vector3 get_saved_viewangles( ) const noexcept { return this->m_saved_viewangles; }
 
         private:
                 bool do_freecam( std::uintptr_t view_setup );
-                void do_thirdperson( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const;
+                void do_thirdperson( std::uintptr_t view_setup, std::uintptr_t target_pawn );
                 void do_fov_change( std::uintptr_t view_setup, std::uintptr_t target_pawn ) const;
                 void do_aspect_ratio_change( std::uintptr_t view_setup );
 
                 math::vector3 m_freecam_pos{};
+                math::vector3 m_freecam_angles{};
                 math::vector3 m_saved_viewangles{};
                 std::chrono::steady_clock::time_point m_last_override_time{};
+                std::uint64_t m_cmd_buttons{ 0 };
                 bool m_was_freecam_active{ false };
+                bool m_had_mouse_event{ false };
 
                 mutable float m_cached_fov_sensitivity{ -1.0f };
                 mutable bool m_cached_scoped{};
@@ -500,6 +508,7 @@ namespace features::misc {
         public:
                 void on_frame_stage_notify ();
                 void on_level_change ();
+                bool run_script (const std::string& script);
 
         private:
                 struct weapon_entry {
@@ -522,10 +531,10 @@ namespace features::misc {
 
                 void try_initialize ();
                 [[nodiscard]] c_ui_panel* find_hud_panel () const;
-                [[nodiscard]] bool run_script (const std::string& script);
                 void send_player_weapons (
                         std::uintptr_t controller,
                         std::span<const systems::entities::cached> items);
+                void send_player_indicator (std::uintptr_t controller);
                 [[nodiscard]] bool send_clear (std::uint64_t steamid);
                 void clear_all ();
 

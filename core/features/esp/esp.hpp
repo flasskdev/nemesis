@@ -140,7 +140,7 @@ namespace features::esp {
 			void add_weapon( xdraw::draw_list& draw_list, const systems::bounds::data& bounds, const info& info, const settings::esp::player::overlay::weapon& cfg, draw_offsets& offsets );
 			void add_flags( xdraw::draw_list& draw_list, const systems::bounds::data& bounds, const info& info, const settings::esp::player::overlay::info_flags& cfg, draw_offsets& offsets );
 			void add_oof_arrow( xdraw::draw_list& draw_list, const info& info, const settings::esp::player::overlay::oof_arrow& cfg );
-			[[nodiscard]] info get_info( const systems::entities::cached& player, const systems::local::snapshot& local );
+			[[nodiscard]] info get_info( const systems::entities::cached& player, const systems::local::snapshot& local, int local_slot = -1 );
 
 			struct animation_data
 			{

@@ -9,7 +9,9 @@ namespace rendering {
 	namespace detail {
 
 		constexpr const char* hitbox_names[ ]{ "head", "chest", "stomach", "arms", "legs", "feet" };
-		constexpr const char* pitch_items[ ]{ "none", "down", "up" };
+		constexpr const char* pitch_items[ ]{ "zero", "down", "up", "custom" };
+		constexpr const char* yaw_items[ ]{ "at target", "custom" };
+		constexpr const char* spin_directions[ ]{ "clockwise (right)", "counter-clockwise (left)" };
 		using menu_weapons::weapon_sel_rage;
 
 	} // namespace detail
@@ -149,6 +151,86 @@ namespace rendering {
 
 		if ( xui::begin_child( "##ragebot_antiaim", col_w, body_h - k_header_h, true ) )
 		{
+			auto draw_animated_item = [&]( const char* name, bool should_show, float item_h, float extra_pad, auto&& render_fn ) {
+				auto anim = xui::anim::lerp(
+					xui::fnv1a( name ),
+					should_show ? 1.0f : 0.0f,
+					10.0f,
+					should_show ? 1.0f : 0.0f
+				);
+
+				if ( anim <= 0.001f )
+				{
+					anim = 0.0f;
+					xui::anim::set( xui::fnv1a( name ), 0.0f );
+				}
+				else if ( anim >= 0.999f )
+				{
+					anim = 1.0f;
+					xui::anim::set( xui::fnv1a( name ), 1.0f );
+				}
+
+				if ( anim > 0.0f )
+				{
+					auto* win = xui::layout::current_window( );
+					auto& st = xui::ctx( ).style;
+
+					if ( win && win->line_h > 0.0f )
+					{
+						win->cursor_y += win->line_h + st.item_spacing_y;
+						win->line_h = 0.0f;
+					}
+
+					const auto [start_cx, base_y] = xui::layout::get_cursor( );
+					const float scroll_y = win ? win->scroll_y : 0.0f;
+					const float win_bx = win ? win->bounds.x : 0.0f;
+					const float win_by = win ? win->bounds.y : 0.0f;
+					const float screen_x = win_bx + start_cx;
+					const float screen_y = win_by + base_y - scroll_y;
+
+					const float full_stride = item_h + extra_pad + st.item_spacing_y;
+					const float anim_ease = xui::ease::out_cubic( anim );
+					const float current_offset = full_stride * anim_ease;
+					const float clip_h = ( item_h + extra_pad ) * anim_ease;
+					const float clip_w = win ? win->bounds.w : col_w;
+
+					auto& dl = xui::draw::current( );
+					dl.push_clip( screen_x - 10.0f, screen_y - 2.0f, clip_w + 20.0f, clip_h + 4.0f );
+
+					const auto a = std::clamp( anim, 0.0f, 1.0f );
+					xui::push_style_color( xui::style_col::text, st.text.alpha( static_cast< std::uint8_t >( st.text.a * a ) ) );
+					xui::push_style_color( xui::style_col::text_dim, st.text_dim.alpha( static_cast< std::uint8_t >( st.text_dim.a * a ) ) );
+					xui::push_style_color( xui::style_col::accent, st.accent.alpha( static_cast< std::uint8_t >( st.accent.a * a ) ) );
+					xui::push_style_color( xui::style_col::checkbox_bg, st.checkbox_bg.alpha( static_cast< std::uint8_t >( st.checkbox_bg.a * a ) ) );
+					xui::push_style_color( xui::style_col::checkbox_border, st.checkbox_border.alpha( static_cast< std::uint8_t >( st.checkbox_border.a * a ) ) );
+					xui::push_style_color( xui::style_col::slider_track, st.slider_track.alpha( static_cast< std::uint8_t >( st.slider_track.a * a ) ) );
+					xui::push_style_color( xui::style_col::slider_fill, st.slider_fill.alpha( static_cast< std::uint8_t >( st.slider_fill.a * a ) ) );
+					xui::push_style_color( xui::style_col::combo_bg, st.combo_bg.alpha( static_cast< std::uint8_t >( st.combo_bg.a * a ) ) );
+					xui::push_style_color( xui::style_col::combo_border, st.combo_border.alpha( static_cast< std::uint8_t >( st.combo_border.a * a ) ) );
+
+					auto& input = xui::ctx( ).input;
+					const auto saved_clicked = input.mouse_clicked;
+					const auto saved_down = input.mouse_down;
+					if ( !should_show || anim < 0.95f )
+					{
+						input.mouse_clicked = false;
+						input.mouse_down = false;
+					}
+
+					render_fn( );
+
+					input.mouse_clicked = saved_clicked;
+					input.mouse_down = saved_down;
+					xui::pop_style_color( 9 );
+					dl.pop_clip( );
+
+					if ( win )
+					{
+						win->line_h = 0.0f;
+					}
+					xui::layout::set_cursor( start_cx, base_y + current_offset );
+				}
+			};
 
 			xui::toggle( "Anti Aim", aa.enabled );
 			if ( xui::begin_popup( "##aa_popup", 220.0f ) )
@@ -160,7 +242,41 @@ namespace rendering {
 				xui::end_popup( );
 			}
 			xui::layout::spacing( 3.0f );
-			xui::combo( "Pitch", aa.pitch.value, detail::pitch_items, 3 );
+			xui::combo( "Pitch", aa.pitch.value, detail::pitch_items, 4 );
+
+			draw_animated_item( "aa_custom_pitch_anim", aa.pitch.value == settings::combat::antiaim::pitch_mode::custom, 36.0f, 0.0f, [&]() {
+				xui::slider_float( "Pitch Angle", aa.custom_pitch, -90.0f, 90.0f, "%.0f°" );
+			} );
+
+			xui::layout::spacing( 3.0f );
+			xui::combo( "Yaw", aa.yaw_type.value, detail::yaw_items, 2 );
+
+			const bool is_custom_yaw = ( aa.yaw_type.value == settings::combat::antiaim::yaw_mode::custom );
+
+			draw_animated_item( "aa_custom_yaw_anim", is_custom_yaw, 36.0f, 0.0f, [&]() {
+				xui::slider_float( "Yaw Angle", aa.custom_yaw, -180.0f, 180.0f, "%.0f°" );
+			} );
+
+			draw_animated_item( "aa_jitters_anim", is_custom_yaw || aa.spinbot.value, 30.0f, 0.0f, [&]() {
+				xui::toggle( "Jitters", aa.jitters );
+				if ( xui::begin_popup( "##jitters_popup", 220.0f ) )
+				{
+					xui::slider_float( "angle", aa.jitters_delta, -180.0f, 180.0f, "%.0f°" );
+					xui::layout::spacing( 3.0f );
+					xui::slider_int( "speed", aa.jitters_speed, 1, 5, aa.jitters_speed.value == 1 ? "%d tick" : "%d ticks" );
+					xui::end_popup( );
+				}
+			} );
+
+			xui::layout::spacing( 3.0f );
+			xui::toggle( "Spinbot", aa.spinbot );
+			if ( xui::begin_popup( "##spinbot_popup", 240.0f ) )
+			{
+				xui::combo( "spin direction", aa.spin_direction.value, detail::spin_directions, 2 );
+				xui::layout::spacing( 3.0f );
+				xui::slider_float( "spin speed", aa.spin_speed, 1.0f, 100.0f, "%.0f°" );
+				xui::end_popup( );
+			}
 
 			xui::layout::spacing( 8.0f );
 			xui::layout::separator( );

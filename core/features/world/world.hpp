@@ -74,6 +74,7 @@ namespace features::world {
 
         void on_map( std::uintptr_t token, std::size_t size, std::uintptr_t buf_ptr );
         void on_unmap( std::uintptr_t token );
+        void on_frame_stage_notify( );
 
     private:
         static inline bool m_active{};

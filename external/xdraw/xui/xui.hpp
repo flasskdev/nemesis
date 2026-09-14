@@ -583,6 +583,8 @@ namespace xui {
 	bool begin_popup( std::string_view label, float width = 200.0f, const xdraw::color* swatch_color = nullptr, bool is_arrow = false );
 	void end_popup( );
 
+	void draw_gear( xdraw::draw_list& dl, float cx, float cy, xdraw::color col, float size = 11.0f );
+
 	void text( std::string_view label, xdraw::color col );
 
 	namespace tooltips {

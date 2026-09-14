@@ -299,6 +299,7 @@ namespace config {
 			{
 				b.key = 0;
 				b.mode = xui::bind_mode::toggle;
+				b.active = false;
 				return;
 			}
 
@@ -364,33 +365,63 @@ namespace config {
 				{
 					auto s = static_cast<xui::setting*>(f.ptr);
 
-					if (j.contains("v"))
+					if (j.is_object())
 					{
-						s->value = j["v"].get< bool >();
-					}
+						if (j.contains("v") && (j["v"].is_boolean() || j["v"].is_number()))
+						{
+							s->value = j["v"].is_boolean() ? j["v"].get<bool>() : (j["v"].get<int>() != 0);
+						}
 
-					if (j.contains("b"))
+						if (j.contains("b"))
+						{
+							json_to_bind(j["b"], s->bind);
+						}
+					}
+					else if (j.is_boolean())
 					{
-						json_to_bind(j["b"], s->bind);
+						s->value = j.get<bool>();
+					}
+					else if (j.is_number())
+					{
+						s->value = (j.get<int>() != 0);
 					}
 
 					if (s->bind.key != 0 && s->bind.mode == xui::bind_mode::toggle)
 					{
 						s->bind.active = s->value;
 					}
+					else
+					{
+						s->bind.active = false;
+					}
 
 					break;
 				}
-				case field_type::bool_val:  *static_cast<bool*>(f.ptr) = j.get< bool >(); break;
-				case field_type::int_val:   *static_cast<int*>(f.ptr) = j.get< int >(); break;
-				case field_type::uint8_val: *static_cast<std::uint8_t*>(f.ptr) = j.get< std::uint8_t >(); break;
-				case field_type::float_val: *static_cast<float*>(f.ptr) = j.get< float >(); break;
+				case field_type::bool_val:
+					if (j.is_boolean()) *static_cast<bool*>(f.ptr) = j.get<bool>();
+					else if (j.is_number()) *static_cast<bool*>(f.ptr) = (j.get<double>() != 0.0);
+					break;
+				case field_type::int_val:
+					if (j.is_number_integer()) *static_cast<int*>(f.ptr) = j.get<int>();
+					else if (j.is_number()) *static_cast<int*>(f.ptr) = static_cast<int>(j.get<double>());
+					else if (j.is_boolean()) *static_cast<int*>(f.ptr) = j.get<bool>() ? 1 : 0;
+					break;
+				case field_type::uint8_val:
+					if (j.is_number_integer()) *static_cast<std::uint8_t*>(f.ptr) = static_cast<std::uint8_t>(j.get<int>());
+					else if (j.is_number()) *static_cast<std::uint8_t*>(f.ptr) = static_cast<std::uint8_t>(j.get<double>());
+					break;
+				case field_type::float_val:
+					if (j.is_number()) *static_cast<float*>(f.ptr) = static_cast<float>(j.get<double>());
+					break;
 				case field_type::color:
 				{
 					auto& c = *static_cast<xdraw::color*>(f.ptr);
 					if (j.is_array() && j.size() >= 4)
 					{
-						c.r = j[0]; c.g = j[1]; c.b = j[2]; c.a = j[3];
+						c.r = static_cast<std::uint8_t>(j[0].is_number() ? j[0].get<int>() : 255);
+						c.g = static_cast<std::uint8_t>(j[1].is_number() ? j[1].get<int>() : 255);
+						c.b = static_cast<std::uint8_t>(j[2].is_number() ? j[2].get<int>() : 255);
+						c.a = static_cast<std::uint8_t>(j[3].is_number() ? j[3].get<int>() : 255);
 					}
 
 					break;
@@ -400,7 +431,9 @@ namespace config {
 					auto& v = *static_cast<config::float3*>(f.ptr);
 					if (j.is_array() && j.size() >= 3)
 					{
-						v.x = j[0]; v.y = j[1]; v.z = j[2];
+						v.x = j[0].is_number() ? static_cast<float>(j[0].get<double>()) : 0.0f;
+						v.y = j[1].is_number() ? static_cast<float>(j[1].get<double>()) : 0.0f;
+						v.z = j[2].is_number() ? static_cast<float>(j[2].get<double>()) : 0.0f;
 					}
 
 					break;
@@ -412,7 +445,8 @@ namespace config {
 					{
 						for (std::uint32_t i = 0; i < std::min< std::uint32_t >(static_cast<std::uint32_t>(j.size()), f.count); ++i)
 						{
-							arr[i] = j[i].get< bool >();
+							if (j[i].is_boolean()) arr[i] = j[i].get<bool>();
+							else if (j[i].is_number()) arr[i] = (j[i].get<int>() != 0);
 						}
 					}
 
@@ -811,20 +845,68 @@ namespace config {
 		std::unordered_map<std::uint32_t, field*> lookup;
 		lookup.reserve(reg.fields.size());
 
+		const auto k_airstrafe = detail::make_key("movement", "airstrafe");
+		const auto k_air_strafer = detail::make_key("movement", "air strafer");
+		const auto k_air_strafe = detail::make_key("movement", "air strafe");
+		const auto k_edgestop = detail::make_key("movement", "edgestop");
+		const auto k_quickstop = detail::make_key("movement", "quick stop");
+
+		field* field_airstrafe = nullptr;
+		field* field_air_strafer = nullptr;
+		field* field_quickstop = nullptr;
+
 		for (auto& f : reg.fields)
 		{
 			lookup[f.key] = &f;
+			if (f.key == k_airstrafe) field_airstrafe = &f;
+			else if (f.key == k_air_strafer) field_air_strafer = &f;
+			else if (f.key == k_quickstop) field_quickstop = &f;
+
+			char key_str[12];
+			std::snprintf(key_str, sizeof(key_str), "%08x", f.key);
+
+			auto def = reg.defaults.find(key_str);
+			if (def != reg.defaults.end())
+			{
+				serial::json_to_field(*def, f);
+			}
 		}
 
 		for (auto it = fields_obj.begin(); it != fields_obj.end(); ++it)
 		{
-			auto found = lookup.find(static_cast<std::uint32_t>(std::strtoul(it.key().c_str(), nullptr, 16)));
-			if (found == lookup.end())
+			const auto k = static_cast<std::uint32_t>(std::strtoul(it.key().c_str(), nullptr, 16));
+			auto found = lookup.find(k);
+			if (found != lookup.end())
 			{
-				continue;
+				serial::json_to_field(it.value(), *found->second);
+				if (k == k_airstrafe && field_air_strafer)
+				{
+					serial::json_to_field(it.value(), *field_air_strafer);
+				}
+				else if (k == k_air_strafer && field_airstrafe)
+				{
+					serial::json_to_field(it.value(), *field_airstrafe);
+				}
 			}
-
-			serial::json_to_field(it.value(), *found->second);
+			else
+			{
+				if ((k == k_air_strafer || k == k_air_strafe) && field_airstrafe)
+				{
+					serial::json_to_field(it.value(), *field_airstrafe);
+					if (field_air_strafer)
+					{
+						serial::json_to_field(it.value(), *field_air_strafer);
+					}
+				}
+				else if (k == k_airstrafe && field_air_strafer)
+				{
+					serial::json_to_field(it.value(), *field_air_strafer);
+				}
+				else if (k == k_edgestop && field_quickstop)
+				{
+					serial::json_to_field(it.value(), *field_quickstop);
+				}
+			}
 		}
 
 		if (root.contains("sb") && root["sb"].is_string())
@@ -837,6 +919,10 @@ namespace config {
 				xui::slider_binds::deserialize(root["slider_binds"].get<std::string>());
 			else
 				xui::slider_binds::deserialize(root["slider_binds"].dump());
+		}
+		else
+		{
+			xui::slider_binds::reset();
 		}
 
 		return true;
@@ -897,9 +983,22 @@ namespace config {
 		std::unordered_map<std::uint32_t, field*> lookup;
 		lookup.reserve(reg.fields.size());
 
+		const auto k_airstrafe = detail::make_key("movement", "airstrafe");
+		const auto k_air_strafer = detail::make_key("movement", "air strafer");
+		const auto k_air_strafe = detail::make_key("movement", "air strafe");
+		const auto k_edgestop = detail::make_key("movement", "edgestop");
+		const auto k_quickstop = detail::make_key("movement", "quick stop");
+
+		field* field_airstrafe = nullptr;
+		field* field_air_strafer = nullptr;
+		field* field_quickstop = nullptr;
+
 		for (auto& f : reg.fields)
 		{
 			lookup[f.key] = &f;
+			if (f.key == k_airstrafe) field_airstrafe = &f;
+			else if (f.key == k_air_strafer) field_air_strafer = &f;
+			else if (f.key == k_quickstop) field_quickstop = &f;
 
 			char key_str[12];
 			std::snprintf(key_str, sizeof(key_str), "%08x", f.key);
@@ -913,13 +1012,39 @@ namespace config {
 
 		for (auto it = fields_obj.begin(); it != fields_obj.end(); ++it)
 		{
-			auto found = lookup.find(static_cast<std::uint32_t>(std::strtoul(it.key().c_str(), nullptr, 16)));
-			if (found == lookup.end())
+			const auto k = static_cast<std::uint32_t>(std::strtoul(it.key().c_str(), nullptr, 16));
+			auto found = lookup.find(k);
+			if (found != lookup.end())
 			{
-				continue;
+				serial::json_to_field(it.value(), *found->second);
+				if (k == k_airstrafe && field_air_strafer)
+				{
+					serial::json_to_field(it.value(), *field_air_strafer);
+				}
+				else if (k == k_air_strafer && field_airstrafe)
+				{
+					serial::json_to_field(it.value(), *field_airstrafe);
+				}
 			}
-
-			serial::json_to_field(it.value(), *found->second);
+			else
+			{
+				if ((k == k_air_strafer || k == k_air_strafe) && field_airstrafe)
+				{
+					serial::json_to_field(it.value(), *field_airstrafe);
+					if (field_air_strafer)
+					{
+						serial::json_to_field(it.value(), *field_air_strafer);
+					}
+				}
+				else if (k == k_airstrafe && field_air_strafer)
+				{
+					serial::json_to_field(it.value(), *field_air_strafer);
+				}
+				else if (k == k_edgestop && field_quickstop)
+				{
+					serial::json_to_field(it.value(), *field_quickstop);
+				}
+			}
 		}
 
 		if (root.contains("sb") && root["sb"].is_string())

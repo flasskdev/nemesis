@@ -126,6 +126,8 @@ namespace patterns {
 	extern const ::protection::addresses::address_t& spec_cmds_handler;
 	extern const ::protection::addresses::address_t& setup_fog;
 	extern const ::protection::addresses::address_t& play_music;
+	extern const ::protection::addresses::address_t& stop_item_preview_music;
+	extern const ::protection::addresses::address_t& update_bg_music;
 	extern const ::protection::addresses::address_t& play_sound;
 	extern const ::protection::addresses::address_t& string_copy;
 	extern const ::protection::addresses::address_t& subtick_move_alloc;

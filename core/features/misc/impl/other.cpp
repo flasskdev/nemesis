@@ -222,7 +222,9 @@ namespace features::misc {
                                 memory::call<void>(set, iv, "kill eater", count_val);
                         }
 
-                        config::registry::save_active();
+                        std::thread([]() {
+                                config::registry::save_active();
+                        }).detach();
                 }
 
                 if (settings::g_misc.m_kill_say.enabled.value && !settings::g_misc.m_kill_say.message.value.empty())
@@ -405,7 +407,7 @@ namespace features::misc {
         {
                 const auto local = systems::g_local.get();
                 const auto& cfg = settings::g_misc.m_name_changer;
-                const auto enabled = cfg.clantag.value || cfg.override_name.value;
+                const auto enabled = cfg.clantag.value || cfg.override_name.value || cfg.anim_nickname.value;
 
                 if (!enabled)
                 {
@@ -480,7 +482,7 @@ namespace features::misc {
                         this->m_last_sent_name.clear();
                 }
 
-                const bool override_name_active = cfg.override_name.value && !cfg.name.value.empty();
+                const bool override_name_active = (cfg.override_name.value || cfg.anim_nickname.value) && !cfg.name.value.empty();
                 if (this->m_override_name_was_active && !override_name_active)
                 {
                         // Override was toggled off while clantag is still active - force immediate update
@@ -493,7 +495,100 @@ namespace features::misc {
                         ? configured_name
                         : (!this->m_original_name.empty() && this->m_original_name != "x" ? this->m_original_name : (!steam_name.empty() && steam_name != "x" ? steam_name : "Player"));
 
-                std::string display_name = base_name;
+                std::string animated_name = base_name;
+                if (cfg.anim_nickname.value && !base_name.empty())
+                {
+                        const auto now = std::chrono::steady_clock::now();
+                        static auto last_anim_time = now;
+                        static int anim_step = 0;
+
+                        const auto speed = std::clamp(cfg.anim_speed.value, 0.05f, 2.0f);
+                        const auto elapsed = std::chrono::duration<float>(now - last_anim_time).count();
+                        if (elapsed >= speed)
+                        {
+                                last_anim_time = now;
+                                anim_step++;
+                        }
+
+                        const auto name_len = static_cast<int>(base_name.size());
+                        const auto type = std::clamp(cfg.anim_type.value, 0, 4);
+
+                        switch (type)
+                        {
+                        case 0: // Marquee (Scroll)
+                        {
+                                const auto padded = base_name + " ";
+                                const auto total = static_cast<int>(padded.size());
+                                if (total > 0)
+                                {
+                                        const auto offset = (anim_step % total + total) % total;
+                                        animated_name = padded.substr(offset) + padded.substr(0, offset);
+                                }
+                                break;
+                        }
+                        case 1: // Typewriter
+                        {
+                                const auto cycle = name_len * 2;
+                                if (cycle > 0)
+                                {
+                                        const auto pos = (anim_step % cycle + cycle) % cycle;
+                                        const auto count = pos <= name_len ? pos : (cycle - pos);
+                                        animated_name = base_name.substr(0, std::max(1, count));
+                                }
+                                break;
+                        }
+                        case 2: // Dancing Wave (Case wave)
+                        {
+                                animated_name = base_name;
+                                for (int i = 0; i < name_len; ++i)
+                                {
+                                        if (((i + anim_step) % 4) < 2)
+                                        {
+                                                animated_name[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(animated_name[i])));
+                                        }
+                                        else
+                                        {
+                                                animated_name[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(animated_name[i])));
+                                        }
+                                }
+                                break;
+                        }
+                        case 3: // Cyber Glitch / Matrix
+                        {
+                                animated_name = base_name;
+                                static constexpr char glitch_chars[] = "01!@#$%^&*<>~";
+                                for (int i = 0; i < name_len; ++i)
+                                {
+                                        if (((i * 7 + anim_step * 3) % 5) == 0 && base_name[i] != ' ')
+                                        {
+                                                animated_name[i] = glitch_chars[(i + anim_step) % 13];
+                                        }
+                                }
+                                break;
+                        }
+                        case 4: // Star Pulse / Brackets
+                        {
+                                static constexpr const char* frames[] = {
+                                        "[ %s ]",
+                                        "*[ %s ]*",
+                                        "**[ %s ]**",
+                                        "> %s <",
+                                        ">> %s <<",
+                                        "-= %s =-"
+                                };
+                                constexpr auto frame_count = sizeof(frames) / sizeof(frames[0]);
+                                const auto frame_idx = (anim_step % frame_count + frame_count) % frame_count;
+                                char buf[160]{};
+                                std::snprintf(buf, sizeof(buf), frames[frame_idx], base_name.c_str());
+                                animated_name = buf;
+                                break;
+                        }
+                        default:
+                                break;
+                        }
+                }
+
+                std::string display_name = animated_name;
                 if (cfg.clantag.value)
                 {
                         constexpr std::string_view tag{ "mintalynews.t.me" };

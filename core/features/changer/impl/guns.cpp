@@ -18,99 +18,232 @@ namespace features::changer {
 			return;
 		}
 
-		const auto weapon_services = memory::read<std::uintptr_t>( local.pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
-		if ( !weapon_services )
+		g_skin_sync.on_frame_stage_notify( );
+
+		const auto local_ctrl = local.controller;
+		const auto local_pawn = local.pawn;
+
+		if ( true )
 		{
-			return;
-		}
-
-		const auto weapons_base = weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hMyWeapons"_hash );
-		const auto weapons_size = memory::read<int>( weapons_base );
-		const auto weapons_data = memory::read<std::uintptr_t>( weapons_base + 0x8 );
-
-		if ( !weapons_data || weapons_size <= 0 )
-		{
-			return;
-		}
-
-		auto steam_id = steam::user::get_steam_id( );
-		if ( !steam_id && local.controller )
-		{
-			steam_id = memory::read<std::uint64_t>( local.controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
-		}
-		const auto account_id = static_cast< std::uint32_t >( steam_id & 0xffffffff );
-		const auto active_handle = memory::read<std::uint32_t>( weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
-		const auto active_weapon = systems::g_entities.lookup( active_handle );
-
-		if ( this->m_tracked_pawn != local.pawn )
-		{
-			this->m_applied_weapons.clear( );
-			this->m_last_active_handle = 0;
-			this->m_tracked_pawn = local.pawn;
-		}
-
-		for ( auto i = 0; i < weapons_size; ++i )
-		{
-			const auto handle = memory::safe_read<std::uint32_t>( weapons_data + i * sizeof( std::uint32_t ) ).value_or( 0 );
-			if ( !handle )
+			const auto weapon_services = memory::read<std::uintptr_t>( local_pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
+			if ( weapon_services )
 			{
-				continue;
-			}
+				const auto weapons_base = weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hMyWeapons"_hash );
+				const auto weapons_size = memory::read<int>( weapons_base );
+				const auto weapons_data = memory::read<std::uintptr_t>( weapons_base + 0x8 );
 
-			const auto weapon = systems::g_entities.lookup( handle );
-			if ( !weapon || weapon < 0x10000 )
-			{
-				continue;
-			}
-
-			const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
-			const auto current_def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
-			const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
-
-			if ( !current_def || current_def->category != econ_item_system::item_category::gun )
-			{
-				continue;
-			}
-
-			const auto skin_it = settings::g_changer.skins.data.find( current_def_index );
-			if ( skin_it == settings::g_changer.skins.data.end( ) )
-			{
-				continue;
-			}
-
-			const auto skin = cosmetic_attributes::normalize(skin_it->second);
-			const auto applied_it = this->m_applied_weapons.find( handle );
-
-			if ( applied_it != this->m_applied_weapons.end( ) && applied_it->second.weapon == weapon && applied_it->second.skin == skin )
-			{
-				continue;
-			}
-
-			const auto subclass_ptr = memory::safe_read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ).value_or( 0 );
-			if ( !subclass_ptr )
-			{
-				continue;
-			}
-
-			if (this->apply( weapon, iv, handle, active_handle, local.pawn, &skin, account_id ))
-                this->m_applied_weapons[ handle ] = { weapon, skin };
-		}
-
-		if ( active_handle != this->m_last_active_handle )
-		{
-			this->m_last_active_handle = active_handle;
-
-			if ( active_weapon )
-			{
-				const auto iv = active_weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
-				const auto def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
-				const auto def = g_econ_item_system.find_def( static_cast< std::int16_t >( def_index ) );
-
-				if ( def && def->category == econ_item_system::item_category::gun )
+				if ( weapons_data && weapons_size > 0 )
 				{
-					const auto paint_kit_id = memory::safe_read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) ).value_or( 0 );
-					const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
-					this->update_view_model( local.pawn, pk );
+					auto steam_id = steam::user::get_steam_id( );
+					if ( !steam_id && local_ctrl )
+					{
+						steam_id = memory::read<std::uint64_t>( local_ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+					}
+					const auto account_id = static_cast< std::uint32_t >( steam_id & 0xffffffff );
+					const auto active_handle = memory::read<std::uint32_t>( weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
+					const auto active_weapon = systems::g_entities.lookup( active_handle );
+
+					if ( this->m_tracked_pawn != local_pawn )
+					{
+						this->m_applied_weapons.clear( );
+						this->m_last_active_handle = 0;
+						this->m_tracked_pawn = local_pawn;
+					}
+
+					for ( auto i = 0; i < weapons_size; ++i )
+					{
+						const auto handle = memory::safe_read<std::uint32_t>( weapons_data + i * sizeof( std::uint32_t ) ).value_or( 0 );
+						if ( !handle )
+						{
+							continue;
+						}
+
+						const auto weapon = systems::g_entities.lookup( handle );
+						if ( !weapon || weapon < 0x10000 )
+						{
+							continue;
+						}
+
+						const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
+						const auto current_def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
+						const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
+
+						if ( !current_def || current_def->category != econ_item_system::item_category::gun )
+						{
+							continue;
+						}
+
+						const auto skin_it = settings::g_changer.skins.data.find( current_def_index );
+						if ( skin_it == settings::g_changer.skins.data.end( ) )
+						{
+							continue;
+						}
+
+						const auto skin = cosmetic_attributes::normalize(skin_it->second);
+						const auto applied_it = this->m_applied_weapons.find( handle );
+
+						const auto current_pk = memory::safe_read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) ).value_or( -1 );
+						const auto current_id_high = memory::safe_read<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDHigh"_hash ) ).value_or( 0 );
+						const auto current_seed = memory::safe_read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackSeed"_hash ) ).value_or( -1 );
+
+						if ( applied_it != this->m_applied_weapons.end( ) 
+							&& applied_it->second.weapon == weapon 
+							&& applied_it->second.skin == skin 
+							&& current_pk == skin.paint_kit_id 
+							&& current_id_high == 0xf0000000 
+							&& current_seed == skin.seed )
+						{
+							continue;
+						}
+
+						const auto subclass_ptr = memory::safe_read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ).value_or( 0 );
+						if ( !subclass_ptr )
+						{
+							continue;
+						}
+
+						if (this->apply( weapon, iv, handle, active_handle, local_pawn, &skin, account_id ))
+							this->m_applied_weapons[ handle ] = { weapon, skin };
+					}
+
+					if ( active_handle != this->m_last_active_handle )
+					{
+						this->m_last_active_handle = active_handle;
+
+						if ( active_weapon )
+						{
+							const auto iv = active_weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
+							const auto def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
+							const auto def = g_econ_item_system.find_def( static_cast< std::int16_t >( def_index ) );
+
+							if ( def && def->category == econ_item_system::item_category::gun )
+							{
+								const auto skin_it = settings::g_changer.skins.data.find( def_index );
+								if ( skin_it != settings::g_changer.skins.data.end( ) )
+								{
+									const auto skin = cosmetic_attributes::normalize( skin_it->second );
+									this->apply( active_weapon, iv, active_handle, active_handle, local_pawn, &skin, account_id );
+									this->m_applied_weapons[ active_handle ] = { active_weapon, skin };
+								}
+								else
+								{
+									const auto paint_kit_id = memory::safe_read<int>( active_weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) ).value_or( 0 );
+									const auto pk = g_econ_item_system.find_paint_kit( paint_kit_id );
+									this->update_view_model( local_pawn, pk );
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Apply synced skins for remote players
+		const auto all_players = systems::g_entities.get_by_type( systems::entities::type::player );
+		for ( const auto& p : all_players )
+		{
+			const auto ctrl = p.ptr;
+			if ( !ctrl || ctrl == local_ctrl )
+			{
+				continue;
+			}
+
+			const auto sid = memory::read<std::uint64_t>( ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+			constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+			if ( sid < steam_id_base && !g_skin_sync.m_bot_sync_test.load( ) )
+			{
+				continue;
+			}
+
+			const auto remote_skin_data = g_skin_sync.get_remote_skin( sid );
+			if ( !remote_skin_data || remote_skin_data->skins.empty( ) )
+			{
+				continue;
+			}
+
+			const auto pawn_handle = memory::read<std::uint32_t>( ctrl + SCHEMA( "CBasePlayerController", "m_hPawn"_hash ) );
+			if ( !pawn_handle )
+			{
+				continue;
+			}
+
+			const auto pawn = systems::g_entities.lookup( pawn_handle );
+			if ( !pawn || pawn < 0x10000 )
+			{
+				continue;
+			}
+
+			const auto remote_weapon_services = memory::read<std::uintptr_t>( pawn + SCHEMA( "C_BasePlayerPawn", "m_pWeaponServices"_hash ) );
+			if ( !remote_weapon_services )
+			{
+				continue;
+			}
+
+			const auto remote_weapons_base = remote_weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hMyWeapons"_hash );
+			const auto remote_weapons_size = memory::read<int>( remote_weapons_base );
+			const auto remote_weapons_data = memory::read<std::uintptr_t>( remote_weapons_base + 0x8 );
+			if ( !remote_weapons_data || remote_weapons_size <= 0 )
+			{
+				continue;
+			}
+
+			const auto remote_active_handle = memory::read<std::uint32_t>( remote_weapon_services + SCHEMA( "CPlayer_WeaponServices", "m_hActiveWeapon"_hash ) );
+			const auto remote_account_id = static_cast< std::uint32_t >( sid & 0xffffffff );
+
+			for ( auto i = 0; i < remote_weapons_size; ++i )
+			{
+				const auto handle = memory::safe_read<std::uint32_t>( remote_weapons_data + i * sizeof( std::uint32_t ) ).value_or( 0 );
+				if ( !handle )
+				{
+					continue;
+				}
+
+				const auto weapon = systems::g_entities.lookup( handle );
+				if ( !weapon || weapon < 0x10000 )
+				{
+					continue;
+				}
+
+				const auto iv = weapon + SCHEMA( "C_EconEntity", "m_AttributeManager"_hash ) + SCHEMA( "C_AttributeContainer", "m_Item"_hash );
+				const auto current_def_index = memory::safe_read<std::uint16_t>( iv + SCHEMA( "C_EconItemView", "m_iItemDefinitionIndex"_hash ) ).value_or( 0 );
+				const auto current_def = g_econ_item_system.find_def( static_cast< std::int16_t >( current_def_index ) );
+				if ( !current_def || current_def->category != econ_item_system::item_category::gun )
+				{
+					continue;
+				}
+
+				const auto skin_it = remote_skin_data->skins.find( current_def_index );
+				if ( skin_it == remote_skin_data->skins.end( ) )
+				{
+					continue;
+				}
+
+				const auto skin = cosmetic_attributes::normalize( skin_it->second );
+				const auto applied_it = this->m_applied_weapons.find( handle );
+
+				const auto current_pk = memory::safe_read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackPaintKit"_hash ) ).value_or( -1 );
+				const auto current_id_high = memory::safe_read<std::uint32_t>( iv + SCHEMA( "C_EconItemView", "m_iItemIDHigh"_hash ) ).value_or( 0 );
+				const auto current_seed = memory::safe_read<int>( weapon + SCHEMA( "C_EconEntity", "m_nFallbackSeed"_hash ) ).value_or( -1 );
+
+				if ( applied_it != this->m_applied_weapons.end( ) 
+					&& applied_it->second.weapon == weapon 
+					&& applied_it->second.skin == skin 
+					&& current_pk == skin.paint_kit_id 
+					&& current_id_high == 0xf0000000 
+					&& current_seed == skin.seed )
+				{
+					continue;
+				}
+
+				const auto subclass_ptr = memory::safe_read<std::uintptr_t>( weapon + SCHEMA( "C_BaseEntity", "m_nSubclassID"_hash ) + 0x8 ).value_or( 0 );
+				if ( !subclass_ptr )
+				{
+					continue;
+				}
+
+				if ( this->apply( weapon, iv, handle, remote_active_handle, pawn, &skin, remote_account_id ) )
+				{
+					this->m_applied_weapons[ handle ] = { weapon, skin };
 				}
 			}
 		}
@@ -187,11 +320,7 @@ namespace features::changer {
 
 		if ( PATTERN( patterns::weapon_update_composite_material ) )
 		{
-			const auto composite_list = memory::safe_read<std::uintptr_t>( weapon + 0x608 ).value_or( 0 );
-			if ( composite_list )
-			{
-				memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
-			}
+			memory::call<void>( PATTERN( patterns::weapon_update_composite_material ), weapon + 0x608, true );
 		}
 
 		memory::call_vfunc<void>( weapon, 10, 1 );

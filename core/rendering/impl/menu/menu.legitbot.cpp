@@ -126,17 +126,105 @@ namespace rendering {
 			xui::end_child( );
 		}
 
+		const bool is_sniper = is_custom_wep
+			? ( menu_weapons::weapon_sel_legit.weapon_flat_idx >= 0 &&
+			    menu_weapons::weapon_sel_legit.weapon_flat_idx < static_cast< int >( cstypes::weapons::k_total_weapons ) &&
+			    cstypes::weapons::k_weapons[ menu_weapons::weapon_sel_legit.weapon_flat_idx ].group_idx == 4 )
+			: ( std::clamp( menu_weapons::weapon_sel_legit.group_idx, 0, 5 ) == 4 );
+
 		// RIGHT COLUMN: TRIGGER & WEAPON ACCURACY
 		draw_col_title( right_x, "TRIGGER & ACCURACY" );
 		xui::layout::set_cursor( right_x - wx, body_y + k_header_h - wy );
 
 		if ( xui::begin_child( "##legitbot_trigger_accuracy", col_w, body_h - k_header_h, true ) )
 		{
+			auto draw_animated_item = [&]( const char* name, bool should_show, float item_h, float extra_pad, auto&& render_fn ) {
+				auto anim = xui::anim::lerp(
+					xui::fnv1a( name ),
+					should_show ? 1.0f : 0.0f,
+					10.0f,
+					should_show ? 1.0f : 0.0f
+				);
+
+				if ( anim <= 0.001f )
+				{
+					anim = 0.0f;
+					xui::anim::set( xui::fnv1a( name ), 0.0f );
+				}
+				else if ( anim >= 0.999f )
+				{
+					anim = 1.0f;
+					xui::anim::set( xui::fnv1a( name ), 1.0f );
+				}
+
+				if ( anim > 0.0f )
+				{
+					auto* win = xui::layout::current_window( );
+					auto& st = xui::ctx( ).style;
+
+					if ( win && win->line_h > 0.0f )
+					{
+						win->cursor_y += win->line_h + st.item_spacing_y;
+						win->line_h = 0.0f;
+					}
+
+					const auto [start_cx, base_y] = xui::layout::get_cursor( );
+					const float scroll_y = win ? win->scroll_y : 0.0f;
+					const float win_bx = win ? win->bounds.x : 0.0f;
+					const float win_by = win ? win->bounds.y : 0.0f;
+					const float screen_x = win_bx + start_cx;
+					const float screen_y = win_by + base_y - scroll_y;
+
+					const float full_stride = item_h + extra_pad + st.item_spacing_y;
+					const float anim_ease = xui::ease::out_cubic( anim );
+					const float current_offset = full_stride * anim_ease;
+					const float clip_h = ( item_h + extra_pad ) * anim_ease;
+					const float clip_w = win ? win->bounds.w : col_w;
+
+					auto& dl = xui::draw::current( );
+					dl.push_clip( screen_x - 10.0f, screen_y - 2.0f, clip_w + 20.0f, clip_h + 4.0f );
+
+					const auto a = std::clamp( anim, 0.0f, 1.0f );
+					xui::push_style_color( xui::style_col::text, st.text.alpha( static_cast< std::uint8_t >( st.text.a * a ) ) );
+					xui::push_style_color( xui::style_col::text_dim, st.text_dim.alpha( static_cast< std::uint8_t >( st.text_dim.a * a ) ) );
+					xui::push_style_color( xui::style_col::accent, st.accent.alpha( static_cast< std::uint8_t >( st.accent.a * a ) ) );
+					xui::push_style_color( xui::style_col::checkbox_bg, st.checkbox_bg.alpha( static_cast< std::uint8_t >( st.checkbox_bg.a * a ) ) );
+					xui::push_style_color( xui::style_col::checkbox_border, st.checkbox_border.alpha( static_cast< std::uint8_t >( st.checkbox_border.a * a ) ) );
+					xui::push_style_color( xui::style_col::slider_track, st.slider_track.alpha( static_cast< std::uint8_t >( st.slider_track.a * a ) ) );
+					xui::push_style_color( xui::style_col::slider_fill, st.slider_fill.alpha( static_cast< std::uint8_t >( st.slider_fill.a * a ) ) );
+					xui::push_style_color( xui::style_col::combo_bg, st.combo_bg.alpha( static_cast< std::uint8_t >( st.combo_bg.a * a ) ) );
+					xui::push_style_color( xui::style_col::combo_border, st.combo_border.alpha( static_cast< std::uint8_t >( st.combo_border.a * a ) ) );
+
+					auto& input = xui::ctx( ).input;
+					const auto saved_clicked = input.mouse_clicked;
+					const auto saved_down = input.mouse_down;
+					if ( !should_show || anim < 0.95f )
+					{
+						input.mouse_clicked = false;
+						input.mouse_down = false;
+					}
+
+					render_fn( );
+
+					input.mouse_clicked = saved_clicked;
+					input.mouse_down = saved_down;
+					xui::pop_style_color( 9 );
+					dl.pop_clip( );
+
+					if ( win )
+					{
+						win->line_h = 0.0f;
+					}
+					xui::layout::set_cursor( start_cx, base_y + current_offset );
+				}
+			};
+
 			xui::push_id( sel_scope_id );
 			xui::toggle( "Check Smoke", wg.smoke_check );
 			xui::layout::spacing( 3.0f );
-			xui::toggle( "Check Scope", wg.scope_check );
-			xui::layout::spacing( 3.0f );
+			draw_animated_item( "lb_scope_check_anim", is_sniper, 24.0f, 3.0f, [ & ]() {
+				xui::toggle( "Check Scope", wg.scope_check );
+			} );
 			xui::toggle( "Flash Check", wg.flash_check );
 			xui::layout::spacing( 3.0f );
 			xui::toggle( "Only On Ground", wg.ground_check );

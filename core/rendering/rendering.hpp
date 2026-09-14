@@ -34,10 +34,19 @@ namespace rendering {
         void initialize_graphics();
         void draw();
         void shutdown() const;
-        void toggle() { this->m_open = !this->m_open; }
+        void toggle()
+        {
+            this->m_open = !this->m_open;
+            if (!this->m_open)
+            {
+                this->m_search_open = false;
+                this->m_user_popup_open = false;
+            }
+        }
         [[nodiscard]] bool is_open() const { return this->m_open; }
         void apply_saved_cursor();
         void update_ui_state();
+        void apply_theme_preset(int preset);
         [[nodiscard]] const std::string& user_name() const { return this->m_user_name; }
         void reset_user_avatar();
         enum class tab : int
@@ -50,7 +59,6 @@ namespace rendering {
         void draw_side_bar(float h); // Оставляем один аргумент
         void draw_top_bar(float w);
         void try_load_user_avatar();
-        void apply_theme_preset(int preset);
         void sync_theme_style() const;
         void draw_search_results(float x, float y, float w, float h);
         void rebuild_search_index();
@@ -170,6 +178,13 @@ namespace rendering {
     public:
         void draw();
         static inline std::string s_map_name{};
+        static inline int s_team_kills{ 0 };
+        static inline int s_team_damage{ 0 };
+        static void reset_team_damage() noexcept { s_team_kills = 0; s_team_damage = 0; }
+        static void record_team_damage( int dmg, bool kill ) noexcept {
+            s_team_damage += dmg;
+            if ( kill ) s_team_kills += 1;
+        }
         [[nodiscard]] bool is_keybinds_hovered() const noexcept { return this->m_keybinds_hovered; }
         [[nodiscard]] bool is_keybinds_dragging() const noexcept { return this->m_keybinds_dragging; }
         [[nodiscard]] bool is_spectators_hovered() const noexcept { return this->m_spectators_hovered; }

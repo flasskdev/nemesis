@@ -220,6 +220,15 @@ namespace rendering {
                                         xui::end_popup( );
                                 }
                                 xui::layout::spacing( 3.0f );
+                                xui::toggle( "Anim Nickname", m.m_name_changer.anim_nickname );
+                                if ( xui::begin_popup( "##restore_anim_name", 250.0f ) )
+                                {
+                                        static constexpr const char* const anim_names[ ]{ "marquee (scroll)", "typewriter", "dancing wave", "cyber glitch", "star pulse" };
+                                        xui::combo( "animation##anim_nick", m.m_name_changer.anim_type.value, anim_names, 5 );
+                                        xui::slider_float( "speed##anim_nick", m.m_name_changer.anim_speed, 0.05f, 1.50f, "%.2fs" );
+                                        xui::end_popup( );
+                                }
+                                xui::layout::spacing( 3.0f );
                                 xui::toggle( "Clantag", m.m_name_changer.clantag );
                                 xui::layout::spacing( 3.0f );
                                 if ( xui::button( "Vote Kick Self", m.vote_kick_self ) )
@@ -371,8 +380,18 @@ namespace rendering {
                         if ( xui::begin_child( "##misc_hud_left", col_w, body_h - k_header_h, true ) )
                         {
                                 xui::toggle( "Keybinds List", m.m_widgets.keybinds_list );
+                                if ( xui::begin_popup( "##keybinds_cfg", 200.0f ) )
+                                {
+                                        xui::checkbox( "Teammates damage", m.m_widgets.keybinds_teammates_damage );
+                                        xui::end_popup( );
+                                }
                                 xui::layout::spacing( 3.0f );
                                 xui::toggle( "Spectator List", m.m_widgets.spectator_list );
+                                if ( xui::begin_popup( "##spectator_cfg", 200.0f ) )
+                                {
+                                        xui::checkbox( "Teammates damage", m.m_widgets.spectator_teammates_damage );
+                                        xui::end_popup( );
+                                }
 
                                 xui::end_child( );
                         }
@@ -453,6 +472,15 @@ namespace rendering {
                                         xui::end_popup( );
                                 }
                                 xui::layout::spacing( 3.0f );
+                                xui::toggle( "Damage Effect", impacts.damage_effect );
+                                if ( xui::begin_popup( "##restore_damage_effect", 220.0f, &impacts.damage_effect_color.value ) )
+                                {
+                                        xui::color_picker( "color##dmgeff", impacts.damage_effect_color );
+                                        xui::slider_float( "delay for hide##dmgeff", impacts.damage_effect_duration, 0.1f, 10.0f, "%.1fs" );
+                                        xui::slider_float( "size##dmgeff", impacts.damage_effect_size, 0.5f, 5.0f, "%.1fx" );
+                                        xui::end_popup( );
+                                }
+                                xui::layout::spacing( 3.0f );
                                 xui::toggle( "Kill Sound", impacts.death_sound );
                                 if ( xui::begin_popup( "##restore_deathsound", 250.0f ) )
                                 {
@@ -513,6 +541,7 @@ namespace rendering {
                                 if ( xui::begin_popup( "##restore_trajectory", 250.0f ) )
                                 {
                                         xui::checkbox( "straight throw##traj", m.m_projectile_trajectory.straight_throw );
+                                        xui::checkbox( "super toss##traj", m.m_projectile_trajectory.super_toss );
                                         xui::color_picker( "held##traj", m.m_projectile_trajectory.held_color );
                                         xui::color_picker( "thrown##traj", m.m_projectile_trajectory.thrown_color );
                                         xui::color_picker( "held damage##traj", m.m_projectile_trajectory.will_deal_damage_held_color );
@@ -522,12 +551,40 @@ namespace rendering {
                                         xui::end_popup( );
                                 }
                                 xui::layout::spacing( 3.0f );
+                                xui::toggle( "Super Toss", m.m_projectile_trajectory.super_toss );
+                                xui::layout::spacing( 3.0f );
                                 xui::toggle( "Dynamic Light", m.m_dlight.enabled );
                                 if ( xui::begin_popup( "##restore_dlight", 250.0f ) )
                                 {
                                         xui::color_picker( "color##dlight", m.m_dlight.color );
                                         xui::slider_float( "radius##dlight", m.m_dlight.radius, 1.0f, 1000.0f, "%.0f" );
                                         xui::slider_float( "z offset##dlight", m.m_dlight.z_offset, -100.0f, 100.0f, "%.1f" );
+                                        xui::end_popup( );
+                                }
+                                xui::layout::spacing( 3.0f );
+                                xui::toggle( "Custom Smoke Color", m.m_smoke_and_fire_color.custom_smoke );
+                                if ( xui::begin_popup( "##restore_smoke_col", 220.0f ) )
+                                {
+                                        xui::color_picker( "color##smoke_misc", m.m_smoke_and_fire_color.smoke_color );
+                                        xui::end_popup( );
+                                }
+                                xui::layout::spacing( 3.0f );
+                                xui::toggle( "Custom Molotov Color", m.m_smoke_and_fire_color.custom_molotov );
+                                if ( xui::begin_popup( "##restore_molo_col", 220.0f ) )
+                                {
+                                        xui::color_picker( "color##molo_misc", m.m_smoke_and_fire_color.molotov_color );
+                                        xui::end_popup( );
+                                }
+                                xui::layout::spacing( 3.0f );
+                                xui::toggle( "Molotov Radius", settings::g_esp.m_projectile.m_overlay.m_infernos.enabled );
+                                if ( xui::begin_popup( "##restore_molo_rad_misc", 220.0f ) )
+                                {
+                                        xui::checkbox( "step detection##molo_r_m", settings::g_esp.m_projectile.m_overlay.m_infernos.step_detection );
+                                        xui::color_picker( "center color##molo_r_m", settings::g_esp.m_projectile.m_overlay.m_infernos.fill_color );
+                                        xui::color_picker( "border color##molo_r_m", settings::g_esp.m_projectile.m_overlay.m_infernos.outline_color );
+                                        xui::slider_float( "border thickness##molo_r_m", settings::g_esp.m_projectile.m_overlay.m_infernos.outline_thickness, 0.5f, 5.0f, "%.1f" );
+                                        xui::checkbox( "glow##molo_r_m", settings::g_esp.m_projectile.m_overlay.m_infernos.glow );
+                                        xui::slider_float( "glow strength##molo_r_m", settings::g_esp.m_projectile.m_overlay.m_infernos.glow_strength, 0.1f, 1.0f, "%.2f" );
                                         xui::end_popup( );
                                 }
 

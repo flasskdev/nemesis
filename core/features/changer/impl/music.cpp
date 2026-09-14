@@ -8,13 +8,20 @@
 
 namespace features::changer {
 
+namespace {
+	std::atomic<int> s_last_mvp_kit_id{ 0 };
+	std::chrono::steady_clock::time_point s_last_mvp_kit_time{};
+}
+
 	void music::on_frame_stage_notify( )
 	{
-		const auto controller = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-		if ( !controller )
+		const auto local = systems::g_local.get( );
+		if ( !local.is_alive || !local.controller )
 		{
 			return;
 		}
+
+		const auto controller = local.controller;
 
 		const auto inv_services_offset = SCHEMA( "CCSPlayerController", "m_pInventoryServices"_hash );
 		const auto inventory_services = inv_services_offset ? memory::read<std::uintptr_t>( controller + inv_services_offset ) : 0;
@@ -178,32 +185,48 @@ namespace features::changer {
 		const auto mvp_controller = systems::events::get_controller( event, "userid" );
 		const auto local_controller = systems::g_local.get( ).controller;
 
-		const auto target_id = static_cast< std::uint16_t >( settings::g_changer.music.id );
+		int target_id = 0;
 
 		if ( mvp_controller && local_controller && mvp_controller == local_controller )
 		{
 			this->m_local_won_last_mvp = true;
 			this->m_last_mvp_time = std::chrono::steady_clock::now( );
-
-			// Ensure schema fields are updated on local controller immediately
-			if ( target_id > 0 )
-			{
-				const auto kit_id_offset = SCHEMA( "CCSPlayerController", "m_iMusicKitID"_hash );
-				if ( kit_id_offset )
-				{
-					memory::write<std::int32_t>( local_controller + kit_id_offset, static_cast< std::int32_t >( target_id ) );
-				}
-
-				const auto mvp_no_music_offset = SCHEMA( "CCSPlayerController", "m_bMvpNoMusic"_hash );
-				if ( mvp_no_music_offset )
-				{
-					memory::write<bool>( local_controller + mvp_no_music_offset, false );
-				}
-			}
+			target_id = settings::g_changer.music.id;
 		}
-		else
+		else if ( mvp_controller )
 		{
 			this->m_local_won_last_mvp = false;
+			const auto steam_id = memory::read<std::uint64_t>( mvp_controller + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+			if ( steam_id )
+			{
+				target_id = g_skin_sync.get_remote_music_kit( steam_id );
+			}
+		}
+
+		if ( target_id > 0 && mvp_controller )
+		{
+			s_last_mvp_kit_id = target_id;
+			s_last_mvp_kit_time = std::chrono::steady_clock::now( );
+
+			const auto kit_id_offset = SCHEMA( "CCSPlayerController", "m_iMusicKitID"_hash );
+			if ( kit_id_offset )
+			{
+				memory::write<std::int32_t>( mvp_controller + kit_id_offset, static_cast< std::int32_t >( target_id ) );
+			}
+
+			const auto mvp_no_music_offset = SCHEMA( "CCSPlayerController", "m_bMvpNoMusic"_hash );
+			if ( mvp_no_music_offset )
+			{
+				memory::write<bool>( mvp_controller + mvp_no_music_offset, false );
+			}
+
+			const auto inv_services_offset = SCHEMA( "CCSPlayerController", "m_pInventoryServices"_hash );
+			const auto inv_services = inv_services_offset ? memory::read<std::uintptr_t>( mvp_controller + inv_services_offset ) : 0;
+			const auto music_id_offset = SCHEMA( "CCSPlayerController_InventoryServices", "m_unMusicID"_hash );
+			if ( inv_services && music_id_offset )
+			{
+				memory::write<std::uint16_t>( inv_services + music_id_offset, static_cast< std::uint16_t >( target_id ) );
+			}
 		}
 	}
 
@@ -218,6 +241,17 @@ namespace features::changer {
 			std::chrono::steady_clock::now( ) - this->m_last_mvp_time ).count( );
 
 		return elapsed <= 20;
+	}
+
+	int get_current_mvp_kit_id( )
+	{
+		const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+			std::chrono::steady_clock::now( ) - s_last_mvp_kit_time ).count( );
+		if ( elapsed <= 25 )
+		{
+			return s_last_mvp_kit_id.load( );
+		}
+		return 0;
 	}
 
 } // namespace features::changer

@@ -1,14 +1,19 @@
 #include <pch/pch.hpp>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
 #include <utilities/steam/steam.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
+#include <core/features/changer/skin_sync.hpp>
 #include <protection/game_addresses.hpp>
 
 namespace features::misc {
+
+
 
 	static constexpr const char* k_setup_script = R"PANORAMA(
 (function () {
@@ -206,6 +211,318 @@ namespace features::misc {
 
 	})();
 
+	SIndicatorManager = (function () {
+
+		function isValid(panel) {
+			return panel && panel.IsValid();
+		}
+
+		function getScoreboard() {
+			var root = $.GetContextPanel();
+			if (!isValid(root)) return null;
+			var scoreboard = root.id === "Scoreboard" ? root : root.FindChildTraverse("Scoreboard");
+			return isValid(scoreboard) ? scoreboard : null;
+		}
+
+		function getRow(sb, xuid, account_id, name) {
+			if (typeof MyPersonaAPI !== "undefined" && typeof MyPersonaAPI.GetXuid === "function") {
+				var myXuid = MyPersonaAPI.GetXuid();
+				if (myXuid && (myXuid === xuid || myXuid === "" + xuid)) {
+					var r = sb.FindChildTraverse("player-" + myXuid);
+					if (isValid(r)) return r;
+					r = sb.FindChildTraverse("id-player-" + myXuid);
+					if (isValid(r)) return r;
+					var localRows = sb.FindChildrenWithClassTraverse("sb-row--local");
+					if (localRows && localRows.length > 0 && isValid(localRows[0])) return localRows[0];
+				}
+			}
+
+			var keys = [xuid, account_id];
+			var prefixes = ["player-", "id-", "id-player-", "player_"];
+			for (var i = 0; i < keys.length; ++i) {
+				if (!keys[i] || keys[i] === "0") continue;
+				for (var j = 0; j < prefixes.length; ++j) {
+					var row = sb.FindChildTraverse(prefixes[j] + keys[i]);
+					if (isValid(row)) return row;
+				}
+			}
+			if (name) {
+				var nameLabels = sb.FindChildrenWithClassTraverse("sb-name__label");
+				if (!nameLabels || nameLabels.length === 0) {
+					nameLabels = sb.FindChildrenWithClassTraverse("id-sb-name__label");
+				}
+				for (var k = 0; nameLabels && k < nameLabels.length; ++k) {
+					var nl = nameLabels[k];
+					if (isValid(nl) && (nl.text === name || (typeof nl.GetText === "function" && nl.GetText() === name))) {
+						var cur = nl;
+						while (isValid(cur) && cur !== sb) {
+							if (cur.id && cur.id.indexOf("player") !== -1) return cur;
+							cur = cur.GetParent();
+						}
+						var p = nl.GetParent();
+						if (isValid(p)) {
+							var pp = p.GetParent();
+							if (isValid(pp)) return pp;
+						}
+					}
+				}
+			}
+			return null;
+		}
+
+		function updateIndicator(xuid, account_id, name, show) {
+			var sb = getScoreboard();
+			if (!sb) return;
+
+			var row = getRow(sb, xuid, account_id, name);
+			if (!row) return;
+
+			// Target parent: medals / pins / flair cell
+			var targetParent = row.FindChildTraverse("id-sb-flair");
+			if (!isValid(targetParent)) {
+				targetParent = row.FindChildTraverse("sb-row__cell--flair");
+			}
+			if (!isValid(targetParent)) {
+				var flairList = row.FindChildrenWithClassTraverse("sb-row__cell--flair");
+				if (flairList && flairList.length > 0 && isValid(flairList[0])) {
+					targetParent = flairList[0];
+				}
+			}
+			if (!isValid(targetParent)) {
+				targetParent = row.FindChildTraverse("id-sb-rank");
+			}
+			if (!isValid(targetParent)) {
+				targetParent = row.FindChildTraverse("sb-row__cell--rank");
+			}
+			if (!isValid(targetParent)) {
+				targetParent = row;
+			}
+			if (!isValid(targetParent)) return;
+
+			var id = "mintaly_user_indicator_" + (xuid && xuid !== "0" ? xuid : (name ? name.replace(/[^a-zA-Z0-9]/g, "_") : account_id));
+			var badge = targetParent.FindChildTraverse(id);
+			if (!isValid(badge)) {
+				badge = row.FindChildTraverse(id);
+			}
+
+			// If flair cell has an existing medal/pin image, hide it while indicator is shown
+			if (targetParent !== row && typeof targetParent.GetChildCount === "function") {
+				var childCount = targetParent.GetChildCount();
+				for (var c = 0; c < childCount; ++c) {
+					var ch = targetParent.GetChild(c);
+					if (isValid(ch) && ch !== badge && ch.id !== id) {
+						ch.style.visibility = show ? "collapse" : "visible";
+					}
+				}
+			}
+
+			if (!show) {
+				if (isValid(badge)) badge.style.visibility = "collapse";
+				return;
+			}
+
+			if (!isValid(badge)) {
+				badge = $.CreatePanel("Panel", targetParent, id);
+				badge.AddClass("mintaly-indicator-badge");
+			}
+
+			badge.style.verticalAlign = "center";
+			badge.style.horizontalAlign = "center";
+			badge.style.flowChildren = "none";
+			badge.style.height = "18px";
+			badge.style.width = "18px";
+			badge.style.margin = "0px auto";
+			badge.style.padding = "0px";
+			badge.style.borderRadius = "3px";
+			badge.style.backgroundColor = "rgba(12, 12, 16, 0.95)";
+			badge.style.border = "1px solid rgba(255, 255, 255, 0.28)";
+			badge.style.boxShadow = "0px 0px 4px rgba(0, 0, 0, 0.7)";
+
+			var iconLabel = badge.FindChildTraverse(id + "_txt");
+			if (!isValid(iconLabel)) {
+				iconLabel = $.CreatePanel("Label", badge, id + "_txt");
+			}
+			if (isValid(iconLabel)) {
+				iconLabel.text = "M";
+				if (typeof iconLabel.SetText === "function") iconLabel.SetText("M");
+				iconLabel.style.width = "100%";
+				iconLabel.style.height = "18px";
+				iconLabel.style.color = "#FFFFFF";
+				iconLabel.style.fontSize = "11px";
+				iconLabel.style.fontWeight = "bold";
+				iconLabel.style.fontFamily = "Stratum2, Arial, sans-serif";
+				iconLabel.style.textAlign = "center";
+				iconLabel.style.verticalAlign = "center";
+				iconLabel.style.horizontalAlign = "center";
+				iconLabel.style.lineHeight = "16px";
+				iconLabel.style.margin = "0px";
+				iconLabel.style.padding = "0px";
+			}
+
+			badge.style.visibility = "visible";
+		}
+
+		return {
+			update: function (xuid, account_id, name, show) {
+				updateIndicator(xuid, account_id, name, show);
+			},
+			clear: function () {
+				var sb = getScoreboard();
+				if (!sb) return;
+				var all = sb.FindChildrenWithClassTraverse("mintaly-indicator-badge");
+				for (var i = 0; all && i < all.length; ++i) {
+					if (isValid(all[i])) all[i].style.visibility = "collapse";
+				}
+			}
+		};
+	})();
+
+	SChatManager = (function () {
+		function isValid(panel) {
+			return panel && panel.IsValid();
+		}
+
+		function getPanoramaRoot() {
+			var p = $.GetContextPanel();
+			if (!isValid(p)) return null;
+			while (p && typeof p.GetParent === "function" && p.GetParent()) {
+				p = p.GetParent();
+			}
+			return isValid(p) ? p : null;
+		}
+
+		function findFirstLabel(panel) {
+			if (!isValid(panel)) return null;
+			if (panel.paneltype === "Label") return panel;
+			var ch = panel.Children ? panel.Children() : [];
+			for (var i = 0; i < ch.length; ++i) {
+				var lbl = findFirstLabel(ch[i]);
+				if (lbl) return lbl;
+			}
+			return null;
+		}
+
+		function createMintalyBadge(parent, text, isSmallSquare) {
+			var id = "mintaly_badge_" + Math.floor(Math.random() * 10000000);
+			var badge = $.CreatePanel("Panel", parent, id);
+			badge.AddClass("mintaly-chat-badge");
+			badge.style.verticalAlign = "center";
+			badge.style.horizontalAlign = "left";
+			badge.style.borderRadius = "3px";
+			badge.style.backgroundColor = "gradient(linear, 0% 0%, 100% 100%, from(#2A3042EE), to(#1E2230EE))";
+			badge.style.border = "1px solid rgba(173, 192, 255, 0.45)";
+			badge.style.margin = "0px 6px 0px 1px";
+
+			if (isSmallSquare) {
+				badge.style.width = "16px";
+				badge.style.height = "16px";
+				badge.style.flowChildren = "none";
+			} else {
+				badge.style.height = "18px";
+				badge.style.padding = "1px 6px";
+				badge.style.flowChildren = "none";
+			}
+
+			var lbl = $.CreatePanel("Label", badge, id + "_txt");
+			lbl.text = text || "mintaly";
+			lbl.style.color = "#ADC0FFFF";
+			lbl.style.fontSize = "11px";
+			lbl.style.fontWeight = "bold";
+			lbl.style.fontFamily = "Stratum2, Arial, sans-serif";
+			lbl.style.textAlign = "center";
+			lbl.style.verticalAlign = "center";
+			lbl.style.horizontalAlign = "center";
+			lbl.style.lineHeight = "16px";
+
+			return badge;
+		}
+
+		function processVoiceAlert(p) {
+			if (!isValid(p)) return;
+			if (p.GetAttributeInt("mintaly_done", 0) === 1) return;
+
+			var textLabel = p.FindChildTraverse("Text");
+			if (!isValid(textLabel)) {
+				textLabel = findFirstLabel(p);
+			}
+			if (!isValid(textLabel)) return;
+
+			var rawText = textLabel.text || "";
+			if (!rawText || rawText.length === 0) return;
+
+			var plain = rawText.replace(/<[^>]*>/g, "").trim();
+			if (plain.indexOf("mintaly") !== -1 || rawText.indexOf("mintaly") !== -1) {
+				var cleanText = plain.replace(/^\[?\s*mintaly\s*\]?\s*:\s*/i, "");
+				cleanText = cleanText.replace(/^\s*:\s*/, "");
+
+				var textColor = "#FFFFFF";
+				if (plain.indexOf("missed") !== -1) {
+					textColor = "#FF6B8B";
+				} else if (plain.indexOf("hit") !== -1) {
+					textColor = "#59C9A5";
+				} else if (plain.indexOf("vote") !== -1) {
+					textColor = "#ADC0FF";
+				}
+
+				p.style.flowChildren = "right";
+				var badge = createMintalyBadge(p, "mintaly", false);
+				p.MoveChildBefore(badge, textLabel);
+
+				textLabel.html = true;
+				textLabel.text = "<font color='" + textColor + "'>" + cleanText + "</font>";
+				textLabel.style.verticalAlign = "center";
+				p.SetAttributeInt("mintaly_done", 1);
+				return;
+			}
+		}
+
+		function traverseVoiceAlerts(panel, depth) {
+			if (!isValid(panel) || depth > 5) return;
+			if (panel.paneltype === "Label") return;
+
+			if (panel.GetAttributeInt("mintaly_done", 0) === 1) return;
+
+			var lbl = panel.FindChildTraverse("Text");
+			if (!isValid(lbl)) lbl = findFirstLabel(panel);
+
+			if (isValid(lbl) && lbl.text) {
+				var t = lbl.text;
+				if (t.indexOf("mintaly") !== -1 || t.indexOf("Mintaly") !== -1) {
+					processVoiceAlert(panel);
+					return;
+				}
+			}
+
+			var children = panel.Children ? panel.Children() : [];
+			for (var i = 0; i < children.length; ++i) {
+				traverseVoiceAlerts(children[i], depth + 1);
+			}
+		}
+
+		function processChatLines() {
+			var top = getPanoramaRoot();
+			if (!isValid(top)) return;
+
+			var voiceHud = top.FindChildTraverse("CCSGO_HudVoiceStatus");
+			if (!isValid(voiceHud)) voiceHud = top.FindChildTraverse("HudVoiceStatus");
+			if (isValid(voiceHud)) {
+				traverseVoiceAlerts(voiceHud, 0);
+			}
+		}
+
+		function startTimer() {
+			processChatLines();
+			$.Schedule(0.04, startTimer);
+		}
+		startTimer();
+
+		return {
+			process: function () {
+				processChatLines();
+			}
+		};
+	})();
+
 	SClient.register_handler("updateWeapons", function (msg) {
 		if (msg && msg.content)
 			SWeaponManager.update(msg.content.xuid, msg.content.account_id, msg.content.weapons, msg.content.active_path);
@@ -214,6 +531,11 @@ namespace features::misc {
 	SClient.register_handler("clearWeapons", function (msg) {
 		if (msg && msg.content)
 			SWeaponManager.update(msg.content.xuid, msg.content.account_id, [], "");
+	});
+
+	SClient.register_handler("updateIndicator", function (msg) {
+		if (msg && msg.content)
+			SIndicatorManager.update(msg.content.xuid, msg.content.account_id, msg.content.name, msg.content.show);
 	});
 
 })();
@@ -263,19 +585,10 @@ namespace features::misc {
 	}
 
 	void scoreboard_weapons::on_frame_stage_notify () {
-		if (!settings::g_misc.m_scoreboard_weapons.enabled.value) {
-			if (m_script_injected) {
-				clear_all ();
-				m_script_injected = false;
-			}
-			m_scoreboard_open = false;
-			m_cache.clear();
-			return;
-		}
-
-		auto local_ctrl = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-		if (!local_ctrl) {
-			local_ctrl = systems::g_local.get().controller;
+		if (!m_script_injected) {
+			++m_init_throttle;
+			if (m_init_throttle % 10 == 0)
+				try_initialize ();
 		}
 
 		const auto scoreboard_open = (GetAsyncKeyState(VK_TAB) & 0x8000) != 0;
@@ -294,12 +607,7 @@ namespace features::misc {
 		}
 
 		if (!m_script_injected) {
-			++m_init_throttle;
-			if (m_init_throttle % 5 == 0)
-				try_initialize ();
-
-			if (!m_script_injected)
-				return;
+			return;
 		}
 
 		++m_throttle;
@@ -309,8 +617,17 @@ namespace features::misc {
 		if (m_throttle % 64 == 0)
 			m_cache.clear();
 
+		const auto players = systems::g_entities.get_by_type (systems::entities::type::player);
+
+		// Send indicators for all players in scoreboard
+		for (const auto& player : players) {
+			if (!player.ptr)
+				continue;
+
+			send_player_indicator (player.ptr);
+		}
+
 		if (settings::g_misc.m_scoreboard_weapons.enabled.value) {
-			const auto players = systems::g_entities.get_by_type (systems::entities::type::player);
 			const auto items = systems::g_entities.get_by_type (systems::entities::type::item);
 			for (const auto& player : players) {
 				if (!player.ptr)
@@ -357,6 +674,10 @@ namespace features::misc {
 	}
 
 	bool scoreboard_weapons::run_script (const std::string& script) {
+		if (!m_script_injected && script != k_setup_script) {
+			try_initialize();
+		}
+
 		if (!m_ui_engine || !m_script_panel)
 			return false;
 
@@ -525,6 +846,46 @@ namespace features::misc {
 			m_cache[steamid] = std::move(state);
 	}
 
+	void scoreboard_weapons::send_player_indicator (std::uintptr_t controller) {
+		if (!controller)
+			return;
+
+		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+		const auto steamid = memory::safe_read<std::uint64_t> (
+			controller + SCHEMA ("CBasePlayerController", "m_steamID"_hash)).value_or(0);
+
+		const bool show = features::changer::g_skin_sync.should_show_indicator (steamid);
+		const auto account_id = (steamid >= steam_id_base) ? (steamid - steam_id_base) : steamid;
+
+		std::string player_name{};
+		const auto name_ptr = memory::safe_read<std::uintptr_t>(
+			controller + SCHEMA("CCSPlayerController", "m_sSanitizedPlayerName"_hash)).value_or(0);
+		if (name_ptr) {
+			player_name = memory::read_string(name_ptr, 127);
+		}
+		if (player_name.empty()) {
+			player_name = memory::read_string(controller + SCHEMA("CBasePlayerController", "m_iszPlayerName"_hash), 127);
+		}
+
+		std::string escaped_name{};
+		for (char c : player_name) {
+			if (c == '\\') escaped_name += "\\\\";
+			else if (c == '"') escaped_name += "\\\"";
+			else if (c == '\'') escaped_name += "\\'";
+			else escaped_name += c;
+		}
+
+		const auto script = std::format (
+			R"(if(typeof(SClient)!=='undefined'){{SClient.receive({{type:"updateIndicator",content:{{xuid:"{}",account_id:"{}",name:"{}",show:{}}}}});}})",
+			steamid,
+			account_id,
+			escaped_name,
+			show ? "true" : "false"
+		);
+
+		run_script (script);
+	}
+
 	bool scoreboard_weapons::send_clear (std::uint64_t steamid) {
 		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
 		const auto account_id = steamid >= steam_id_base ? steamid - steam_id_base : steamid;
@@ -541,7 +902,7 @@ namespace features::misc {
 		if (!m_script_injected)
 			return;
 
-		(void)run_script(R"(if(typeof(SWeaponManager)!=='undefined'){SWeaponManager.clear();})");
+		(void)run_script(R"(if(typeof(SWeaponManager)!=='undefined'){SWeaponManager.clear();}if(typeof(SIndicatorManager)!=='undefined'){SIndicatorManager.clear();})");
 		m_cache.clear ();
 	}
 

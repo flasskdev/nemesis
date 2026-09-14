@@ -2,6 +2,7 @@
 #include <utilities/memory/memory.hpp>
 #include <utilities/addresses/addresses.hpp>
 #include <utilities/logging/logging.hpp>
+#include <core/settings.hpp>
 
 #include "../systems.hpp"
 
@@ -51,6 +52,33 @@ namespace systems {
 		}
 
 		this->m_cached.emplace_back( entry );
+
+		if ( hashed == "C_SmokeGrenadeProjectile"_hash && settings::g_misc.m_smoke_and_fire_color.custom_smoke.value )
+		{
+			static auto smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+			if ( !smoke_col_offset )
+			{
+				smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+				if ( !smoke_col_offset )
+				{
+					const auto det_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash );
+					if ( det_offset >= 12 )
+					{
+						smoke_col_offset = det_offset - 12;
+					}
+				}
+			}
+			if ( smoke_col_offset )
+			{
+				const auto& col = settings::g_misc.m_smoke_and_fire_color.smoke_color.value;
+				const math::vector3 smoke_col{
+					static_cast<float>( col.r ) / 255.0f,
+					static_cast<float>( col.g ) / 255.0f,
+					static_cast<float>( col.b ) / 255.0f
+				};
+				memory::write<math::vector3>( entity + smoke_col_offset, smoke_col );
+			}
+		}
 	}
 
 	void entities::on_remove_entity( std::uintptr_t entity, std::uint32_t handle )

@@ -18,10 +18,15 @@ namespace features::combat {
     void misc::antiaim::on_create_move(systems::input::usercmd* cmd) {
         this->m_antiaim_active = false;
 
-        if (!settings::g_combat.m_antiaim.enabled.value ||
+        const bool aa_enabled = settings::g_combat.m_antiaim.enabled.value;
+        const bool spin_enabled = settings::g_combat.m_antiaim.spinbot.value;
+
+        if ((!aa_enabled && !spin_enabled) ||
             systems::g_local.is_in_cinematic() ||
-            systems::g_local.is_in_time_freeze())
+            systems::g_local.is_in_time_freeze()) {
+            this->m_was_spinning = false;
             return;
+        }
 
         // Оптимизированная обработка ручного направления (без лишних записей)
         const bool manual_left = settings::g_combat.m_antiaim.manual_left.value;
@@ -43,6 +48,16 @@ namespace features::combat {
         // Ранние выходы для невалидных состояний
         if ((cmd->buttons.value & cstypes::command_buttons::in_use) != 0) return;
 
+        // Не включать антиаим при стрельбе или атаке холодным/метательным оружием
+        const bool is_attacking = (cmd->buttons.value & cstypes::command_buttons::in_attack) != 0;
+        const bool is_knife = (ctx.weapon_type == cstypes::weapon_type::knife);
+        const bool is_revolver = (ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver);
+        const bool is_grenade = (ctx.weapon_type == cstypes::weapon_type::grenade);
+        const bool is_secondary_attack = (cmd->buttons.value & cstypes::command_buttons::in_second_attack) != 0;
+
+        if (is_attacking) return;
+        if ((is_knife || is_revolver || is_grenade) && is_secondary_attack) return;
+
         if (ctx.weapon_type == cstypes::weapon_type::grenade) {
             if (memory::read<float>(ctx.weapon + SCHEMA("C_BaseCSGrenade", "m_fThrowTime"_hash)) > 0.0f)
                 return;
@@ -53,25 +68,41 @@ namespace features::combat {
             return;
         if (this->is_near_ladder(local.pawn)) return;
 
+        this->m_original_buttons = cmd->buttons.value;
         this->m_old_angles = view_angles;
         this->m_antiaim_active = true;
         this->m_modified_angles = view_angles;
 
         // Расчет углов с минимальными аллокациями
-        this->m_modified_angles.x = this->get_pitch(view_angles.x);
-        this->m_modified_angles.y = this->get_yaw(view_angles, local);
+        this->m_modified_angles.x = this->get_pitch(cmd, view_angles.x);
+        this->m_modified_angles.y = this->get_yaw(cmd, view_angles, local);
         math::helpers::normalize_angles(this->m_modified_angles);
 
         base->mutable_viewangles()->set_x(this->m_modified_angles.x);
         base->mutable_viewangles()->set_y(this->m_modified_angles.y);
         base->mutable_viewangles()->set_z(this->m_modified_angles.z);
 
+        const auto history_size = cmd->csgo_user_cmd.input_history_size();
+        for (auto i = 0; i < history_size; ++i)
+        {
+            const auto entry = cmd->csgo_user_cmd.mutable_input_history(i);
+            if (!entry)
+                continue;
+
+            if (const auto angles = entry->mutable_view_angles())
+            {
+                angles->set_x(this->m_modified_angles.x);
+                angles->set_y(this->m_modified_angles.y);
+                angles->set_z(this->m_modified_angles.z);
+            }
+        }
+
         this->m_should_correct = true;
         this->correct_movement(cmd);
     }
 
     void misc::antiaim::on_render(xdraw::draw_list& draw_list) const {
-        if (!settings::g_combat.m_antiaim.enabled.value ||
+        if ((!settings::g_combat.m_antiaim.enabled.value && !settings::g_combat.m_antiaim.spinbot.value) ||
             !settings::g_combat.m_antiaim.direction_indicator.value ||
             !this->m_antiaim_active ||
             !systems::g_frame_data.valid())
@@ -157,33 +188,110 @@ namespace features::combat {
         }
     }
 
-    float misc::antiaim::get_pitch(float view_pitch) {
+    float misc::antiaim::get_pitch(systems::input::usercmd* cmd, float view_pitch) {
         if (!std::isfinite(view_pitch)) return 0.0f;
 
+        if (!settings::g_combat.m_antiaim.enabled.value)
+            return std::clamp(view_pitch, -89.0f, 89.0f);
+
         switch (settings::g_combat.m_antiaim.pitch) {
-        case settings::combat::antiaim::pitch_mode::down: return 89.0f;
-        case settings::combat::antiaim::pitch_mode::up:   return -89.0f;
-        default: return std::clamp(view_pitch, -89.0f, 89.0f);
+        case settings::combat::antiaim::pitch_mode::zero:   return 0.0f;
+        case settings::combat::antiaim::pitch_mode::down:   return 89.0f;
+        case settings::combat::antiaim::pitch_mode::up:     return -89.0f;
+        case settings::combat::antiaim::pitch_mode::custom: return std::clamp(settings::g_combat.m_antiaim.custom_pitch.value, -89.0f, 89.0f);
+        default: return 0.0f;
         }
     }
 
-    float misc::antiaim::get_yaw(const math::vector3& view_angles, const systems::local::snapshot& local) {
+    float misc::antiaim::get_yaw(systems::input::usercmd* cmd, const math::vector3& view_angles, const systems::local::snapshot& local) {
+        const auto& prestate = systems::g_prediction.pre();
+        const bool on_ground = (prestate.flags & cstypes::entity_flags::on_ground) != 0;
+
+        const auto is_spinbot = settings::g_combat.m_antiaim.spinbot.value;
+        const auto is_custom_yaw = (settings::g_combat.m_antiaim.yaw_type == settings::combat::antiaim::yaw_mode::custom);
+
         constexpr auto base_yaw_offset{ 180.0f };
         auto base_yaw = view_angles.y - base_yaw_offset;
 
-        const auto local_game_scene_node = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
-        if (!local_game_scene_node) return view_angles.y;
+        if (is_spinbot) {
+            if (!this->m_was_spinning) {
+                this->m_spin_yaw = view_angles.y;
+                this->m_was_spinning = true;
+            }
 
-        const auto local_origin = memory::read<math::vector3>(local_game_scene_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash));
-        const auto eye_pos = local_origin + memory::read<math::vector3>(local.pawn + SCHEMA("C_BaseModelEntity", "m_vecViewOffset"_hash));
-        const auto players = systems::g_entities.get_by_type(systems::entities::type::player);
+            const auto speed = settings::g_combat.m_antiaim.spin_speed.value;
+            const auto dir = settings::g_combat.m_antiaim.spin_direction.value;
+            const auto step = (dir == settings::combat::antiaim::spin_direction_mode::clockwise ? -speed : speed);
 
-        // Backstab avoidance (оптимизированный цикл)
-        if (settings::g_combat.m_antiaim.avoid_backstab.value) {
-            constexpr auto backstab_range_sq = 350.0f * 350.0f;
-            auto knife_dist = std::numeric_limits<float>::max();
-            auto knife_yaw{ 0.0f };
-            auto knife_found{ false };
+            this->m_spin_yaw = math::helpers::normalize_yaw(this->m_spin_yaw + step);
+            base_yaw = this->m_spin_yaw;
+        } else {
+            this->m_was_spinning = false;
+
+            if (is_custom_yaw) {
+                base_yaw = view_angles.y + settings::g_combat.m_antiaim.custom_yaw.value;
+            } else {
+                const auto local_game_scene_node = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
+                if (!local_game_scene_node) return view_angles.y;
+
+            const auto local_origin = memory::read<math::vector3>(local_game_scene_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash));
+            const auto eye_pos = local_origin + memory::read<math::vector3>(local.pawn + SCHEMA("C_BaseModelEntity", "m_vecViewOffset"_hash));
+            const auto players = systems::g_entities.get_by_type(systems::entities::type::player);
+
+            // Backstab avoidance (оптимизированный цикл)
+            if (settings::g_combat.m_antiaim.avoid_backstab.value) {
+                constexpr auto backstab_range_sq = 350.0f * 350.0f;
+                auto knife_dist = std::numeric_limits<float>::max();
+                auto knife_yaw{ 0.0f };
+                auto knife_found{ false };
+
+                for (const auto& p : players) {
+                    if (!p.ptr || p.ptr == local.controller) continue;
+                    if (!memory::read<bool>(p.ptr + SCHEMA("CCSPlayerController", "m_bPawnIsAlive"_hash))) continue;
+
+                    const auto pawn_handle = memory::read<std::uint32_t>(p.ptr + SCHEMA("CBasePlayerController", "m_hPawn"_hash));
+                    const auto pawn = systems::g_entities.lookup(pawn_handle);
+                    if (!pawn || pawn == local.pawn) continue;
+                    if (!local.is_this_other_team(memory::read<int>(pawn + SCHEMA("C_BaseEntity", "m_iTeamNum"_hash)))) continue;
+                    if (memory::read<int>(pawn + SCHEMA("C_BaseEntity", "m_iHealth"_hash)) <= 0) continue;
+
+                    const auto enemy_node = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
+                    if (!enemy_node) continue;
+
+                    const auto enemy_origin = memory::read<math::vector3>(enemy_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash));
+                    const auto dx = enemy_origin.x - local_origin.x;
+                    const auto dy = enemy_origin.y - local_origin.y;
+                    const auto dist_sq = dx * dx + dy * dy;
+                    if (dist_sq > backstab_range_sq) continue;
+
+                    const auto ws = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BasePlayerPawn", "m_pWeaponServices"_hash));
+                    if (!ws) continue;
+
+                    const auto wh = memory::read<std::uint32_t>(ws + SCHEMA("CPlayer_WeaponServices", "m_hActiveWeapon"_hash));
+                    const auto weapon = systems::g_entities.lookup(wh);
+                    if (!weapon) continue;
+
+                    const auto vdata = memory::read<std::uintptr_t>(weapon + SCHEMA("C_BaseEntity", "m_nSubclassID"_hash) + 0x8);
+                    if (!vdata) continue;
+                    if (memory::read<std::uint32_t>(vdata + SCHEMA("CCSWeaponBaseVData", "m_WeaponType"_hash)) != cstypes::weapon_type::knife) continue;
+
+                    if (dist_sq < knife_dist) {
+                        knife_dist = dist_sq;
+                        knife_yaw = std::atan2f(dy, dx) * (180.0f / std::numbers::pi_v<float>);
+                        knife_found = true;
+                    }
+                }
+
+                if (knife_found) {
+                    this->m_indicator_yaw = knife_yaw;
+                    return knife_yaw;
+                }
+            }
+
+            // Target selection with threat scoring
+            auto best_yaw = base_yaw;
+            auto best_threat = std::numeric_limits<float>::max();
+            bool target_found = false;
 
             for (const auto& p : players) {
                 if (!p.ptr || p.ptr == local.controller) continue;
@@ -194,95 +302,64 @@ namespace features::combat {
                 if (!pawn || pawn == local.pawn) continue;
                 if (!local.is_this_other_team(memory::read<int>(pawn + SCHEMA("C_BaseEntity", "m_iTeamNum"_hash)))) continue;
                 if (memory::read<int>(pawn + SCHEMA("C_BaseEntity", "m_iHealth"_hash)) <= 0) continue;
+                if (memory::read<bool>(pawn + SCHEMA("C_CSPlayerPawn", "m_bGunGameImmunity"_hash))) continue;
 
                 const auto enemy_node = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
                 if (!enemy_node) continue;
 
                 const auto enemy_origin = memory::read<math::vector3>(enemy_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash));
-                const auto dx = enemy_origin.x - local_origin.x;
-                const auto dy = enemy_origin.y - local_origin.y;
-                const auto dist_sq = dx * dx + dy * dy;
-                if (dist_sq > backstab_range_sq) continue;
+                const auto enemy_eye = enemy_origin + memory::read<math::vector3>(pawn + SCHEMA("C_BaseModelEntity", "m_vecViewOffset"_hash));
 
-                const auto ws = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BasePlayerPawn", "m_pWeaponServices"_hash));
-                if (!ws) continue;
+                const auto angle_to_enemy = math::helpers::calculate_angle(eye_pos, enemy_eye);
+                const auto fov = math::helpers::angle_distance(view_angles, angle_to_enemy);
+                const auto distance = eye_pos.distance(enemy_eye);
 
-                const auto wh = memory::read<std::uint32_t>(ws + SCHEMA("CPlayer_WeaponServices", "m_hActiveWeapon"_hash));
-                const auto weapon = systems::g_entities.lookup(wh);
-                if (!weapon) continue;
+                auto threat = fov * 4.0f + distance * 0.01f;
 
-                const auto vdata = memory::read<std::uintptr_t>(weapon + SCHEMA("C_BaseEntity", "m_nSubclassID"_hash) + 0x8);
-                if (!vdata) continue;
-                if (memory::read<std::uint32_t>(vdata + SCHEMA("CCSWeaponBaseVData", "m_WeaponType"_hash)) != cstypes::weapon_type::knife) continue;
+                math::vector3 enemy_fwd{};
+                math::helpers::angle_vectors_left(memory::read<math::vector3>(pawn + SCHEMA("C_CSPlayerPawn", "m_angEyeAngles"_hash)), &enemy_fwd);
+                const auto dir_to_us = (eye_pos - enemy_eye).normalized();
+                threat -= std::clamp(enemy_fwd.dot(dir_to_us), -1.0f, 1.0f) * 25.0f;
 
-                if (dist_sq < knife_dist) {
-                    knife_dist = dist_sq;
-                    knife_yaw = std::atan2f(dy, dx) * (180.0f / std::numbers::pi_v<float>);
-                    knife_found = true;
+                if (systems::g_tracing.is_visible(eye_pos, enemy_eye, pawn, local.pawn))
+                    threat -= 15.0f;
+
+                if (threat < best_threat) {
+                    best_threat = threat;
+                    best_yaw = angle_to_enemy.y - base_yaw_offset;
+                    target_found = true;
                 }
             }
 
-            if (knife_found) {
-                this->m_indicator_yaw = knife_yaw;
-                return knife_yaw;
+            if (on_ground && target_found) base_yaw = best_yaw;
             }
         }
-
-        // Target selection with threat scoring
-        auto best_yaw = base_yaw;
-        auto best_threat = std::numeric_limits<float>::max();
-        bool target_found = false;
-
-        for (const auto& p : players) {
-            if (!p.ptr || p.ptr == local.controller) continue;
-            if (!memory::read<bool>(p.ptr + SCHEMA("CCSPlayerController", "m_bPawnIsAlive"_hash))) continue;
-
-            const auto pawn_handle = memory::read<std::uint32_t>(p.ptr + SCHEMA("CBasePlayerController", "m_hPawn"_hash));
-            const auto pawn = systems::g_entities.lookup(pawn_handle);
-            if (!pawn || pawn == local.pawn) continue;
-            if (!local.is_this_other_team(memory::read<int>(pawn + SCHEMA("C_BaseEntity", "m_iTeamNum"_hash)))) continue;
-            if (memory::read<int>(pawn + SCHEMA("C_BaseEntity", "m_iHealth"_hash)) <= 0) continue;
-            if (memory::read<bool>(pawn + SCHEMA("C_CSPlayerPawn", "m_bGunGameImmunity"_hash))) continue;
-
-            const auto enemy_node = memory::read<std::uintptr_t>(pawn + SCHEMA("C_BaseEntity", "m_pGameSceneNode"_hash));
-            if (!enemy_node) continue;
-
-            const auto enemy_origin = memory::read<math::vector3>(enemy_node + SCHEMA("CGameSceneNode", "m_vecAbsOrigin"_hash));
-            const auto enemy_eye = enemy_origin + memory::read<math::vector3>(pawn + SCHEMA("C_BaseModelEntity", "m_vecViewOffset"_hash));
-
-            const auto angle_to_enemy = math::helpers::calculate_angle(eye_pos, enemy_eye);
-            const auto fov = math::helpers::angle_distance(view_angles, angle_to_enemy);
-            const auto distance = eye_pos.distance(enemy_eye);
-
-            auto threat = fov * 4.0f + distance * 0.01f;
-
-            math::vector3 enemy_fwd{};
-            math::helpers::angle_vectors_left(memory::read<math::vector3>(pawn + SCHEMA("C_CSPlayerPawn", "m_angEyeAngles"_hash)), &enemy_fwd);
-            const auto dir_to_us = (eye_pos - enemy_eye).normalized();
-            threat -= std::clamp(enemy_fwd.dot(dir_to_us), -1.0f, 1.0f) * 25.0f;
-
-            if (systems::g_tracing.is_visible(eye_pos, enemy_eye, pawn, local.pawn))
-                threat -= 15.0f;
-
-            if (threat < best_threat) {
-                best_threat = threat;
-                best_yaw = angle_to_enemy.y - base_yaw_offset;
-                target_found = true;
-            }
-        }
-
-        const auto& prestate = systems::g_prediction.pre();
-        const bool on_ground = (prestate.flags & cstypes::entity_flags::on_ground) != 0;
-        if (on_ground && target_found) base_yaw = best_yaw;
 
         auto indicator = base_yaw;
         auto yaw = base_yaw;
 
-        if (this->m_yaw_side == -1) { indicator -= 90.0f; yaw -= 90.0f; }
-        else if (this->m_yaw_side == 1) { indicator += 90.0f; yaw += 90.0f; }
+        if (!is_spinbot) {
+            if (this->m_yaw_side == -1) { indicator -= 90.0f; yaw -= 90.0f; }
+            else if (this->m_yaw_side == 1) { indicator += 90.0f; yaw += 90.0f; }
+        }
+
+        if (settings::g_combat.m_antiaim.jitters.value) {
+            const auto speed_ticks = std::clamp(settings::g_combat.m_antiaim.jitters_speed.value, 1, 5);
+            if (++this->m_jitter_ticks >= speed_ticks) {
+                this->m_jitter_flip = !this->m_jitter_flip;
+                this->m_jitter_ticks = 0;
+            }
+
+            const auto delta = settings::g_combat.m_antiaim.jitters_delta.value;
+            const auto jitter_val = this->m_jitter_flip ? (delta * 0.5f) : -(delta * 0.5f);
+            yaw += jitter_val;
+            indicator += jitter_val;
+        } else {
+            this->m_jitter_ticks = 0;
+        }
 
         this->m_indicator_yaw = indicator;
-        if (settings::g_combat.m_antiaim.auto_yaw_adjust.value) yaw += 33.0f;
+        if (!is_spinbot && settings::g_combat.m_antiaim.auto_yaw_adjust.value) yaw += 33.0f;
 
         // Fast normalize without loops
         yaw = std::fmodf(yaw + 180.0f, 360.0f);
@@ -297,58 +374,70 @@ namespace features::combat {
         this->m_should_correct = false;
 
         const auto base = cmd->csgo_user_cmd.mutable_base();
-        const auto forward_move = base->forwardmove();
-        const auto side_move = base->leftmove();
+        if (!base) return;
+
+        auto forward_move = base->forwardmove();
+        auto side_move = base->leftmove();
+
+        if (forward_move == 0.0f && side_move == 0.0f) {
+            if (this->m_original_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward)) forward_move += 1.0f;
+            if (this->m_original_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_back)) forward_move -= 1.0f;
+            if (this->m_original_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveleft)) side_move += 1.0f;
+            if (this->m_original_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_moveright)) side_move -= 1.0f;
+        }
+
         if (forward_move == 0.0f && side_move == 0.0f) return;
 
-        math::vector3 new_fwd{}, new_left{}, old_fwd{}, old_left{};
-        math::helpers::angle_vectors_left(this->m_modified_angles, &new_fwd, &new_left, nullptr);
-        math::helpers::angle_vectors_left(this->m_old_angles, &old_fwd, &old_left, nullptr);
+        const auto delta_yaw = math::helpers::normalize_yaw(this->m_modified_angles.y - this->m_old_angles.y) * (std::numbers::pi_v<float> / 180.0f);
+        const auto cos_yaw = std::cosf(delta_yaw);
+        const auto sin_yaw = std::sinf(delta_yaw);
 
-        new_fwd.z = 0.0f; new_left.z = 0.0f;
-        old_fwd.z = 0.0f; old_left.z = 0.0f;
-        new_fwd.normalize(); new_left.normalize();
-        old_fwd.normalize(); old_left.normalize();
+        auto corrected_forward = forward_move * cos_yaw + side_move * sin_yaw;
+        auto corrected_side = -forward_move * sin_yaw + side_move * cos_yaw;
 
-        const auto intent = old_fwd * forward_move + old_left * -side_move;
-        const auto intent_len = intent.length();
-        if (intent_len == 0.0f) return;
+        const auto max_comp = std::fmaxf(std::fabsf(corrected_forward), std::fabsf(corrected_side));
+        if (max_comp > 1.0f) {
+            corrected_forward /= max_comp;
+            corrected_side /= max_comp;
+        }
 
-        const auto intent_dir = intent / intent_len;
-        const auto corrected_forward = new_fwd.dot(intent_dir) * intent_len;
-        const auto corrected_side = -new_left.dot(intent_dir) * intent_len;
+        base->set_forwardmove(corrected_forward);
+        base->set_leftmove(corrected_side);
 
-        base->set_forwardmove(std::clamp(corrected_forward, -1.0f, 1.0f));
-        base->set_leftmove(std::clamp(corrected_side, -1.0f, 1.0f));
-
-        const auto local = systems::g_local.get();
-        const auto movement_services = local.pawn ? memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pMovementServices"_hash)) : 0;
-        const auto cur_fwd = movement_services ? memory::read<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdForwardMove"_hash)) : systems::g_prediction.pre().last_movement_impulses.x;
-        const auto cur_left = movement_services ? memory::read<float>(movement_services + SCHEMA("CPlayer_MovementServices", "m_flCmdLeftMove"_hash)) : systems::g_prediction.pre().last_movement_impulses.y;
-
-        for (int i = 0; i < base->subtick_moves_size(); ++i) {
-            if (auto step = base->mutable_subtick_moves(i)) {
-                if ((step->m_has_bits.test(0x8) && step->analog_forward_delta() != 0.0f) ||
-                    (step->m_has_bits.test(0x10) && step->analog_left_delta() != 0.0f)) {
-                    step->set_analog_forward_delta(base->forwardmove() - cur_fwd);
-                    step->set_analog_left_delta(base->leftmove() - cur_left);
+        if (const auto subtick_moves = base->mutable_subtick_moves()) {
+            for (int i = 0; i < base->subtick_moves_size(); ++i) {
+                if (const auto step = base->mutable_subtick_moves(i)) {
+                    const auto step_fwd = step->analog_forward_delta();
+                    const auto step_left = step->analog_left_delta();
+                    if (std::fabsf(step_fwd) > 0.0001f || std::fabsf(step_left) > 0.0001f) {
+                        const auto corr_step_fwd = step_fwd * cos_yaw + step_left * sin_yaw;
+                        const auto corr_step_left = -step_fwd * sin_yaw + step_left * cos_yaw;
+                        step->set_analog_forward_delta(corr_step_fwd);
+                        step->set_analog_left_delta(corr_step_left);
+                    }
                 }
             }
         }
 
-        if (systems::g_prediction.pre().flags & cstypes::entity_flags::on_ground) {
-            auto buttons = cmd->buttons.value;
-            buttons &= ~static_cast<std::uintptr_t>(cstypes::command_buttons::in_forward | cstypes::command_buttons::in_back |
-                cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright);
+        const auto original_buttons = this->m_original_buttons;
+        auto buttons = original_buttons;
+        buttons &= ~static_cast<std::uintptr_t>(
+            cstypes::command_buttons::in_forward | cstypes::command_buttons::in_back |
+            cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright
+        );
 
-            if (base->forwardmove() > 0.0f) buttons |= cstypes::command_buttons::in_forward;
-            else if (base->forwardmove() < 0.0f) buttons |= cstypes::command_buttons::in_back;
+        if (corrected_forward > 0.001f)
+            buttons |= cstypes::command_buttons::in_forward;
+        else if (corrected_forward < -0.001f)
+            buttons |= cstypes::command_buttons::in_back;
 
-            if (base->leftmove() > 0.0f) buttons |= cstypes::command_buttons::in_moveleft;
-            else if (base->leftmove() < 0.0f) buttons |= cstypes::command_buttons::in_moveright;
+        if (corrected_side > 0.001f)
+            buttons |= cstypes::command_buttons::in_moveleft;
+        else if (corrected_side < -0.001f)
+            buttons |= cstypes::command_buttons::in_moveright;
 
-            cmd->buttons.value = buttons;
-        }
+        cmd->buttons.value = buttons;
+        cmd->buttons.value_changed |= (original_buttons ^ buttons);
     }
 
     bool misc::antiaim::is_near_ladder(std::uintptr_t local_pawn) const {

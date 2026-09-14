@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <core/settings.hpp>
 #include "cosmetic_attributes.hpp"
+#include "skin_sync.hpp"
 #include <core/systems/systems.hpp>
 
 namespace features::changer {
@@ -352,5 +353,7 @@ namespace features::changer {
 		std::atomic_bool m_local_won_last_mvp{ false };
 		std::chrono::steady_clock::time_point m_last_mvp_time{};
 	};
+
+	[[nodiscard]] int get_current_mvp_kit_id( );
 
 } // namespace features::changer

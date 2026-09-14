@@ -2,6 +2,7 @@
 #include <utilities/math/math.hpp>
 #include <core/settings.hpp>
 #include <core/features/features.hpp>
+#include <core/hooks/hooks.hpp>
 
 #include "../../rendering.hpp"
 
@@ -116,8 +117,16 @@ namespace rendering {
 				}
 			}
 
+			features::changer::g_guns.reset( );
+			features::changer::g_knives.reset( );
+			features::changer::g_gloves.reset( );
+			features::changer::g_agents.reset( );
+			features::changer::g_music.reset( );
+			features::changer::g_skin_sync.trigger_push( );
 			settings::finalize_binds( );
 			settings::g_world.update_active( rendering::g_widgets.s_map_name );
+			rendering::g_menu.apply_theme_preset( settings::g_misc.menu_palette.value );
+			xui::tooltips::set_enabled( settings::g_misc.tooltips.value );
 		}
 
 	} // namespace detail
@@ -222,9 +231,17 @@ namespace rendering {
 					features::changer::g_guns.reset( );
 					features::changer::g_knives.reset( );
 					features::changer::g_gloves.reset( );
+					features::changer::g_agents.reset( );
 					features::changer::g_music.reset( );
+					features::changer::g_skin_sync.trigger_push( );
 					settings::finalize_binds( );
 					settings::g_world.update_active( rendering::g_widgets.s_map_name );
+					rendering::g_menu.apply_theme_preset( settings::g_misc.menu_palette.value );
+					xui::tooltips::set_enabled( settings::g_misc.tooltips.value );
+					if ( rendering::g_widgets.s_map_name.empty( ) )
+					{
+						hooks::cheat::trigger_lobby_music( static_cast< std::uint16_t >( settings::g_changer.music.id ) );
+					}
 				}
 				else if ( is_hovered && !popup_hovered && input.rmb_clicked && !xui::ctx( ).overlay_blocking( ) )
 				{

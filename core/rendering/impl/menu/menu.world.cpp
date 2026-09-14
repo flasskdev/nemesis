@@ -39,14 +39,8 @@ namespace rendering {
         const auto right_x = content_x + col_w + tokens::gap;
 
         constexpr const char* display_types[]{ "text", "icon", "text + icon" };
-        constexpr const char* cham_material_names[]{
-            "liquid", "metallic", "matte", "flat", "bloom", "outlines", "glow", "electric", "distortion", "hologram", "pearl",
-            "liquid (iz)", "matte (iz)", "flat (iz)", "bloom (iz)", "outlines (iz)", "glow (iz)", "distortion (iz)", "hologram (iz)",
-            "outline glow", "outline glow (iz)"
-        };
-        constexpr auto cham_material_count = static_cast<int>(settings::esp::cham_ids::count);
 
-        auto draw_chams_layer = [&](const char* label, const char* popup_id, settings::esp::chams_layer& layer)
+        auto draw_chams_layer = [&](const char* label, const char* popup_id, settings::esp::chams_layer& layer, bool is_through_wall = false)
             {
                 xui::checkbox(label, layer.enabled);
                 if (xui::begin_popup(popup_id, 220.0f))
@@ -56,12 +50,30 @@ namespace rendering {
                         layer.material.value == settings::esp::cham_ids::outline_glow_ignorez);
 
                     const auto prev_mat = layer.material.value;
-                    if (xui::combo("material", layer.material.value, cham_material_names, cham_material_count))
+                    if (is_through_wall)
                     {
-                        if ((layer.material.value == settings::esp::cham_ids::outline_glow || layer.material.value == settings::esp::cham_ids::outline_glow_ignorez) &&
-                            (prev_mat != settings::esp::cham_ids::outline_glow && prev_mat != settings::esp::cham_ids::outline_glow_ignorez))
+                        int mat_idx = settings::esp::get_iz_index(layer.material.value);
+                        if (xui::combo("material", mat_idx, settings::esp::k_iz_material_names, settings::esp::k_iz_material_count))
                         {
-                            layer.filled.value = true;
+                            layer.material.value = settings::esp::k_iz_materials[mat_idx];
+                            if ((layer.material.value == settings::esp::cham_ids::outline_glow || layer.material.value == settings::esp::cham_ids::outline_glow_ignorez) &&
+                                (prev_mat != settings::esp::cham_ids::outline_glow && prev_mat != settings::esp::cham_ids::outline_glow_ignorez))
+                            {
+                                layer.filled.value = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        int mat_idx = settings::esp::get_non_iz_index(layer.material.value);
+                        if (xui::combo("material", mat_idx, settings::esp::k_non_iz_material_names, settings::esp::k_non_iz_material_count))
+                        {
+                            layer.material.value = settings::esp::k_non_iz_materials[mat_idx];
+                            if ((layer.material.value == settings::esp::cham_ids::outline_glow || layer.material.value == settings::esp::cham_ids::outline_glow_ignorez) &&
+                                (prev_mat != settings::esp::cham_ids::outline_glow && prev_mat != settings::esp::cham_ids::outline_glow_ignorez))
+                            {
+                                layer.filled.value = true;
+                            }
                         }
                     }
 
@@ -134,11 +146,11 @@ namespace rendering {
                 char id_p[48]{}, id_pp[48]{}, id_s[48]{}, id_sp[48]{};
                 std::snprintf(id_p, sizeof(id_p), "primary##ic%d", item_group);
                 std::snprintf(id_pp, sizeof(id_pp), "##ic_p%d", item_group);
-                std::snprintf(id_s, sizeof(id_s), "secondary##ic%d", item_group);
+                std::snprintf(id_s, sizeof(id_s), "through wall##ic%d", item_group);
                 std::snprintf(id_sp, sizeof(id_sp), "##ic_s%d", item_group);
 
-                draw_chams_layer(id_p, id_pp, g.primary);
-                draw_chams_layer(id_s, id_sp, g.secondary);
+                draw_chams_layer(id_p, id_pp, g.primary, false);
+                draw_chams_layer(id_s, id_sp, g.secondary, true);
                 xui::end_popup();
             }
 
@@ -231,6 +243,8 @@ namespace rendering {
             {
                 if (xui::begin_popup("##inferno_cfg", 220.0f))
                 {
+                    xui::checkbox("enabled##inf", proj.m_overlay.m_infernos.enabled);
+                    xui::checkbox("step detection##inf", proj.m_overlay.m_infernos.step_detection);
                     xui::color_picker("fill color##inf", proj.m_overlay.m_infernos.fill_color);
                     xui::color_picker("outline color##inf", proj.m_overlay.m_infernos.outline_color);
                     xui::slider_float("outline thickness##inf", proj.m_overlay.m_infernos.outline_thickness, 0.5f, 5.0f, "%.1f");
@@ -247,11 +261,12 @@ namespace rendering {
                 if (xui::begin_popup("##ind_grp_cfg", 220.0f))
                 {
                     auto& g = proj.m_overlay.m_indicator.get_group(indicator_id);
-                    char id_a[32]{}, id_i[32]{}, id_b[32]{}, id_g[32]{}, id_gs[32]{};
+                    char id_a[32]{}, id_i[32]{}, id_b[32]{}, id_g[32]{};
                     std::snprintf(id_a, sizeof(id_a), "arc color##ind%d", indicator_id);
                     std::snprintf(id_i, sizeof(id_i), "icon color##ind%d", indicator_id);
                     std::snprintf(id_b, sizeof(id_b), "background##ind%d", indicator_id);
                     std::snprintf(id_g, sizeof(id_g), "glow##ind%d", indicator_id);
+                    char id_gs[32]{};
                     std::snprintf(id_gs, sizeof(id_gs), "glow strength##ind%d", indicator_id);
 
                     xui::color_picker(id_a, g.arc_color);
@@ -268,6 +283,36 @@ namespace rendering {
             xui::layout::spacing(4.0f);
 
             xui::toggle("bomb timer", other.bomb_timer);
+            xui::layout::spacing(4.0f);
+            xui::layout::separator();
+            xui::layout::spacing(4.0f);
+
+            xui::toggle("Molotov Radius", proj.m_overlay.m_infernos.enabled);
+            if (xui::begin_popup("##molo_radius_direct_cfg", 220.0f))
+            {
+                xui::checkbox("step detection##molo_r", proj.m_overlay.m_infernos.step_detection);
+                xui::color_picker("center color##molo_r", proj.m_overlay.m_infernos.fill_color);
+                xui::color_picker("border color##molo_r", proj.m_overlay.m_infernos.outline_color);
+                xui::slider_float("border thickness##molo_r", proj.m_overlay.m_infernos.outline_thickness, 0.5f, 5.0f, "%.1f");
+                xui::checkbox("glow##molo_r", proj.m_overlay.m_infernos.glow);
+                xui::slider_float("glow strength##molo_r", proj.m_overlay.m_infernos.glow_strength, 0.1f, 1.0f, "%.2f");
+                xui::end_popup();
+            }
+            xui::layout::spacing(3.0f);
+
+            xui::toggle("custom smoke color", settings::g_misc.m_smoke_and_fire_color.custom_smoke);
+            if (xui::begin_popup("##smoke_col_world", 220.0f))
+            {
+                xui::color_picker("color##smoke_world", settings::g_misc.m_smoke_and_fire_color.smoke_color);
+                xui::end_popup();
+            }
+            xui::layout::spacing(3.0f);
+            xui::toggle("custom molotov color", settings::g_misc.m_smoke_and_fire_color.custom_molotov);
+            if (xui::begin_popup("##molo_col_world", 220.0f))
+            {
+                xui::color_picker("color##molo_world", settings::g_misc.m_smoke_and_fire_color.molotov_color);
+                xui::end_popup();
+            }
             xui::end_child();
         }
 
@@ -277,7 +322,7 @@ namespace rendering {
 
     void menu::draw_ambience()
     {
-        if (this->m_ambience_anim <= 0.0f && !this->m_ambience_open)
+        if (!this->m_open || (this->m_ambience_anim <= 0.0f && !this->m_ambience_open))
         {
             return;
         }
@@ -291,7 +336,11 @@ namespace rendering {
 
         const auto dt = xdraw::delta_time();
         const float amb_anim = std::clamp(this->m_ambience_anim, 0.0f, 1.0f);
-        const float amb_reveal = amb_anim;
+        const float amb_reveal = amb_anim * xui::ease::smoothstep(this->m_open_anim);
+        if (amb_reveal <= 0.001f)
+        {
+            return;
+        }
 
         const auto wx = this->m_x;
         const auto wy = this->m_y;
@@ -593,16 +642,13 @@ namespace rendering {
                     dl.circle_filled(card_rect.x + 12.0f + tw + 8.0f, card_rect.y + card_rect.h * 0.5f, 3.0f, xdraw::color{ 46, 213, 115, dot_alpha });
                 }
 
-                // 5. Three dots (...) on the far right
+                // 5. Gear icon on the far right
                 const float dots_cx = card_rect.x + card_rect.w - 18.0f;
                 const float dots_cy = card_rect.y + card_rect.h * 0.5f;
                 const auto dots_col = is_sel
                     ? xdraw::color{ 200, 212, 225, 220 }
                 : (is_hover ? xdraw::color{ 170, 182, 195, 185 } : xdraw::color{ 115, 128, 142, 140 });
-                for (int d = -1; d <= 1; ++d)
-                {
-                    dl.circle_filled(dots_cx + d * 4.0f, dots_cy, 1.2f, dots_col, 8);
-                }
+                xui::draw_gear( dl, dots_cx, dots_cy, dots_col, 11.0f );
 
                 // 6. Card border outline
                 if (is_sel)
@@ -644,12 +690,21 @@ namespace rendering {
                 xui::end_popup();
             }
 
-            // 2. Fullbright (with lighting color swatch)
+            // 2. Fullbright / Override sunlight (with lighting color swatch)
             xui::toggle("Override sunlight", scene.lighting);
             if (xui::begin_popup("##amb_fullbright_popup", 220.0f, &scene.lighting_color.value))
             {
                 xui::slider_float("intensity##light", scene.lighting_intensity, 0.0f, 2.0f, "%.2f");
                 xui::color_picker("color##light", scene.lighting_color);
+                xui::end_popup();
+            }
+
+            // 2.1 Fullbright (uniform ambient illumination)
+            xui::toggle("Fullbright", scene.fullbright);
+            if (xui::begin_popup("##amb_fullbright_mode_popup", 220.0f, &scene.fullbright_color.value))
+            {
+                xui::slider_float("intensity##fullbright", scene.fullbright_intensity, 0.5f, 3.0f, "%.2f");
+                xui::color_picker("color##fullbright", scene.fullbright_color);
                 xui::end_popup();
             }
 
@@ -677,6 +732,16 @@ namespace rendering {
                 xui::color_picker("sky color", scene.skybox.skybox_color);
                 xui::color_picker("cloud color", scene.skybox.cloud_color);
                 xui::color_picker("sun color", scene.skybox.sun_color);
+                xui::end_popup();
+            }
+
+            // 3.1 Overlight (sky brightness, bloom & tint)
+            xui::toggle("Overlight", scene.overlight);
+            if (xui::begin_popup("##amb_overlight_popup", 220.0f, &scene.overlight_tint.value))
+            {
+                xui::slider_float("intensity##overlight", scene.overlight_intensity, 1.0f, 10.0f, "%.1f");
+                xui::slider_float("bloom##overlight", scene.overlight_bloom, 0.0f, 5.0f, "%.2f");
+                xui::color_picker("tint##overlight", scene.overlight_tint);
                 xui::end_popup();
             }
 

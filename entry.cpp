@@ -627,9 +627,9 @@ void print_expired_chat_notification( )
 	const auto b = tokens::col_accent.b;
 
 	const auto formatted = std::format(
-		"<font color='#{:02X}{:02X}{:02X}'>mintaly</font> <font color='#888888'>:</font> "
+		"<font color='#{:02X}{:02X}{:02X}'>[<b> mintaly </b>]</font> <font color='#888888'>:</font> "
 		"<font color='#38BDF8'>Ваша подписка на </font>"
-		"<font color='#{:02X}{:02X}{:02X}'>Mintaly</font>"
+		"<font color='#{:02X}{:02X}{:02X}'>[ mintaly ]</font>"
 		"<font color='#38BDF8'> закончилась, возобновить ее вы можете на нашем сайте </font>"
 		"<font color='#{:02X}{:02X}{:02X}'>mintaly.cc</font>",
 		r, g, b, r, g, b, r, g, b

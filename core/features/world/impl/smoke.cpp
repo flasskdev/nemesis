@@ -45,4 +45,54 @@ namespace features::world {
 		this->m_token = 0;
 	}
 
+	void smoke::on_frame_stage_notify( )
+	{
+		if ( !settings::g_misc.m_smoke_and_fire_color.custom_smoke.value )
+		{
+			return;
+		}
+
+		static auto smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+		if ( !smoke_col_offset )
+		{
+			smoke_col_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeColor"_hash );
+			if ( !smoke_col_offset )
+			{
+				const auto det_offset = SCHEMA( "C_SmokeGrenadeProjectile", "m_vSmokeDetonationPos"_hash );
+				if ( det_offset >= 12 )
+				{
+					smoke_col_offset = det_offset - 12;
+				}
+			}
+		}
+
+		if ( !smoke_col_offset )
+		{
+			return;
+		}
+
+		const auto& col = settings::g_misc.m_smoke_and_fire_color.smoke_color.value;
+
+		for ( const auto& p : systems::g_entities.get_by_type( systems::entities::type::projectile ) )
+		{
+			if ( p.schema_hash != "C_SmokeGrenadeProjectile"_hash || !p.ptr )
+			{
+				continue;
+			}
+
+			const auto cur = memory::read<math::vector3>( p.ptr + smoke_col_offset );
+			math::vector3 target_col;
+			if ( cur.x > 1.5f || cur.y > 1.5f || cur.z > 1.5f )
+			{
+				target_col = math::vector3{ static_cast<float>( col.r ), static_cast<float>( col.g ), static_cast<float>( col.b ) };
+			}
+			else
+			{
+				target_col = math::vector3{ static_cast<float>( col.r ) / 255.0f, static_cast<float>( col.g ) / 255.0f, static_cast<float>( col.b ) / 255.0f };
+			}
+
+			memory::write<math::vector3>( p.ptr + smoke_col_offset, target_col );
+		}
+	}
+
 } // namespace features::world

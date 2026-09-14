@@ -219,9 +219,10 @@ namespace features::movement {
 
     [[nodiscard]] bool test_strafer::is_active() const
     {
-        if (!settings::g_movement.m_test_strafer.enabled.value)
+        if (!settings::g_movement.airstrafe.value && !settings::g_movement.m_test_strafer.enabled.value)
             return false;
-        return CONVAR("sv_quantize_movement_input")->get<bool>();
+        const auto c = CONVAR("sv_quantize_movement_input");
+        return c ? c->get<bool>() : true;
     }
 
     math::vector2 test_strafer::movement_from_buttons(std::uintptr_t pressed)
@@ -281,6 +282,12 @@ namespace features::movement {
 
         if (features::combat::g_rage.is_firing_this_tick())
             return;
+
+        if (features::combat::g_misc.antiaim().has_modified_angles())
+        {
+            this->antiaim_strafe_path(cmd);
+            return;
+        }
 
         this->quantized_path(cmd);
     }
@@ -402,6 +409,135 @@ namespace features::movement {
 
         if (injected > 0)
         {
+            this->m_handled_this_tick = true;
+            ++this->m_substep_counter;
+        }
+    }
+
+    void test_strafer::antiaim_strafe_path(systems::input::usercmd* cmd)
+    {
+        const auto original_buttons = features::combat::g_misc.antiaim().get_original_buttons();
+
+        if (original_buttons & static_cast<std::uintptr_t>(cstypes::command_buttons::in_sprint))
+            return;
+
+        const auto base = cmd->csgo_user_cmd.mutable_base();
+        if (!base)
+            return;
+
+        this->check_button(original_buttons, cstypes::command_buttons::in_moveleft);
+        this->check_button(original_buttons, cstypes::command_buttons::in_moveright);
+        this->check_button(original_buttons, cstypes::command_buttons::in_forward);
+        this->check_button(original_buttons, cstypes::command_buttons::in_back);
+        this->m_last_buttons = original_buttons;
+
+        const auto& prestate = systems::g_prediction.pre();
+        const auto velocity = prestate.networked_velocity;
+        const auto speed_2d = velocity.length_2d();
+
+        const auto command_yaw = systems::g_input.get_view_angles().y;
+        auto player_move = movement_from_buttons(this->m_last_pressed);
+
+        if (player_move.x == 0.0f && player_move.y == 0.0f)
+        {
+            player_move.x = 1.0f;
+        }
+
+        if (speed_2d < k_min_strafe_speed)
+            return;
+
+        const auto start_when = get_max_subtick_when(base);
+        if (start_when >= 0.95f)
+            return;
+
+        const auto sv_airaccelerate = CONVAR("sv_airaccelerate")->get<float>();
+        const auto sv_maxspeed = CONVAR("sv_maxspeed")->get<float>();
+        const auto sv_air_max_wishspeed = CONVAR("sv_air_max_wishspeed")->get<float>();
+        const auto surface_friction = prestate.surface_friction;
+
+        const auto base_yaw_offset = std::atan2f(-player_move.y, player_move.x) * (180.0f / std::numbers::pi_v<float>);
+        auto target_yaw = command_yaw + base_yaw_offset;
+        math::helpers::normalize_angle(target_yaw);
+
+        const auto total_when = 0.99f - start_when;
+        const auto when_step = total_when / static_cast<float>(k_max_subticks + 1);
+        const auto sub_frame = (cstypes::tick_interval * total_when) / static_cast<float>(k_max_subticks);
+
+        const auto aa_yaw = base->viewangles() ? base->viewangles()->y() : features::combat::g_misc.antiaim().get_modified_angles().y;
+
+        auto acc_yaw = aa_yaw;
+        auto sim_vx = velocity.x;
+        auto sim_vy = velocity.y;
+        auto sim_vz = velocity.z;
+        auto injected = 0;
+
+        const auto local = systems::g_local.get();
+        const auto movement_services = memory::read<std::uintptr_t>(local.pawn + SCHEMA("C_BasePlayerPawn", "m_pMovementServices"_hash));
+
+        for (auto i = 1; i <= k_max_subticks; ++i)
+        {
+            const auto entry_side = ((this->m_substep_counter + i) % 2) == 0;
+
+            if (will_hit_ground_soon(local.pawn, movement_services, prestate, sim_vz))
+                break;
+
+            const auto wishdir_yaw = ref_air_strafer(sim_vx, sim_vy, target_yaw, sub_frame, entry_side,
+                sv_maxspeed, sv_airaccelerate, sv_air_max_wishspeed);
+
+            auto target_view_yaw = wishdir_yaw - base_yaw_offset;
+            math::helpers::normalize_angle(target_view_yaw);
+
+            auto yaw_delta = target_view_yaw - acc_yaw;
+            math::helpers::normalize_angle(yaw_delta);
+
+            if (std::fabsf(yaw_delta) < 0.02f)
+            {
+                yaw_delta = (yaw_delta >= 0.0f ? 0.02f : -0.02f);
+            }
+
+            const auto when_frac = start_when + static_cast<float>(i) * when_step;
+
+            if (!this->apply_yaw_subtick(base, when_frac, yaw_delta))
+                break;
+
+            acc_yaw = target_view_yaw;
+            ref_air_accel_sim(sim_vx, sim_vy, wishdir_yaw, sub_frame, surface_friction,
+                sv_maxspeed, sv_airaccelerate, sv_air_max_wishspeed);
+
+            const auto sv_gravity = CONVAR("sv_gravity")->get<float>();
+            const auto gravity_scale = memory::read<float>(local.pawn + SCHEMA("C_BaseEntity", "m_flGravityScale"_hash));
+            sim_vz -= gravity_scale * sv_gravity * sub_frame;
+
+            ++injected;
+        }
+
+        if (injected > 0)
+        {
+            auto restore_delta = aa_yaw - acc_yaw;
+            math::helpers::normalize_angle(restore_delta);
+            if (std::fabsf(restore_delta) > 0.01f)
+            {
+                this->apply_yaw_subtick(base, 0.995f, restore_delta);
+            }
+
+            base->set_forwardmove(player_move.x);
+            base->set_leftmove(-player_move.y);
+
+            auto buttons = original_buttons;
+            buttons &= ~(static_cast<std::uintptr_t>(
+                cstypes::command_buttons::in_forward | cstypes::command_buttons::in_back |
+                cstypes::command_buttons::in_moveleft | cstypes::command_buttons::in_moveright
+            ));
+
+            if (player_move.x > 0.0f) buttons |= cstypes::command_buttons::in_forward;
+            else if (player_move.x < 0.0f) buttons |= cstypes::command_buttons::in_back;
+
+            if (player_move.y < 0.0f) buttons |= cstypes::command_buttons::in_moveleft;
+            else if (player_move.y > 0.0f) buttons |= cstypes::command_buttons::in_moveright;
+
+            cmd->buttons.value = buttons;
+            cmd->buttons.value_changed |= (original_buttons ^ buttons);
+
             this->m_handled_this_tick = true;
             ++this->m_substep_counter;
         }

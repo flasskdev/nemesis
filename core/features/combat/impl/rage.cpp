@@ -78,6 +78,12 @@ namespace features::combat {
         }
         else if (ctx.item_def_idx == cstypes::item_definition_index::weapon_r8_revolver)
         {
+            if (!settings::g_combat.m_ragebot.enabled)
+            {
+                this->m_revolver_cock_ticks = 0;
+                return;
+            }
+
             if (settings::g_combat.m_autos.revolver_quick.value)
             {
                 this->m_revolver_cock_ticks = 0;
@@ -101,6 +107,8 @@ namespace features::combat {
         else
         {
             this->m_revolver_cock_ticks = 0;
+            if (!settings::g_combat.m_ragebot.enabled)
+                return;
             if (!g_shared.can_shoot(cmd, local.controller))
                 return;
             this->run_gun(cmd, aim_ctx, local);

@@ -273,6 +273,15 @@ namespace systems {
 			math::vector3 last_movement_impulses{};
 			float surface_friction{};
 			float stamina{};
+
+			// Capture these with origin/velocity, before any speculative movement.
+			std::uintptr_t pawn{};
+			math::vector3 collision_mins{};
+			math::vector3 collision_maxs{};
+			float duck_amount{};
+			float gravity_scale{ 1.0f };
+			bool ducked{};
+			bool movement_valid{};
 		};
 
 		void capture_prestate( std::uintptr_t local_pawn, std::uintptr_t movement_services );
@@ -672,6 +681,8 @@ namespace systems {
 
 #define SCHEMA( class_name, field_hash ) \
 	[]( ) -> int { \
-		static const auto val = systems::schemas::lookup( class_name, field_hash ); \
+		static auto val = systems::schemas::lookup( class_name, field_hash ); \
+		if ( !val ) \
+			val = systems::schemas::lookup( class_name, field_hash ); \
 		return val; \
 	}( )
