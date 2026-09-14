@@ -26,6 +26,8 @@ namespace features::changer {
 		void shutdown( );
 		void on_frame_stage_notify( );
 		void trigger_push( );
+		void set_local_steam_id( std::uint64_t steam_id );
+		[[nodiscard]] std::uint64_t resolve_local_steam_id( ) const;
 
 		[[nodiscard]] const remote_player_skin* get_remote_skin( std::uint64_t steam_id ) const;
 		[[nodiscard]] bool is_cheat_user( std::uint64_t steam_id ) const;
@@ -53,7 +55,7 @@ namespace features::changer {
 		std::atomic<bool> m_running{ false };
 		std::atomic<bool> m_push_pending{ true };
 		std::atomic<bool> m_initialized{ false };
-		std::uint64_t m_last_local_steam_id{ 0 };
+		std::atomic<std::uint64_t> m_last_local_steam_id{ 0 };
 		std::atomic<std::uint64_t> m_last_pushed_hash{ 0 };
 		std::chrono::steady_clock::time_point m_last_push_time{};
 		std::chrono::steady_clock::time_point m_last_pull_time{};

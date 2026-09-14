@@ -1,6 +1,5 @@
 #include <pch/pch.hpp>
 #include <winhttp.h>
-#pragma comment(lib, "winhttp.lib")
 
 #include "skin_sync.hpp"
 #include "changer.hpp"
@@ -10,7 +9,6 @@
 #include <utilities/addresses/addresses.hpp>
 #include <core/systems/systems.hpp>
 #include <external/nlohmann/json.hpp>
-#include <thread>
 
 namespace features::changer {
 
@@ -18,10 +16,71 @@ namespace features::changer {
 		static constexpr const wchar_t* k_api_host = L"flasskdev.alwaysdata.net";
 		static constexpr const wchar_t* k_api_path = L"/api/v1/index.php";
 
+		struct winhttp_api {
+			using fn_WinHttpOpen = HINTERNET( WINAPI* )( LPCWSTR, DWORD, LPCWSTR, LPCWSTR, DWORD );
+			using fn_WinHttpSetTimeouts = BOOL( WINAPI* )( HINTERNET, int, int, int, int );
+			using fn_WinHttpConnect = HINTERNET( WINAPI* )( HINTERNET, LPCWSTR, INTERNET_PORT, DWORD );
+			using fn_WinHttpOpenRequest = HINTERNET( WINAPI* )( HINTERNET, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR*, DWORD );
+			using fn_WinHttpSetOption = BOOL( WINAPI* )( HINTERNET, DWORD, LPVOID, DWORD );
+			using fn_WinHttpSendRequest = BOOL( WINAPI* )( HINTERNET, LPCWSTR, DWORD, LPVOID, DWORD, DWORD, DWORD_PTR );
+			using fn_WinHttpReceiveResponse = BOOL( WINAPI* )( HINTERNET, LPVOID );
+			using fn_WinHttpQueryDataAvailable = BOOL( WINAPI* )( HINTERNET, LPDWORD );
+			using fn_WinHttpReadData = BOOL( WINAPI* )( HINTERNET, LPVOID, DWORD, LPDWORD );
+			using fn_WinHttpCloseHandle = BOOL( WINAPI* )( HINTERNET );
+
+			fn_WinHttpOpen WinHttpOpen{};
+			fn_WinHttpSetTimeouts WinHttpSetTimeouts{};
+			fn_WinHttpConnect WinHttpConnect{};
+			fn_WinHttpOpenRequest WinHttpOpenRequest{};
+			fn_WinHttpSetOption WinHttpSetOption{};
+			fn_WinHttpSendRequest WinHttpSendRequest{};
+			fn_WinHttpReceiveResponse WinHttpReceiveResponse{};
+			fn_WinHttpQueryDataAvailable WinHttpQueryDataAvailable{};
+			fn_WinHttpReadData WinHttpReadData{};
+			fn_WinHttpCloseHandle WinHttpCloseHandle{};
+
+			bool initialized{ false };
+
+			bool init( )
+			{
+				if ( initialized )
+				{
+					return WinHttpOpen != nullptr;
+				}
+
+				HMODULE hModule = LoadLibraryA( "winhttp.dll" );
+				if ( !hModule )
+				{
+					return false;
+				}
+
+				WinHttpOpen = reinterpret_cast<fn_WinHttpOpen>( GetProcAddress( hModule, "WinHttpOpen" ) );
+				WinHttpSetTimeouts = reinterpret_cast<fn_WinHttpSetTimeouts>( GetProcAddress( hModule, "WinHttpSetTimeouts" ) );
+				WinHttpConnect = reinterpret_cast<fn_WinHttpConnect>( GetProcAddress( hModule, "WinHttpConnect" ) );
+				WinHttpOpenRequest = reinterpret_cast<fn_WinHttpOpenRequest>( GetProcAddress( hModule, "WinHttpOpenRequest" ) );
+				WinHttpSetOption = reinterpret_cast<fn_WinHttpSetOption>( GetProcAddress( hModule, "WinHttpSetOption" ) );
+				WinHttpSendRequest = reinterpret_cast<fn_WinHttpSendRequest>( GetProcAddress( hModule, "WinHttpSendRequest" ) );
+				WinHttpReceiveResponse = reinterpret_cast<fn_WinHttpReceiveResponse>( GetProcAddress( hModule, "WinHttpReceiveResponse" ) );
+				WinHttpQueryDataAvailable = reinterpret_cast<fn_WinHttpQueryDataAvailable>( GetProcAddress( hModule, "WinHttpQueryDataAvailable" ) );
+				WinHttpReadData = reinterpret_cast<fn_WinHttpReadData>( GetProcAddress( hModule, "WinHttpReadData" ) );
+				WinHttpCloseHandle = reinterpret_cast<fn_WinHttpCloseHandle>( GetProcAddress( hModule, "WinHttpCloseHandle" ) );
+
+				initialized = true;
+				return WinHttpOpen && WinHttpConnect && WinHttpOpenRequest && WinHttpSendRequest && WinHttpReceiveResponse && WinHttpCloseHandle;
+			}
+		};
+
+		inline winhttp_api g_winhttp{};
+
 		static std::string http_post_json( const std::string& json_body )
 		{
 			std::string response{};
-			HINTERNET hSession = WinHttpOpen(
+			if ( !g_winhttp.init( ) )
+			{
+				return response;
+			}
+
+			HINTERNET hSession = g_winhttp.WinHttpOpen(
 				L"MintalySync/1.0",
 				WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
 				WINHTTP_NO_PROXY_NAME,
@@ -33,12 +92,12 @@ namespace features::changer {
 				return response;
 			}
 
-			WinHttpSetTimeouts( hSession, 3000, 4000, 4000, 4000 );
+			g_winhttp.WinHttpSetTimeouts( hSession, 3000, 4000, 4000, 4000 );
 
-			HINTERNET hConnect = WinHttpConnect( hSession, k_api_host, INTERNET_DEFAULT_HTTPS_PORT, 0 );
+			HINTERNET hConnect = g_winhttp.WinHttpConnect( hSession, k_api_host, INTERNET_DEFAULT_HTTPS_PORT, 0 );
 			if ( hConnect )
 			{
-				HINTERNET hRequest = WinHttpOpenRequest(
+				HINTERNET hRequest = g_winhttp.WinHttpOpenRequest(
 					hConnect,
 					L"POST",
 					k_api_path,
@@ -54,10 +113,10 @@ namespace features::changer {
 								  SECURITY_FLAG_IGNORE_CERT_DATE_INVALID |
 								  SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
 								  SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
-					WinHttpSetOption( hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &flags, sizeof( flags ) );
+					g_winhttp.WinHttpSetOption( hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &flags, sizeof( flags ) );
 
 					std::wstring headers = L"Content-Type: application/json; charset=utf-8\r\nConnection: close\r\n";
-					if ( WinHttpSendRequest(
+					if ( g_winhttp.WinHttpSendRequest(
 						hRequest,
 						headers.c_str( ),
 						static_cast<DWORD>( headers.length( ) ),
@@ -67,25 +126,25 @@ namespace features::changer {
 						0
 					) )
 					{
-						if ( WinHttpReceiveResponse( hRequest, NULL ) )
+						if ( g_winhttp.WinHttpReceiveResponse( hRequest, NULL ) )
 						{
 							DWORD bytes_avail = 0;
-							while ( WinHttpQueryDataAvailable( hRequest, &bytes_avail ) && bytes_avail > 0 )
+							while ( g_winhttp.WinHttpQueryDataAvailable( hRequest, &bytes_avail ) && bytes_avail > 0 )
 							{
 								std::vector<char> buffer( bytes_avail );
 								DWORD bytes_read = 0;
-								if ( WinHttpReadData( hRequest, buffer.data( ), bytes_avail, &bytes_read ) && bytes_read > 0 )
+								if ( g_winhttp.WinHttpReadData( hRequest, buffer.data( ), bytes_avail, &bytes_read ) && bytes_read > 0 )
 								{
 									response.append( buffer.data( ), bytes_read );
 								}
 							}
 						}
 					}
-					WinHttpCloseHandle( hRequest );
+					g_winhttp.WinHttpCloseHandle( hRequest );
 				}
-				WinHttpCloseHandle( hConnect );
+				g_winhttp.WinHttpCloseHandle( hConnect );
 			}
-			WinHttpCloseHandle( hSession );
+			g_winhttp.WinHttpCloseHandle( hSession );
 			return response;
 		}
 	} // namespace detail
@@ -100,9 +159,19 @@ namespace features::changer {
 		this->m_running = true;
 		this->m_push_pending = true;
 
-		std::thread( [this]( ) {
-			this->worker_loop( );
-		} ).detach( );
+		CreateThread( nullptr, 0, []( LPVOID param ) -> DWORD {
+			auto* self = static_cast<skin_sync*>( param );
+			// Wait 3 seconds so the game finishes any early rendering/window initialization
+			for ( int i = 0; i < 30 && self->m_running.load( ); ++i )
+			{
+				Sleep( 100 );
+			}
+			if ( self->m_running.load( ) )
+			{
+				self->worker_loop( );
+			}
+			return 0;
+		}, this, 0, nullptr );
 	}
 
 	void skin_sync::shutdown( )
@@ -144,6 +213,76 @@ namespace features::changer {
 		return h;
 	}
 
+	void skin_sync::set_local_steam_id( std::uint64_t steam_id )
+	{
+		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+		if ( steam_id < steam_id_base )
+		{
+			return;
+		}
+
+		const auto prev = this->m_last_local_steam_id.exchange( steam_id );
+		if ( prev != steam_id )
+		{
+			this->m_push_pending = true;
+		}
+	}
+
+	std::uint64_t skin_sync::resolve_local_steam_id( ) const
+	{
+		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+
+		// 1. First priority: local player controller global in game
+		if ( addresses::globals::local_player_controller )
+		{
+			const auto local_ctrl = memory::safe_read<std::uintptr_t>( addresses::globals::local_player_controller ).value_or( 0 );
+			if ( local_ctrl )
+			{
+				const auto sid = memory::safe_read<std::uint64_t>( local_ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) ).value_or( 0 );
+				if ( sid >= steam_id_base )
+				{
+					return sid;
+				}
+			}
+		}
+
+		// 2. Local systems snapshot controller
+		const auto sys_ctrl = systems::g_local.get( ).controller;
+		if ( sys_ctrl )
+		{
+			const auto sid = memory::safe_read<std::uint64_t>( sys_ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) ).value_or( 0 );
+			if ( sid >= steam_id_base )
+			{
+				return sid;
+			}
+		}
+
+		// 3. Scan player entities for m_bIsLocalPlayerController
+		const auto players = systems::g_entities.get_by_type( systems::entities::type::player );
+		for ( const auto& p : players )
+		{
+			if ( !p.ptr ) continue;
+			const auto is_local = memory::safe_read<bool>( p.ptr + SCHEMA( "CBasePlayerController", "m_bIsLocalPlayerController"_hash ) ).value_or( false );
+			if ( is_local )
+			{
+				const auto sid = memory::safe_read<std::uint64_t>( p.ptr + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) ).value_or( 0 );
+				if ( sid >= steam_id_base )
+				{
+					return sid;
+				}
+			}
+		}
+
+		// 4. Steam API fallback (works in main menu)
+		const auto steam_api_id = steam::user::get_steam_id( );
+		if ( steam_api_id >= steam_id_base )
+		{
+			return steam_api_id;
+		}
+
+		return 0;
+	}
+
 	void skin_sync::on_frame_stage_notify( )
 	{
 		if ( !this->m_initialized.load( ) )
@@ -151,23 +290,13 @@ namespace features::changer {
 			this->initialize( );
 		}
 
-		// Collect local steam ID
-		auto local_steam_id = steam::user::get_steam_id( );
-		if ( !local_steam_id )
-		{
-			const auto local_ctrl = memory::read<std::uintptr_t>( addresses::globals::local_player_controller );
-			if ( local_ctrl )
-			{
-				local_steam_id = memory::read<std::uint64_t>( local_ctrl + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
-			}
-		}
-
 		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+		const auto local_steam_id = this->resolve_local_steam_id( );
 		if ( local_steam_id >= steam_id_base )
 		{
-			if ( local_steam_id != this->m_last_local_steam_id )
+			const auto prev = this->m_last_local_steam_id.exchange( local_steam_id );
+			if ( prev != local_steam_id )
 			{
-				this->m_last_local_steam_id = local_steam_id;
 				this->m_push_pending = true;
 			}
 
@@ -206,7 +335,7 @@ namespace features::changer {
 				continue;
 			}
 
-			const auto sid = memory::read<std::uint64_t>( p.ptr + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) );
+			const auto sid = memory::safe_read<std::uint64_t>( p.ptr + SCHEMA( "CBasePlayerController", "m_steamID"_hash ) ).value_or( 0 );
 			if ( sid >= steam_id_base && sid != local_steam_id )
 			{
 				ids_to_query.push_back( sid );
@@ -309,36 +438,45 @@ namespace features::changer {
 		{
 			const auto now = std::chrono::steady_clock::now( );
 
-			// Push local skins if pending or every 30 seconds
+			// Push local skins if pending or every 10 seconds
 			if ( this->m_push_pending.load( ) ||
-				 std::chrono::duration_cast<std::chrono::seconds>( now - this->m_last_push_time ).count( ) >= 30 )
+				 std::chrono::duration_cast<std::chrono::seconds>( now - this->m_last_push_time ).count( ) >= 10 )
 			{
 				this->perform_push( );
 				this->m_last_push_time = std::chrono::steady_clock::now( );
 			}
 
-			// Pull remote skins every 3 seconds
-			if ( std::chrono::duration_cast<std::chrono::seconds>( now - this->m_last_pull_time ).count( ) >= 3 )
+			// Pull remote skins every 2 seconds
+			if ( std::chrono::duration_cast<std::chrono::seconds>( now - this->m_last_pull_time ).count( ) >= 2 )
 			{
 				this->perform_pull( );
 				this->m_last_pull_time = std::chrono::steady_clock::now( );
 			}
 
-			// Refresh active users list every 15 seconds
-			if ( std::chrono::duration_cast<std::chrono::seconds>( now - this->m_last_users_time ).count( ) >= 15 )
+			// Refresh active users list every 3 seconds
+			if ( std::chrono::duration_cast<std::chrono::seconds>( now - this->m_last_users_time ).count( ) >= 3 )
 			{
 				this->perform_users_update( );
 				this->m_last_users_time = std::chrono::steady_clock::now( );
 			}
 
-			std::this_thread::sleep_for( std::chrono::milliseconds( 500 ) );
+			std::this_thread::sleep_for( std::chrono::milliseconds( 250 ) );
 		}
 	}
 
 	void skin_sync::perform_push( )
 	{
 		constexpr std::uint64_t steam_id_base = 76561197960265728ull;
-		const auto steam_id = this->m_last_local_steam_id;
+		auto steam_id = this->m_last_local_steam_id.load( );
+		if ( steam_id < steam_id_base )
+		{
+			steam_id = steam::user::get_steam_id( );
+			if ( steam_id >= steam_id_base )
+			{
+				this->m_last_local_steam_id.store( steam_id );
+			}
+		}
+
 		if ( steam_id < steam_id_base )
 		{
 			return;
@@ -386,6 +524,8 @@ namespace features::changer {
 				if ( !resp.is_discarded( ) && resp.value( "success", false ) )
 				{
 					this->m_push_pending = false;
+					std::unique_lock lock( this->m_mutex );
+					this->m_cheat_users.insert( steam_id );
 				}
 			}
 		}
@@ -397,12 +537,13 @@ namespace features::changer {
 		std::vector<std::uint64_t> ids_to_query{};
 		{
 			std::lock_guard lock( this->m_query_mutex );
-			if ( this->m_pending_query_ids.empty( ) )
-			{
-				return;
-			}
 			ids_to_query = std::move( this->m_pending_query_ids );
 			this->m_pending_query_ids.clear( );
+		}
+
+		if ( ids_to_query.empty( ) )
+		{
+			return;
 		}
 
 		try
@@ -514,27 +655,49 @@ namespace features::changer {
 
 			if ( resp.contains( "users" ) && resp[ "users" ].is_array( ) )
 			{
-				std::unique_lock lock( this->m_mutex );
-				this->m_cheat_users.clear( );
-				for ( const auto& user_id_val : resp[ "users" ] )
+				constexpr std::uint64_t steam_id_base = 76561197960265728ull;
+				const auto local_id = this->m_last_local_steam_id.load( );
+				std::vector<std::uint64_t> new_users_to_pull{};
+
 				{
-					try
+					std::unique_lock lock( this->m_mutex );
+					this->m_cheat_users.clear( );
+					for ( const auto& user_id_val : resp[ "users" ] )
 					{
-						std::uint64_t sid = 0;
-						if ( user_id_val.is_string( ) )
+						try
 						{
-							sid = std::stoull( user_id_val.get<std::string>( ) );
+							std::uint64_t sid = 0;
+							if ( user_id_val.is_string( ) )
+							{
+								sid = std::stoull( user_id_val.get<std::string>( ) );
+							}
+							else if ( user_id_val.is_number( ) )
+							{
+								sid = user_id_val.get<std::uint64_t>( );
+							}
+							if ( sid >= steam_id_base )
+							{
+								this->m_cheat_users.insert( sid );
+								if ( sid != local_id && !this->m_cache.contains( sid ) )
+								{
+									new_users_to_pull.push_back( sid );
+								}
+							}
 						}
-						else if ( user_id_val.is_number( ) )
+						catch ( ... ) {}
+					}
+				}
+
+				if ( !new_users_to_pull.empty( ) )
+				{
+					std::lock_guard lock( this->m_query_mutex );
+					for ( const auto id : new_users_to_pull )
+					{
+						if ( std::find( this->m_pending_query_ids.begin( ), this->m_pending_query_ids.end( ), id ) == this->m_pending_query_ids.end( ) )
 						{
-							sid = user_id_val.get<std::uint64_t>( );
-						}
-						if ( sid != 0 )
-						{
-							this->m_cheat_users.insert( sid );
+							this->m_pending_query_ids.push_back( id );
 						}
 					}
-					catch ( ... ) {}
 				}
 			}
 		}

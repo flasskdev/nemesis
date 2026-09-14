@@ -588,6 +588,7 @@ namespace {
 		features::world::g_scene.discover_skyboxes( );
 
 		diag::step( "stage: done" );
+		features::changer::g_skin_sync.initialize( );
 		loader_session::ready();
 
 		lifecycle::start_subscription_monitor( module_handle );

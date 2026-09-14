@@ -18,8 +18,6 @@ namespace features::changer {
 			return;
 		}
 
-		g_skin_sync.on_frame_stage_notify( );
-
 		const auto local_ctrl = local.controller;
 		const auto local_pawn = local.pawn;
 

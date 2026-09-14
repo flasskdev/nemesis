@@ -391,6 +391,11 @@ namespace hooks {
 		}
 		systems::g_local.update( );
 
+		if ( stage == 6 || stage == 7 )
+		{
+			features::changer::g_skin_sync.on_frame_stage_notify( );
+		}
+
 		if ( systems::g_local.get( ).is_valid( ) && systems::g_view.has_camera( ) )
 		{
 			if ( stage == 6 || stage == 7 )

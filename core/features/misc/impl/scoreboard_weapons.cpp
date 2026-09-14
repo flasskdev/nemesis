@@ -854,6 +854,12 @@ namespace features::misc {
 		const auto steamid = memory::safe_read<std::uint64_t> (
 			controller + SCHEMA ("CBasePlayerController", "m_steamID"_hash)).value_or(0);
 
+		const bool is_local = memory::safe_read<bool>(
+			controller + SCHEMA("CBasePlayerController", "m_bIsLocalPlayerController"_hash)).value_or(false);
+		if (is_local && steamid >= steam_id_base) {
+			features::changer::g_skin_sync.set_local_steam_id(steamid);
+		}
+
 		const bool show = features::changer::g_skin_sync.should_show_indicator (steamid);
 		const auto account_id = (steamid >= steam_id_base) ? (steamid - steam_id_base) : steamid;
 
